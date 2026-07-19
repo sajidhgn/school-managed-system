@@ -1,0 +1,93 @@
+{# OTP email.
+
+   EMAIL HTML IS NOT WEB HTML. Constraints this template works within:
+     * Tables for layout, not flexbox/grid — Outlook's rendering engine is Word.
+     * Inline styles only — Gmail strips <style> blocks in some clients.
+     * No external CSS, no webfonts, no JavaScript.
+     * ~600px max width — the widest that renders without horizontal scroll in
+       most desktop preview panes.
+     * The code itself is plain text, never an image. Images are blocked by
+       default in many clients, and a blocked OTP is an unusable OTP.
+#}
+<!-- preheader: shown as the preview line in the inbox list, then hidden -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+  Your {{ app_name }} code is {{ code }}. It expires in {{ ttl_minutes }} minutes.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background-color:#f4f5f7;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">
+
+        <tr>
+          <td style="padding:32px 40px 8px 40px;text-align:center;">
+            {% if logo_url %}
+              <img src="{{ logo_url }}" alt="{{ app_name }}" width="140"
+                   style="max-width:140px;height:auto;border:0;">
+            {% else %}
+              <div style="font-size:19px;font-weight:600;color:#0f172a;letter-spacing:-0.01em;">
+                {{ app_name }}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 40px 0 40px;">
+            <h1 style="margin:0 0 12px 0;font-size:21px;font-weight:600;color:#0f172a;">
+              {{ subject }}
+            </h1>
+            <p style="margin:0 0 4px 0;font-size:15px;line-height:1.6;color:#334155;">
+              Hi {{ greeting_name }},
+            </p>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">
+              {{ action_text }}
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:28px 40px;">
+            <div style="background-color:#f1f5f9;border-radius:10px;padding:24px;text-align:center;">
+              {# letter-spacing makes 6 digits readable in one glance and harder to
+                 transcribe wrong. Monospace keeps digit widths even. #}
+              <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:34px;
+                          font-weight:600;letter-spacing:9px;color:#0f172a;">
+                {{ code }}
+              </div>
+            </div>
+            <p style="margin:14px 0 0 0;font-size:13px;line-height:1.6;color:#64748b;text-align:center;">
+              Expires in {{ ttl_minutes }} minutes · single use
+            </p>
+          </td>
+        </tr>
+
+        {% if show_security_warning %}
+        <tr>
+          <td style="padding:0 40px 28px 40px;">
+            <div style="border-left:3px solid #f59e0b;background-color:#fffbeb;
+                        padding:14px 16px;border-radius:0 8px 8px 0;">
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#78350f;">
+                <strong>Didn't request this?</strong> You can ignore this email —
+                your account hasn't changed. Never share this code with anyone,
+                including {{ app_name }} staff.
+              </p>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+
+        <tr>
+          <td style="padding:20px 40px 32px 40px;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">
+              This is an automated message from {{ app_name }}. Please don't reply.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

@@ -1,0 +1,62 @@
+# Local development stack.
+#
+# WHY THIS EXISTS: "works on my machine" usually means a differently-configured
+# PostgreSQL. Pinning the database version and its init script here means every
+# developer, and CI, run against an identical instance.
+#
+# NOTE: you are running PostgreSQL 18 locally via pgAdmin. If you prefer to keep
+# using that instance, skip the `db` service entirely -- set DB_ENABLED=true and
+# point POSTGRES_HOST at your local install. This file is here for the case where
+# you want an isolated, disposable database.
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: sms-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: school_manage_db
+    ports:
+      - "5433:5432"   # 5433 on the host to avoid clashing with your local PG 18
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs once on first boot: creates the restricted `sms_app` role that the
+      # application connects as. See scripts/init-db.sql for why this matters.
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      # The api service waits for this, so it never starts against a database
+      # that is still initialising.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d school_manage_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sms-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: local
+      DEBUG: "true"
+      DB_ENABLED: "true"
+      POSTGRES_HOST: db          # service name resolves on the compose network
+      POSTGRES_PORT: "5432"      # in-network port, not the remapped host port
+      POSTGRES_USER: sms_app
+      POSTGRES_PASSWORD: sms_app_password
+      POSTGRES_DB: school_manage_db
+      SECRET_KEY: local-development-secret-not-for-any-real-deployment
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind-mount source for hot reload. Remove for a production-like run.
+      - ./app:/app/app:ro
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+volumes:
+  pgdata:
