@@ -25,6 +25,7 @@ Read it top to bottom once. After that, use the **Directory Map** and the
 10. [Python things that trip up MERN developers](#10-python-things-that-trip-up-mern-developers)
 11. [Command cheat sheet](#11-command-cheat-sheet)
 12. [What exists vs what is still empty](#12-what-exists-vs-what-is-still-empty)
+13. [The product feature checklist](#13-the-product-feature-checklist)
 
 ---
 
@@ -37,21 +38,24 @@ school's data.
 **Stack:** Python 3.13 · FastAPI · Pydantic v2 · SQLAlchemy 2.x (async) · Alembic ·
 PostgreSQL.
 
-**Current state — important:** this is a **complete, working foundation with zero
-business features yet**. Think of it as the moment in a MERN project where you have
-`app.js`, `config/`, `middleware/`, `utils/`, error handling, auth helpers and the DB
-connection all done — but `routes/students.js` doesn't exist yet.
+**Current state:** a complete, working foundation with **the first two feature modules
+delivered end to end**. Think of it as the moment in a MERN project where `app.js`,
+`config/`, `middleware/`, `utils/`, error handling, auth helpers and the DB connection
+are all done — *and* the first real routes are shipped on top.
 
 Concretely:
 
-- The app boots and serves `/health` **with no database at all** (`DB_ENABLED=false`).
-- `app/modules/` — where all business logic will live — is **empty**.
-- `alembic/versions/` — where migrations live — is **empty** (no tables created yet).
+- The app boots and serves `/health` **with no database at all** (`DB_ENABLED=false`),
+  and against real PostgreSQL when `DB_ENABLED=true`.
+- `app/modules/` contains **`tenancy`**, **`auth`**, **`academics`** and **`students`**,
+  each a full models → schemas → repository → service → router stack.
+- `alembic/versions/` holds **two migrations**: the tenancy/auth bootstrap, and
+  classes/sections/students. Every tenant table carries an RLS policy.
 - There is **no frontend folder yet**. The config points at a future Next.js app on
   `http://localhost:3000`.
 
-So everything in this document that describes `app/modules/students/` is describing the
-**pattern you will follow**, not code that exists today.
+See [§12](#12-what-exists-vs-what-is-still-empty) for the exact state of play, and
+[§13](#13-the-product-feature-checklist) for how it maps onto the feature checklist.
 
 ---
 
@@ -226,14 +230,20 @@ School Management System/
     │   ├── middleware/
     │   │   └── request_context.py ← request id + access logging
     │   │
-    │   └── modules/              ← ★ EMPTY TODAY. All business features go here.
-    │       └── __init__.py           (students/, auth/, fees/, attendance/, ...)
+    │   └── modules/              ← ★ ALL BUSINESS FEATURES LIVE HERE
+    │       ├── tenancy/          ← schools: registration, approval, suspension
+    │       ├── auth/             ← register, verify, login, 2FA, refresh, reset
+    │       ├── academics/        ← classes (grades) + sections
+    │       └── students/         ← SIS directory + public admissions
+    │                                 (attendance/, timetable/, fees/, ... to come)
     │
     ├── alembic/                  ← database migrations
     │   ├── env.py                ← migration runtime config
     │   ├── rls.py                ← Row-Level Security DDL helpers
     │   ├── script.py.mako        ← template for generated migration files
-    │   └── versions/             ← EMPTY. Generated migration files land here.
+    │   └── versions/
+    │       ├── ..._bootstrap_tenancy_and_auth.py
+    │       └── ..._add_classes_sections_and_students.py
     │
     ├── tests/
     │   ├── conftest.py           ← shared fixtures (auto-discovered by pytest)
@@ -241,10 +251,18 @@ School Management System/
     │   │   ├── test_otp.py
     │   │   └── test_email.py
     │   └── integration/          ← full HTTP requests through the real app
-    │       └── test_health.py
+    │       ├── conftest.py       ← DB fixtures; app connects as `sms_app`
+    │       ├── test_health.py
+    │       ├── test_rls.py       ← cross-tenant isolation proofs
+    │       ├── test_tenancy.py
+    │       ├── test_auth_flows.py
+    │       ├── test_academics.py
+    │       └── test_students.py
     │
     ├── scripts/
-    │   └── init-db.sql           ← creates extensions + the restricted `sms_app` role
+    │   ├── init-db.sql           ← creates extensions + the restricted `sms_app` role
+    │   ├── create_super_admin.py ← seed the first platform operator
+    │   └── smoke_auth.sh         ← end-to-end auth check against a running server
     │
     └── docker/
         └── Dockerfile            ← multi-stage production image
@@ -840,7 +858,7 @@ validation failures).
 
 ### 5.8 `app/modules/` — where your features go ★
 
-**Empty today.** This is the most important directory in the project.
+This is the most important directory in the project.
 
 The common FastAPI tutorial layout groups by *technical layer*: one `models/` directory,
 one `services/` directory, one `routers/` directory. That works up to roughly ten tables.
@@ -868,8 +886,16 @@ Why this scales better here:
   self-contained directory with explicit imports is a day of work. Untangling flat layers
   is a quarter.
 
-Planned modules (from the roadmap comments in `router.py` and `registry.py`): `tenancy`,
-`auth`, `students`, `classes`, `attendance`, `timetable`, `fees`, and more.
+Delivered so far: `tenancy`, `auth`, `academics` (classes + sections), `students`.
+Still to come (see the roadmap comments in `router.py` and `registry.py`): `attendance`,
+`timetable`, `fees`, `communications`, `documents`, `search`, `inventory`, `ai`.
+
+**Why classes and sections live in `academics/`, not `classes/`:** `class` is a Python
+keyword, so the package would be awkward to import and the model has to be
+`SchoolClass` regardless. Grouping the grade/section hierarchy under `academics`
+also leaves the obvious home for the timetable and attendance modules that read it.
+The HTTP prefix is still `/api/v1/classes` — the URL follows the domain language,
+not the Python package name.
 
 If you have done Nest.js, this is exactly its module concept. If you have only done
 Express, it is `routes/students.js` + `models/Student.js` + `services/studentService.js`
@@ -1492,7 +1518,7 @@ Everything runs from `backend/`.
 cd backend
 uv venv --python 3.13         # create .venv
 uv sync                       # npm install
-cp .env.example .env          # then set SECRET_KEY
+cp .env.example .env          # then set SECRET_KEY and the DB credentials
 ```
 
 Generate a real secret key:
@@ -1500,6 +1526,31 @@ Generate a real secret key:
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
+
+Bootstrap the database once, as a superuser, then migrate:
+
+```bash
+createdb school_manage_db
+psql -d school_manage_db -f scripts/init-db.sql   # extensions + the sms_app role
+make migrate
+```
+
+> **★ Two roles, not one.** `POSTGRES_USER` is the restricted runtime role
+> (`sms_app`); `MIGRATION_USER` is the schema **owner** that Alembic connects as.
+> `sms_app` has no DDL rights, so leaving `MIGRATION_USER` unset on a database it
+> does not own makes `make migrate` fail with *permission denied for schema public*.
+> Setting both to the owner "fixes" that and silently disables every RLS policy —
+> owners are exempt from RLS. See [§8](#8-multi-tenancy-the-thing-that-makes-this-project-unusual).
+
+Seed the first platform operator (needed to approve self-registered schools):
+
+```bash
+SMS_SUPERADMIN_PASSWORD='...' uv run python -m scripts.create_super_admin \
+  --email ops@yourdomain.com --name "Ops"
+```
+
+Note the address must be a genuinely routable one — reserved TLDs (`.test`,
+`.local`, `.example`) are rejected, because the login endpoint would reject them too.
 
 ### Daily
 
@@ -1530,6 +1581,19 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 | `make docker-up` | Start PostgreSQL + API |
 | `make docker-down` | Stop (data preserved) |
 | `make docker-reset` | Stop **and destroy the volume** |
+
+### Smoke-testing auth against a running server
+
+```bash
+make dev > /tmp/sms.log 2>&1 &
+SA_EMAIL=ops@yourdomain.com SA_PASSWORD='...' ./scripts/smoke_auth.sh /tmp/sms.log
+```
+
+Walks register → verify → approve → login (2FA) → refresh rotation → logout over real
+HTTP. The pytest suite covers the same flows in-process; this catches the wiring the
+in-process tests cannot see — middleware order, RLS binding on a pooled connection,
+and the migration/runtime role split. Requires `EMAIL_BACKEND=console`, since it reads
+OTP codes out of the log.
 
 ### Once running
 
@@ -1595,9 +1659,56 @@ their site:
   `alembic/` directory, so the documented helper import never resolved. `alembic/env.py`
   now extends `alembic.__path__` so the convention works for every future migration.
 
+### Module 2 — Academics & Students — DONE (delivered end-to-end)
+
+- ✅ **`modules/academics`** — full stack. `SchoolClass` (grade levels) and `Section`,
+  both tenant-scoped. Create/list/update/delete classes; sections nested under their
+  class with optional `capacity` and a `class_teacher_id` FK to `users`. A class with
+  sections, or a section with enrolled students, refuses deletion rather than
+  cascading a whole grade away.
+- ✅ **`modules/students`** — full stack. Directory CRUD with demographics, guardian
+  and emergency contacts; search across name and admission number; filter by section
+  and status; partial (PATCH) updates; soft delete. Admission numbers are unique per
+  school, section capacity and the plan's `max_students` seat limit are both enforced.
+- ✅ **Public admissions intake** — `POST /students/admissions` is unauthenticated and
+  lands an applicant as `PENDING` with a generated admission number. It cannot be used
+  to self-admit (status and admission number are server-assigned), and a suspended
+  school is indistinguishable from a nonexistent one, so the endpoint leaks no tenant
+  existence.
+- ✅ **Class & section summaries** — `GET /classes/summary` returns each class, its
+  sections, and live headcounts in two queries total (one grouped `COUNT`), not an
+  N+1 per section. Pending applicants are excluded — they occupy no seat.
+- ✅ **RBAC** — reads are open to any authenticated member of the school (teachers need
+  the directory); every write requires `school_admin`.
+- ✅ **Migration** — `classes`, `sections`, `students`, each with
+  `setup_tenant_table()`. Verified: applies, downgrades cleanly, re-applies, and
+  `alembic check` reports no drift.
+- ✅ **Tests** — 22 new integration tests running as the restricted `sms_app` role,
+  including cross-tenant isolation proofs for both modules (another school's class or
+  student reads as **404, never 403**). `make check` is green: 78 tests, ruff clean,
+  mypy strict clean.
+
+Three foundation fixes were needed along the way, all documented at their site:
+
+- **Alembic connected as the wrong role.** `env.py`'s docstring stated that migrations
+  run as the schema owner while the app runs as restricted `sms_app`, but it read
+  `settings.DATABASE_URL` — the *application* DSN — so `alembic upgrade` failed with
+  `permission denied for schema public`. Added `MIGRATION_USER`/`MIGRATION_PASSWORD`
+  and a `MIGRATION_DATABASE_URL` that `env.py` now uses, making the documented
+  owner/app split real rather than aspirational.
+- **The public admissions lookup could never find its school.** `schools` is itself
+  RLS-protected by an *id-based* policy, so on an unauthenticated session with no
+  tenant bound the predicate is `id = NULL` and every school reads as missing. The
+  tenant is now bound *before* the lookup, not after.
+- **`create_super_admin.py` could create an unusable account.** It writes straight to
+  the table, bypassing the `EmailStr` check on the API schemas, so an address in a
+  reserved TLD (`.test`, `.local`) was accepted and then rejected with a 422 by
+  `POST /auth/login` — a super admin that exists but can never sign in. The script now
+  validates with the same validator the login endpoint uses.
+
 ### Not started
 
-- ⬜ **`modules/students`** and beyond — classes, attendance, timetable, fees, …
+- ⬜ **Attendance, timetable, fees**, and the rest of the checklist — see [§13](#13-the-product-feature-checklist)
 - ⬜ No frontend directory (config anticipates Next.js on :3000)
 - ⬜ No CI pipeline file
 
@@ -1605,10 +1716,13 @@ their site:
 
 1. ✅ **`modules/tenancy`** — the `schools` table (done).
 2. ✅ **`modules/auth`** — users, login, refresh, OTP state (done).
-3. **`modules/students`** — the first real domain, and the template for the rest. This is
-   the first module that uses the standard `setup_tenant_table()` RLS helper (`school_id`
-   based), now that the import path is fixed.
-4. Then: classes, attendance, timetable, fees…
+3. ✅ **`modules/academics`** — classes and sections (done).
+4. ✅ **`modules/students`** — the SIS directory and admissions intake (done).
+5. **`modules/attendance`** — next. Reads the section register that `academics` now
+   provides; the PDF's "under 10 seconds" target makes it a bulk-write endpoint
+   (one request per section per day), not one POST per student.
+6. Then: timetable, fees + PDF vouchers, communications (WhatsApp), documents
+   (ID cards, certificates), global search, inventory/POS, and the AI modules.
 
 ### Where to look when you are stuck
 
@@ -1626,3 +1740,93 @@ their site:
 **One habit worth forming:** every source file in this project starts with a docstring
 explaining *why it exists*, *what it is responsible for*, and *what it interacts with*.
 Before changing a file, read its docstring. Before adding a file, write one.
+
+---
+
+## 13. The product feature checklist
+
+Source: `school_management_complete_features.pdf` — 18 features across 9 categories.
+This table is the single place where the product checklist and the codebase are
+reconciled. **Update it in the same commit that ships a feature.**
+
+Status: ✅ done · 🟡 partial · ⬜ not started
+
+### Tenant & Access Control
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Multi-Tenant RLS Database | Critical | ✅ | `alembic/rls.py`, `db/session.py`; policies on `schools`, `classes`, `sections`, `students` |
+| Super Admin Dashboard | Critical | 🟡 | API done (`modules/tenancy`: list/onboard/approve/suspend). No UI — there is no frontend yet |
+| Role-Based Access Control | High | ✅ | `api/deps.py::require_roles`; School Admin writes, Teacher reads |
+
+### Student Management (SIS)
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Student Directory CRUD | Critical | ✅ | `modules/students` — demographics, guardian + emergency contacts, search, soft delete |
+| Class & Section Setup | Critical | ✅ | `modules/academics` — grades and sections, capacity, class teacher |
+| Digital Admissions Form | High | 🟡 | Backend done: `POST /students/admissions` → PENDING queue. The Next.js form itself is not built |
+
+### Academics & Daily Ops
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Fast Attendance Interface | Critical | ⬜ | Next module. Will read the section register from `academics` |
+| Basic Timetable View | Medium | ⬜ | — |
+| Class & Section Summaries | High | ✅ | `GET /classes/summary` — sections + headcount per class |
+
+### Financials
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Fee Structure Configuration | Critical | ⬜ | Will key off `classes` (fees are per grade) |
+| Automated PDF Vouchers | High | ⬜ | Needs a PDF library — none added yet |
+| Payment Collection Dashboard | Critical | ⬜ | — |
+
+### Communications
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| WhatsApp Integration (API) | High | ⬜ | `students.guardian_phone` is the target field, already captured |
+| Bulk Fee WhatsApp Notifications | Critical | ⬜ | Depends on fees + WhatsApp |
+
+### ID Cards & Certificates
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Student ID Card Generator | Medium | ⬜ | `students.photo_url` and `schools.logo_url` exist for it |
+| Certificate Generator | Medium | ⬜ | — |
+
+### Global Navigation & Search
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Global Search Engine | High | 🟡 | Per-module search exists (`GET /students?q=`); `pg_trgm` is installed. No cross-entity omnibar yet |
+
+### AI Agents & Automation
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| AI Homework Agent | High | ⬜ | — |
+| AI WhatsApp Notification Agent | High | ⬜ | — |
+
+### Stationary & Inventory
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| Stationary Point of Sale (POS) | Medium | ⬜ | — |
+
+### AI Marketing Studio
+
+| Feature | Priority | Status | Where |
+|---|---|---|---|
+| AI Social Media Designer | High | ⬜ | — |
+| Print & Paper Design Hub | Medium | ⬜ | — |
+
+### A note on what "done" means here
+
+Every ✅ above is backend only — API endpoints, business rules, migrations and tests.
+**There is no frontend in this repository.** Several checklist items (the Super Admin
+dashboard, the admissions form, ID card templates, the marketing studio) are described
+in the PDF as Next.js interfaces; for those, a ✅ backend is roughly half the feature.
+The 🟡 rows are exactly the ones where the API exists and the UI does not.

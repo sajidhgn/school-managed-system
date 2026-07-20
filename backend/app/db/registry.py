@@ -25,15 +25,29 @@ from __future__ import annotations
 
 from app.db.base import Base
 
+# Module 2 -- Student Information System
+# `academics` first: `students.Student.section_id` has a ForeignKey to
+# `sections.id`, so that table must already be in Base.metadata when the Student
+# mapper is configured.
+from app.modules.academics import models as academics_models
+
 # Module 1 -- Tenancy & Access Control
 from app.modules.auth import models as auth_models
+from app.modules.students import models as student_models
 from app.modules.tenancy import models as tenancy_models
 
 # ---------------------------------------------------------------------------
-# Module 2 -- Student Information System
-# from app.modules.students import models as student_models
+# Module 3 -- Academics & Daily Ops
+# from app.modules.attendance import models as attendance_models
+# from app.modules.timetable import models as timetable_models
 #
 # ... one line per module as it is implemented.
 # ---------------------------------------------------------------------------
 
-__all__ = ["Base", "auth_models", "tenancy_models"]
+__all__ = [
+    "Base",
+    "academics_models",
+    "auth_models",
+    "student_models",
+    "tenancy_models",
+]

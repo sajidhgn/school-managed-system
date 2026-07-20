@@ -393,6 +393,70 @@
   .status .todo::before { content: "○"; color: var(--ink-3); }
   .status .todo { color: var(--ink-2); }
 
+  /* ---------- feature checklist ---------- */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 0 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex: 0 0 auto;
+  }
+  .dot.done { background: var(--good); }
+  .dot.part { background: var(--flag); }
+  .dot.todo { background: var(--rule-2); }
+
+  /* Priority is a semantic signal, kept separate from the page accent. */
+  .pri {
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .pri.crit { color: #B4362F; }
+  .pri.high { color: #9A5B12; }
+  .pri.med  { color: #2C6A4F; }
+  @media (prefers-color-scheme: dark) {
+    .pri.crit { color: #E08880; }
+    .pri.high { color: #D9A159; }
+    .pri.med  { color: #63B08A; }
+  }
+  :root[data-theme="dark"] .pri.crit { color: #E08880; }
+  :root[data-theme="dark"] .pri.high { color: #D9A159; }
+  :root[data-theme="dark"] .pri.med  { color: #63B08A; }
+  :root[data-theme="light"] .pri.crit { color: #B4362F; }
+  :root[data-theme="light"] .pri.high { color: #9A5B12; }
+  :root[data-theme="light"] .pri.med  { color: #2C6A4F; }
+
+  table.feat td:nth-child(3) {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  table.feat td:nth-child(3) .dot { margin-right: 7px; }
+  table.feat td:nth-child(4) { font-size: 13.5px; color: var(--ink-2); }
+  table.feat td:first-child { font-weight: 550; }
+
   /* ---------- request trace ---------- */
 
   .trace { list-style: none; padding: 0; counter-reset: step; max-width: 72ch; }
@@ -462,7 +526,8 @@
     </p>
     <p class="standfirst" style="font-family: var(--sans); font-size: 16px;">
       Written for a MERN developer moving to Python. Read it top to bottom once. After that, use the
-      <a href="#s4">Directory Map</a> and <a href="#s9">How to add a feature</a> as your daily reference.
+      <a href="#s4">Directory Map</a> and <a href="#s9">How to add a feature</a> as your daily reference,
+      and <a href="#s13">the feature checklist</a> to see what is built.
     </p>
     <div class="stackline">
       <span class="chip">Python 3.13</span>
@@ -489,6 +554,7 @@
       <li><a href="#s10">Python things that trip up MERN devs</a></li>
       <li><a href="#s11">Command cheat sheet</a></li>
       <li><a href="#s12">What exists vs what is still empty</a></li>
+      <li><a href="#s13">The product feature checklist</a></li>
     </ol>
   </nav>
 
@@ -505,27 +571,29 @@
       <p><strong>Stack:</strong> Python 3.13 · FastAPI · Pydantic v2 · SQLAlchemy 2.x (async) · Alembic ·
       PostgreSQL.</p>
 
-      <p><strong>Current state — important:</strong> this is a <strong>complete, working foundation</strong>
-      with the first business module delivered. Think of it as the moment in a MERN project where
+      <p><strong>Current state:</strong> a complete, working foundation with <strong>the first two feature
+      modules delivered end to end</strong>. Think of it as the moment in a MERN project where
       <code>app.js</code>, <code>config/</code>, <code>middleware/</code>, <code>utils/</code>, error handling,
-      auth helpers and the DB connection are all done — and the first real feature has landed on top.</p>
+      auth helpers and the DB connection are all done — <em>and</em> the first real routes are shipped on
+      top.</p>
 
       <p>Concretely:</p>
       <ul>
         <li>The app boots and serves <code>/health</code> <strong>with no database at all</strong>
-          (<code>DB_ENABLED=false</code>).</li>
-        <li><span class="path">app/modules/</span> now contains <code>tenancy</code> and <code>auth</code>,
-          delivered end to end. Everything after that is still to come.</li>
-        <li><span class="path">alembic/versions/</span> holds the bootstrap migration creating
-          <code>schools</code>, <code>users</code>, <code>otp_codes</code>, <code>refresh_tokens</code>.</li>
+          (<code>DB_ENABLED=false</code>), and against real PostgreSQL when <code>DB_ENABLED=true</code>.</li>
+        <li><span class="path">app/modules/</span> contains <strong>tenancy</strong>, <strong>auth</strong>,
+          <strong>academics</strong> and <strong>students</strong> — each a full models → schemas →
+          repository → service → router stack.</li>
+        <li><span class="path">alembic/versions/</span> holds <strong>two migrations</strong>: the
+          tenancy/auth bootstrap, and classes/sections/students. Every tenant table carries an RLS
+          policy.</li>
         <li>There is <strong>no frontend folder yet</strong>. The config points at a future Next.js app on
           <code>http://localhost:3000</code>.</li>
       </ul>
 
       <div class="note">
-        <p>Everything in this document that describes <span class="path">app/modules/students/</span> is
-        describing the <strong>pattern you will follow</strong>, not code that exists today. See
-        <a href="#s12">§12</a> for the exact state of play.</p>
+        <p>See <a href="#s12">§12</a> for the exact state of play, and <a href="#s13">§13</a> for how it maps
+        onto the product feature checklist.</p>
       </div>
     </section>
 
@@ -715,16 +783,20 @@ async def create_student(
     │   ├── middleware/
     │   │   └── request_context.py <span class="c">← request id + access logging</span>
     │   │
-    │   └── modules/              <span class="hl">← ★ ALL BUSINESS FEATURES GO HERE</span>
-    │       ├── tenancy/              <span class="c">(done — schools, registration, approval)</span>
-    │       └── auth/                 <span class="c">(done — register, login, 2FA, refresh, reset)</span>
-    │                                 <span class="c">students/, classes/, fees/, attendance/ … to come</span>
+    │   └── modules/              <span class="hl">← ★ ALL BUSINESS FEATURES LIVE HERE</span>
+    │       ├── tenancy/          <span class="c">← schools: registration, approval, suspension</span>
+    │       ├── auth/             <span class="c">← register, verify, login, 2FA, refresh, reset</span>
+    │       ├── academics/        <span class="c">← classes (grades) + sections</span>
+    │       └── students/         <span class="c">← SIS directory + public admissions</span>
+    │                                 <span class="c">(attendance/, timetable/, fees/, … to come)</span>
     │
     ├── alembic/                  <span class="c">← database migrations</span>
     │   ├── env.py                <span class="c">← migration runtime config</span>
     │   ├── rls.py                <span class="c">← Row-Level Security DDL helpers</span>
     │   ├── script.py.mako        <span class="c">← template for generated migration files</span>
-    │   └── versions/             <span class="c">← the bootstrap migration lives here</span>
+    │   └── versions/
+    │       ├── ..._bootstrap_tenancy_and_auth.py
+    │       └── ..._add_classes_sections_and_students.py
     │
     ├── tests/
     │   ├── conftest.py           <span class="c">← shared fixtures (auto-discovered by pytest)</span>
@@ -732,11 +804,18 @@ async def create_student(
     │   │   ├── test_otp.py
     │   │   └── test_email.py
     │   └── integration/          <span class="c">← full HTTP requests through the real app</span>
-    │       └── test_health.py
+    │       ├── conftest.py       <span class="c">← DB fixtures; app connects as `sms_app`</span>
+    │       ├── test_health.py
+    │       ├── test_rls.py       <span class="c">← cross-tenant isolation proofs</span>
+    │       ├── test_tenancy.py
+    │       ├── test_auth_flows.py
+    │       ├── test_academics.py
+    │       └── test_students.py
     │
     ├── scripts/
     │   ├── init-db.sql           <span class="c">← creates extensions + the restricted `sms_app` role</span>
-    │   └── create_super_admin.py <span class="c">← seed the first platform operator</span>
+    │   ├── create_super_admin.py <span class="c">← seed the first platform operator</span>
+    │   └── smoke_auth.sh         <span class="c">← end-to-end auth check against a running server</span>
     │
     └── docker/
         └── Dockerfile            <span class="c">← multi-stage production image</span></code></pre></div>
@@ -1264,7 +1343,7 @@ async def list_students(db: DbSession, user: CurrentUser) -&gt; Page[StudentRead
           and a stale id would mislabel a later log line.</li>
       </ul>
 
-      <h3>5.8 app/modules/ — where your features go <span class="star">★</span></h3>
+      <h3 id="modules">5.8 app/modules/ — where your features go <span class="star">★</span></h3>
       <p>This is the most important directory in the project.</p>
       <p>The common FastAPI tutorial layout groups by <em>technical layer</em>: one <code>models/</code>
       directory, one <code>services/</code> directory, one <code>routers/</code> directory. That works up to
@@ -1291,9 +1370,19 @@ async def list_students(db: DbSession, user: CurrentUser) -&gt; Page[StudentRead
           self-contained directory with explicit imports is a day of work. Untangling flat layers is a
           quarter.</li>
       </ul>
-      <p>Planned modules: <code>tenancy</code> and <code>auth</code> (both delivered), then
-      <code>students</code>, <code>classes</code>, <code>attendance</code>, <code>timetable</code>,
-      <code>fees</code>, and more.</p>
+      <p>Delivered so far: <code>tenancy</code>, <code>auth</code>, <code>academics</code> (classes +
+      sections), <code>students</code>. Still to come: <code>attendance</code>, <code>timetable</code>,
+      <code>fees</code>, <code>communications</code>, <code>documents</code>, <code>search</code>,
+      <code>inventory</code>, <code>ai</code>.</p>
+
+      <div class="note">
+        <p><strong>Why classes and sections live in <code>academics/</code>, not <code>classes/</code>:</strong>
+        <code>class</code> is a Python keyword, so the package would be awkward to import and the model has
+        to be <code>SchoolClass</code> regardless. Grouping the grade/section hierarchy under
+        <code>academics</code> also leaves the obvious home for the timetable and attendance modules that
+        read it. The HTTP prefix is still <code>/api/v1/classes</code> — the URL follows the domain
+        language, not the Python package name.</p>
+      </div>
       <p>If you have done Nest.js, this is exactly its module concept. If you have only done Express, it is
       <code>routes/students.js</code> + <code>models/Student.js</code> + <code>services/studentService.js</code>
       collapsed into one folder.</p>
@@ -1810,9 +1899,31 @@ pytest</code></pre></div>
       <div class="scroll"><pre><code>cd backend
 uv venv --python 3.13         <span class="c"># create .venv</span>
 uv sync                       <span class="c"># npm install</span>
-cp .env.example .env          <span class="c"># then set SECRET_KEY</span></code></pre></div>
+cp .env.example .env          <span class="c"># then set SECRET_KEY and the DB credentials</span></code></pre></div>
       <p>Generate a real secret key:</p>
       <div class="scroll"><pre><code>python -c "import secrets; print(secrets.token_urlsafe(64))"</code></pre></div>
+
+      <p>Bootstrap the database once, as a superuser, then migrate:</p>
+      <div class="scroll"><pre><code>createdb school_manage_db
+psql -d school_manage_db -f scripts/init-db.sql   <span class="c"># extensions + the sms_app role</span>
+make migrate</code></pre></div>
+
+      <div class="rule-box">
+        <span class="tag">Two roles, not one</span>
+        <p><code>POSTGRES_USER</code> is the restricted runtime role (<code>sms_app</code>);
+        <code>MIGRATION_USER</code> is the schema <strong>owner</strong> that Alembic connects as.
+        <code>sms_app</code> has no DDL rights, so leaving <code>MIGRATION_USER</code> unset on a database it
+        does not own makes <code>make migrate</code> fail with <em>permission denied for schema public</em>.
+        Setting both to the owner "fixes" that and silently disables every RLS policy — owners are exempt
+        from RLS. See <a href="#s8">§8</a>.</p>
+      </div>
+
+      <p>Seed the first platform operator (needed to approve self-registered schools):</p>
+      <div class="scroll"><pre><code>SMS_SUPERADMIN_PASSWORD='...' uv run python -m scripts.create_super_admin \
+  --email ops@yourdomain.com --name "Ops"</code></pre></div>
+      <p>The address must be a genuinely routable one — reserved TLDs (<code>.test</code>,
+      <code>.local</code>, <code>.example</code>) are rejected, because the login endpoint would reject them
+      too.</p>
 
       <h3>Daily</h3>
       <div class="scroll">
@@ -1855,6 +1966,14 @@ cp .env.example .env          <span class="c"># then set SECRET_KEY</span></code
           </tbody>
         </table>
       </div>
+
+      <h3>Smoke-testing auth against a running server</h3>
+      <div class="scroll"><pre><code>make dev &gt; /tmp/sms.log 2&gt;&amp;1 &amp;
+SA_EMAIL=ops@yourdomain.com SA_PASSWORD='...' ./scripts/smoke_auth.sh /tmp/sms.log</code></pre></div>
+      <p>Walks register → verify → approve → login (2FA) → refresh rotation → logout over real HTTP. The
+      pytest suite covers the same flows in-process; this catches the wiring the in-process tests cannot
+      see — middleware order, RLS binding on a pooled connection, and the migration/runtime role split.
+      Requires <code>EMAIL_BACKEND=console</code>, since it reads OTP codes out of the log.</p>
 
       <h3>Once running</h3>
       <div class="scroll">
@@ -1933,10 +2052,62 @@ cp .env.example .env          <span class="c"># then set SECRET_KEY</span></code
           <code>alembic.__path__</code> so the convention works for every future migration.</li>
       </ul>
 
+      <h3>Module 2 — Academics &amp; Students — delivered end to end</h3>
+      <ul class="status">
+        <li class="done"><strong><code>modules/academics</code></strong> — full stack.
+          <code>SchoolClass</code> (grade levels) and <code>Section</code>, both tenant-scoped.
+          Create/list/update/delete classes; sections nested under their class with optional
+          <code>capacity</code> and a <code>class_teacher_id</code> FK to <code>users</code>. A class with
+          sections, or a section with enrolled students, refuses deletion rather than cascading a whole
+          grade away.</li>
+        <li class="done"><strong><code>modules/students</code></strong> — full stack. Directory CRUD with
+          demographics, guardian and emergency contacts; search across name and admission number; filter by
+          section and status; partial (PATCH) updates; soft delete. Admission numbers unique per school,
+          section capacity and the plan's <code>max_students</code> seat limit both enforced.</li>
+        <li class="done"><strong>Public admissions intake</strong> —
+          <code>POST /students/admissions</code> is unauthenticated and lands an applicant as
+          <code>PENDING</code> with a generated admission number. It cannot be used to self-admit (status
+          and admission number are server-assigned), and a suspended school is indistinguishable from a
+          nonexistent one, so the endpoint leaks no tenant existence.</li>
+        <li class="done"><strong>Class &amp; section summaries</strong> —
+          <code>GET /classes/summary</code> returns each class, its sections, and live headcounts in two
+          queries total (one grouped <code>COUNT</code>), not an N+1 per section. Pending applicants are
+          excluded — they occupy no seat.</li>
+        <li class="done"><strong>RBAC</strong> — reads are open to any authenticated member of the school
+          (teachers need the directory); every write requires <code>school_admin</code>.</li>
+        <li class="done"><strong>Migration</strong> — <code>classes</code>, <code>sections</code>,
+          <code>students</code>, each with <code>setup_tenant_table()</code>. Verified: applies, downgrades
+          cleanly, re-applies, and <code>alembic check</code> reports no drift.</li>
+        <li class="done"><strong>Tests</strong> — 22 new integration tests running as the restricted
+          <code>sms_app</code> role, including cross-tenant isolation proofs for both modules (another
+          school's class or student reads as <strong>404, never 403</strong>). <code>make check</code> is
+          green: 78 tests, ruff clean, mypy strict clean.</li>
+      </ul>
+
+      <p>Three foundation fixes were needed along the way, all documented at their site:</p>
+      <ul>
+        <li><strong>Alembic connected as the wrong role.</strong> <span class="path">env.py</span>'s
+          docstring stated that migrations run as the schema owner while the app runs as restricted
+          <code>sms_app</code>, but it read <code>settings.DATABASE_URL</code> — the <em>application</em>
+          DSN — so <code>alembic upgrade</code> failed with <code>permission denied for schema public</code>.
+          Added <code>MIGRATION_USER</code>/<code>MIGRATION_PASSWORD</code> and a
+          <code>MIGRATION_DATABASE_URL</code> that <code>env.py</code> now uses, making the documented
+          owner/app split real rather than aspirational.</li>
+        <li><strong>The public admissions lookup could never find its school.</strong>
+          <code>schools</code> is itself RLS-protected by an <em>id-based</em> policy, so on an
+          unauthenticated session with no tenant bound the predicate is <code>id = NULL</code> and every
+          school reads as missing. The tenant is now bound <em>before</em> the lookup, not after.</li>
+        <li><strong><code>create_super_admin.py</code> could create an unusable account.</strong> It writes
+          straight to the table, bypassing the <code>EmailStr</code> check on the API schemas, so an address
+          in a reserved TLD (<code>.test</code>, <code>.local</code>) was accepted and then rejected with a
+          422 by <code>POST /auth/login</code> — a super admin that exists but can never sign in. The script
+          now validates with the same validator the login endpoint uses.</li>
+      </ul>
+
       <h3>Not started</h3>
       <ul class="status">
-        <li class="todo"><strong><code>modules/students</code></strong> and beyond — classes, attendance,
-          timetable, fees, …</li>
+        <li class="todo"><strong>Attendance, timetable, fees</strong>, and the rest of the checklist — see
+          <a href="#s13">§13</a></li>
         <li class="todo">No frontend directory (config anticipates Next.js on :3000)</li>
         <li class="todo">No CI pipeline file</li>
       </ul>
@@ -1945,10 +2116,14 @@ cp .env.example .env          <span class="c"># then set SECRET_KEY</span></code
       <ol>
         <li><strong><code>modules/tenancy</code></strong> — the <code>schools</code> table. <em>Done.</em></li>
         <li><strong><code>modules/auth</code></strong> — users, login, refresh, OTP state. <em>Done.</em></li>
-        <li><strong><code>modules/students</code></strong> — the first real domain, and the template for the
-          rest. This is the first module that uses the standard <code>setup_tenant_table()</code> RLS helper
-          (<code>school_id</code> based), now that the import path is fixed.</li>
-        <li>Then: classes, attendance, timetable, fees…</li>
+        <li><strong><code>modules/academics</code></strong> — classes and sections. <em>Done.</em></li>
+        <li><strong><code>modules/students</code></strong> — the SIS directory and admissions intake.
+          <em>Done.</em></li>
+        <li><strong><code>modules/attendance</code></strong> — next. Reads the section register that
+          <code>academics</code> now provides; the checklist's "under 10 seconds" target makes it a
+          bulk-write endpoint (one request per section per day), not one POST per student.</li>
+        <li>Then: timetable, fees + PDF vouchers, communications (WhatsApp), documents (ID cards,
+          certificates), global search, inventory/POS, and the AI modules.</li>
       </ol>
 
       <h3>Where to look when you are stuck</h3>
@@ -1973,6 +2148,129 @@ cp .env.example .env          <span class="c"># then set SECRET_KEY</span></code
         <p>Every source file in this project starts with a docstring explaining <em>why it exists</em>,
         <em>what it is responsible for</em>, and <em>what it interacts with</em>. Before changing a file, read
         its docstring. Before adding a file, write one.</p>
+      </div>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section id="s13">
+      <p class="sec-no">Section 13</p>
+      <h2>The product feature checklist</h2>
+
+      <p>Source: <code>school_management_complete_features.pdf</code> — 18 features across 9 categories.
+      This table is the single place where the product checklist and the codebase are reconciled.
+      <strong>Update it in the same commit that ships a feature.</strong></p>
+
+      <div class="legend">
+        <span><i class="dot done"></i> done</span>
+        <span><i class="dot part"></i> partial</span>
+        <span><i class="dot todo"></i> not started</span>
+        <span><i class="pri crit">Critical</i></span>
+        <span><i class="pri high">High</i></span>
+        <span><i class="pri med">Medium</i></span>
+      </div>
+
+      <h3>Tenant &amp; Access Control</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Multi-Tenant RLS Database</td><td><i class="pri crit">Critical</i></td><td><i class="dot done"></i>done</td><td><span class="path">alembic/rls.py</span>, <span class="path">db/session.py</span>; policies on <code>schools</code>, <code>classes</code>, <code>sections</code>, <code>students</code></td></tr>
+            <tr><td>Super Admin Dashboard</td><td><i class="pri crit">Critical</i></td><td><i class="dot part"></i>partial</td><td>API done (<code>modules/tenancy</code>: list/onboard/approve/suspend). No UI — there is no frontend yet</td></tr>
+            <tr><td>Role-Based Access Control</td><td><i class="pri high">High</i></td><td><i class="dot done"></i>done</td><td><code>api/deps.py::require_roles</code>; School Admin writes, Teacher reads</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Student Management (SIS)</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Student Directory CRUD</td><td><i class="pri crit">Critical</i></td><td><i class="dot done"></i>done</td><td><code>modules/students</code> — demographics, guardian + emergency contacts, search, soft delete</td></tr>
+            <tr><td>Class &amp; Section Setup</td><td><i class="pri crit">Critical</i></td><td><i class="dot done"></i>done</td><td><code>modules/academics</code> — grades and sections, capacity, class teacher</td></tr>
+            <tr><td>Digital Admissions Form</td><td><i class="pri high">High</i></td><td><i class="dot part"></i>partial</td><td>Backend done: <code>POST /students/admissions</code> → PENDING queue. The Next.js form itself is not built</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Academics &amp; Daily Ops</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Fast Attendance Interface</td><td><i class="pri crit">Critical</i></td><td><i class="dot todo"></i>next</td><td>Next module. Will read the section register from <code>academics</code></td></tr>
+            <tr><td>Basic Timetable View</td><td><i class="pri med">Medium</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+            <tr><td>Class &amp; Section Summaries</td><td><i class="pri high">High</i></td><td><i class="dot done"></i>done</td><td><code>GET /classes/summary</code> — sections + headcount per class</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Financials</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Fee Structure Configuration</td><td><i class="pri crit">Critical</i></td><td><i class="dot todo"></i>—</td><td>Will key off <code>classes</code> (fees are per grade)</td></tr>
+            <tr><td>Automated PDF Vouchers</td><td><i class="pri high">High</i></td><td><i class="dot todo"></i>—</td><td>Needs a PDF library — none added yet</td></tr>
+            <tr><td>Payment Collection Dashboard</td><td><i class="pri crit">Critical</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Communications</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>WhatsApp Integration (API)</td><td><i class="pri high">High</i></td><td><i class="dot todo"></i>—</td><td><code>students.guardian_phone</code> is the target field, already captured</td></tr>
+            <tr><td>Bulk Fee WhatsApp Notifications</td><td><i class="pri crit">Critical</i></td><td><i class="dot todo"></i>—</td><td>Depends on fees + WhatsApp</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>ID Cards &amp; Certificates</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Student ID Card Generator</td><td><i class="pri med">Medium</i></td><td><i class="dot todo"></i>—</td><td><code>students.photo_url</code> and <code>schools.logo_url</code> exist for it</td></tr>
+            <tr><td>Certificate Generator</td><td><i class="pri med">Medium</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Global Navigation &amp; Search</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Global Search Engine</td><td><i class="pri high">High</i></td><td><i class="dot part"></i>partial</td><td>Per-module search exists (<code>GET /students?q=</code>); <code>pg_trgm</code> is installed. No cross-entity omnibar yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>AI Agents, Inventory &amp; Marketing</h3>
+      <div class="scroll">
+        <table class="feat">
+          <thead><tr><th>Feature</th><th>Priority</th><th>Status</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>AI Homework Agent</td><td><i class="pri high">High</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+            <tr><td>AI WhatsApp Notification Agent</td><td><i class="pri high">High</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+            <tr><td>Stationary Point of Sale (POS)</td><td><i class="pri med">Medium</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+            <tr><td>AI Social Media Designer</td><td><i class="pri high">High</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+            <tr><td>Print &amp; Paper Design Hub</td><td><i class="pri med">Medium</i></td><td><i class="dot todo"></i>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rule-box">
+        <span class="tag">What "done" means here</span>
+        <p>Every <strong>done</strong> above is <strong>backend only</strong> — API endpoints, business
+        rules, migrations and tests. <strong>There is no frontend in this repository.</strong> Several
+        checklist items (the Super Admin dashboard, the admissions form, ID card templates, the marketing
+        studio) are described in the checklist as Next.js interfaces; for those, a finished backend is
+        roughly half the feature. The <strong>partial</strong> rows are exactly the ones where the API
+        exists and the UI does not.</p>
       </div>
     </section>
 

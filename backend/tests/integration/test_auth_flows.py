@@ -134,9 +134,7 @@ async def test_full_signup_approve_login_2fa_flow(db_client: AsyncClient, mailbo
 async def test_teacher_login_needs_no_2fa(db_client: AsyncClient, seed_school, seed_user) -> None:
     """Teachers skip 2FA (attendance in under 10s), so login returns tokens directly."""
     school = await seed_school()
-    teacher: SeededUser = await seed_user(
-        school_id=str(school.id), email="teacher@springfield.edu"
-    )
+    teacher: SeededUser = await seed_user(school_id=str(school.id), email="teacher@springfield.edu")
 
     resp = await db_client.post(
         "/api/v1/auth/login",

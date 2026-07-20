@@ -59,7 +59,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# MIGRATION_DATABASE_URL, not DATABASE_URL -- see the module docstring above. This
+# connects as the schema owner; the application's restricted role cannot run DDL.
+config.set_main_option("sqlalchemy.url", settings.MIGRATION_DATABASE_URL)
 
 target_metadata = Base.metadata
 
@@ -116,7 +118,7 @@ def run_migrations_offline() -> None:
     write access to production.
     """
     context.configure(
-        url=settings.DATABASE_URL,
+        url=settings.MIGRATION_DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

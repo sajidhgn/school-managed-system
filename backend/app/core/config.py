@@ -85,6 +85,19 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 5
 
+    # --- Migration credentials ---------------------------------------------
+    # Alembic needs DDL rights and must connect as the schema OWNER. The
+    # application connects as POSTGRES_USER -- a restricted, NOBYPASSRLS role that
+    # owns nothing (see scripts/init-db.sql). The split is not cosmetic: PostgreSQL
+    # exempts superusers and table owners from RLS, so running the app as the owner
+    # would silently disable every tenant-isolation policy in the system.
+    #
+    # Left empty, these fall back to POSTGRES_USER/POSTGRES_PASSWORD -- correct only
+    # for a throwaway database where the app role happens to own the schema, and
+    # wrong everywhere else. Set them whenever the two roles genuinely differ.
+    MIGRATION_USER: str = ""
+    MIGRATION_PASSWORD: str = ""
+
     # --- Email / SMTP ------------------------------------------------------
     # EMAIL_BACKEND selects the transport:
     #   "console" -- render to the log, send nothing. The default, and what tests
@@ -159,6 +172,32 @@ class Settings(BaseSettings):
                 scheme="postgresql+asyncpg",
                 username=self.POSTGRES_USER,
                 password=self.POSTGRES_PASSWORD,
+                host=self.POSTGRES_HOST,
+                port=self.POSTGRES_PORT,
+                path=self.POSTGRES_DB,
+            )
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def MIGRATION_DATABASE_URL(self) -> str:
+        """Async DSN used by Alembic only -- connects as the schema owner.
+
+        Falls back to the application credentials when MIGRATION_USER is unset, so
+        a disposable local database still works with no extra configuration. Note
+        the password is taken from MIGRATION_PASSWORD verbatim once MIGRATION_USER
+        is set: an owner authenticating by local trust/peer has no password, and
+        silently substituting the app role's password would break that.
+        """
+        if self.MIGRATION_USER:
+            username, password = self.MIGRATION_USER, self.MIGRATION_PASSWORD
+        else:
+            username, password = self.POSTGRES_USER, self.POSTGRES_PASSWORD
+        return str(
+            PostgresDsn.build(
+                scheme="postgresql+asyncpg",
+                username=username,
+                password=password or None,
                 host=self.POSTGRES_HOST,
                 port=self.POSTGRES_PORT,
                 path=self.POSTGRES_DB,

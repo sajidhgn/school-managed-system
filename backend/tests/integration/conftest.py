@@ -45,7 +45,17 @@ from app.modules.tenancy.models import School, SchoolStatus, SubscriptionPlan
 # Test infrastructure credentials. The app connects as the restricted role; the admin
 # engine (superuser) is used only for setup/teardown and cross-tenant assertions.
 _ADMIN_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/school_manage_db"
-_APP_TABLES = ("refresh_tokens", "otp_codes", "users", "schools")
+# Listed children-first for readability; TRUNCATE ... CASCADE would reach them via
+# schools anyway, but naming them keeps the blast radius of this statement explicit.
+_APP_TABLES = (
+    "students",
+    "sections",
+    "classes",
+    "refresh_tokens",
+    "otp_codes",
+    "users",
+    "schools",
+)
 
 TEST_SECRET = "integration-test-secret-key-not-for-production-use"
 DEFAULT_PASSWORD = "Password123!"

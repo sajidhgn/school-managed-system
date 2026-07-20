@@ -23,6 +23,8 @@ import getpass
 import os
 import sys
 
+from pydantic import EmailStr, TypeAdapter, ValidationError
+
 import app.db.registry  # noqa: F401  (registers every model so FKs resolve, e.g. users->schools)
 from app.core.config import get_settings
 from app.core.otp import normalise_identifier
@@ -71,7 +73,21 @@ def main() -> None:
         print("Password must be at least 8 characters.", file=sys.stderr)
         raise SystemExit(1)
 
-    asyncio.run(_create(normalise_identifier(args.email), args.name.strip(), password))
+    # Validate with the SAME validator the login endpoint uses.
+    #
+    # WHY: this script writes straight to the table and so bypasses the `EmailStr`
+    # check on the API schemas. Without this, an address in a reserved TLD
+    # (`.test`, `.local`, `.example`) is accepted here and then rejected with a 422
+    # by POST /auth/login -- producing a super admin that exists in the database and
+    # can never sign in, with nothing to explain why.
+    try:
+        validated = TypeAdapter(EmailStr).validate_python(args.email)
+    except ValidationError as exc:
+        reason = exc.errors()[0]["msg"] if exc.errors() else "invalid address"
+        print(f"{args.email!r} is not a usable login email: {reason}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    asyncio.run(_create(normalise_identifier(validated), args.name.strip(), password))
 
 
 if __name__ == "__main__":

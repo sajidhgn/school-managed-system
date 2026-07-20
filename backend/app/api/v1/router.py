@@ -23,7 +23,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.modules.academics.router import router as classes_router
 from app.modules.auth.router import router as auth_router
+from app.modules.students.router import router as students_router
 from app.modules.tenancy.router import router as tenancy_router
 
 api_router = APIRouter()
@@ -39,9 +41,9 @@ api_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(tenancy_router, prefix="/schools", tags=["Schools"])
 
 # Module 2 -- Student Information System
-# api_router.include_router(students_router, prefix="/students", tags=["Students"])
-# api_router.include_router(classes_router,  prefix="/classes",  tags=["Classes & Sections"])
-#
+api_router.include_router(classes_router, prefix="/classes", tags=["Classes & Sections"])
+api_router.include_router(students_router, prefix="/students", tags=["Students"])
+
 # Module 3 -- Academics & Daily Ops
 # api_router.include_router(attendance_router, prefix="/attendance", tags=["Attendance"])
 # api_router.include_router(timetable_router,  prefix="/timetable",  tags=["Timetable"])
