@@ -75,7 +75,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.otp import OtpPurpose
-from app.db.base import Base
+from app.db.base import Base, str_enum
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 
@@ -144,9 +144,14 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
 
     # --- Authorisation -----------------------------------------------------
-    role: Mapped[UserRole] = mapped_column(String(32), nullable=False, index=True)
+    role: Mapped[UserRole] = mapped_column(
+        str_enum(UserRole, name="role"), nullable=False, index=True
+    )
     status: Mapped[UserStatus] = mapped_column(
-        String(32), nullable=False, default=UserStatus.PENDING_VERIFICATION, index=True
+        str_enum(UserStatus, name="status"),
+        nullable=False,
+        default=UserStatus.PENDING_VERIFICATION,
+        index=True,
     )
 
     # --- Verification & 2FA ------------------------------------------------
@@ -252,7 +257,9 @@ class OtpCode(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     the lookup must not require a join to a user that may not exist yet.
     """
 
-    purpose: Mapped[OtpPurpose] = mapped_column(String(32), nullable=False)
+    purpose: Mapped[OtpPurpose] = mapped_column(
+        str_enum(OtpPurpose, name="purpose"), nullable=False
+    )
     """Bound into `code_hash` cryptographically AND stored here.
 
     The digest binding makes cross-flow replay impossible; storing it as well lets

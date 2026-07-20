@@ -84,6 +84,7 @@ class Principal:
 
 async def get_current_principal(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    settings: SettingsDep,
 ) -> Principal:
     """Verify the bearer token and publish the caller into the request context.
 
@@ -91,11 +92,16 @@ async def get_current_principal(
     makes tenant isolation work. `db.session.get_db` reads it moments later and
     issues `set_config('app.current_school_id', ...)`, which is the value every RLS
     policy compares against.
+
+    `settings` is injected (not read from the global singleton) so token verification
+    honours `dependency_overrides[get_settings]` -- e.g. a test signing key.
     """
     if credentials is None:
         raise AuthenticationError("Missing Authorization header.", code="TOKEN_MISSING")
 
-    payload = decode_token(credentials.credentials, expected_type=TokenType.ACCESS)
+    payload = decode_token(
+        credentials.credentials, expected_type=TokenType.ACCESS, settings=settings
+    )
 
     try:
         user_id = UUID(payload["sub"])

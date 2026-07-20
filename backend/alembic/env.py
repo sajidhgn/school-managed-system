@@ -25,17 +25,33 @@ MIGRATIONS RUN AS THE OWNER, THE APP RUNS AS A RESTRICTED ROLE
 from __future__ import annotations
 
 import asyncio
+import os
 from logging.config import fileConfig
 
+import alembic
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# Importing the registry is what populates Base.metadata with every table.
-import app.db.registry  # noqa: F401  (import for side effect)
+import app.db.registry  # noqa: F401  (import for side effect: populates Base.metadata)
 from app.core.config import get_settings
 from app.db.base import Base
+
+# ---------------------------------------------------------------------------
+# Make migration helpers importable as `alembic.rls`.
+#
+# WHY THIS IS NEEDED: this project ships helpers in `alembic/rls.py` and the
+# convention (see PROJECT_STRUCTURE.md and rls.py's own docstring) is that
+# migrations do `from alembic.rls import setup_tenant_table`. But the *installed*
+# `alembic` distribution is a regular package that shadows this local directory,
+# so `alembic.rls` would not resolve on its own. Extending the installed package's
+# search path to include this directory makes the documented import work for every
+# migration -- and env.py always runs before any migration, so this is in place in
+# time. It is idempotent (append-once guarded).
+_ALEMBIC_DIR = os.path.dirname(os.path.abspath(__file__))
+if _ALEMBIC_DIR not in alembic.__path__:
+    alembic.__path__.append(_ALEMBIC_DIR)
 
 config = context.config
 

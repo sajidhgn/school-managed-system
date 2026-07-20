@@ -159,6 +159,35 @@ async def _apply_tenant_guc(
     )
 
 
+async def bind_tenant(
+    session: AsyncSession,
+    school_id: UUID | None,
+    *,
+    super_admin: bool = False,
+) -> None:
+    """Re-bind the tenant GUC on an already-open session, mid-transaction.
+
+    WHY THIS EXISTS
+        A handful of PRE-authentication flows discover their tenant only *after* a
+        lookup, so `get_db` cannot have bound it at session start:
+
+          * self-service registration inserts a brand-new school and must set the
+            GUC to that new id so the `schools` WITH CHECK policy accepts the row;
+          * login reads the caller's own `School` row to check it is active, but the
+            tenant is known only once the user has been found by email.
+
+        Both run on a `PublicDbSession` whose GUC is empty. This helper lets the
+        service bind the tenant it just resolved, using the same transaction-scoped
+        `set_config` that `get_db` uses -- so nothing leaks past COMMIT onto the next
+        request that reuses this pooled connection.
+
+        This is a deliberately narrow, auditable escape hatch. It is NOT a way to
+        widen a normal request's tenant: RLS still governs every row, and binding a
+        tenant the caller has not proven they own would simply fail the policy.
+    """
+    await _apply_tenant_guc(session, school_id, super_admin)
+
+
 async def get_db() -> AsyncGenerator[AsyncSession]:
     """FastAPI dependency yielding a tenant-scoped session (one per request).
 

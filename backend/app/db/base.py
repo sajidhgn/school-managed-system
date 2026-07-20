@@ -22,8 +22,10 @@ DEVIATION FROM THE SKILL PLAYBOOK
 from __future__ import annotations
 
 import re
+from enum import StrEnum
 from typing import Any
 
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase, declared_attr
 
@@ -47,6 +49,44 @@ NAMING_CONVENTION: dict[str, str] = {
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 _CAMEL_TO_SNAKE = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def str_enum[E: StrEnum](enum_cls: type[E], *, name: str, length: int = 32) -> SAEnum:
+    """A VARCHAR-backed enum column type that returns real StrEnum members.
+
+    WHY THIS EXISTS
+        The models store lifecycle states (SchoolStatus, UserRole, ...) as text, and
+        the design note in tenancy/models.py is explicit about the trade: a
+        "VARCHAR + CHECK constraint" for integrity, with the Python StrEnum supplying
+        type safety in the app -- deliberately NOT a native PostgreSQL ENUM type
+        (whose ALTER TYPE is non-transactional and irreversible in a downgrade).
+
+        A bare `mapped_column(String(32))` annotated `Mapped[SomeEnum]` delivers
+        neither half of that: PostgreSQL stores free text with no CHECK, and reads
+        come back as plain `str`, so `self.status is SomeEnum.ACTIVE` in a model
+        property is always False. This factory delivers both halves correctly:
+
+          * `native_enum=False`  -> a VARCHAR column plus a CHECK constraint
+            restricting it to the enum's members (the documented integrity mechanism).
+          * `values_callable`    -> persists each member's *value* ("active"), not its
+            NAME ("ACTIVE"); the values are what the StrEnum, JWTs and the API use.
+          * on read, SQLAlchemy coerces the text back into the enum member, so both
+            `==` and `is` comparisons behave.
+
+    Pass an explicit `name` so the CHECK constraint is deterministically named under
+    the project's naming convention.
+    """
+    return SAEnum(
+        enum_cls,
+        native_enum=False,
+        # create_constraint defaults to False since SQLAlchemy 1.4; without this the
+        # "CHECK" half of "VARCHAR + CHECK" never reaches the database and a raw
+        # INSERT could store an out-of-range value. Turn it on explicitly.
+        create_constraint=True,
+        length=length,
+        values_callable=lambda e: [member.value for member in e],
+        name=name,
+    )
 
 
 class Base(DeclarativeBase):

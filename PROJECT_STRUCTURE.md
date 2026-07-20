@@ -1565,22 +1565,49 @@ All three docs URLs are **disabled in production** — they leak the full API su
 - ✅ Docker + docker-compose, `sms_app` role bootstrap
 - ✅ Test harness (unit + integration), ruff, mypy strict, Makefile
 
+### Module 1 — Tenancy & Auth — DONE (delivered end-to-end)
+
+- ✅ **`modules/tenancy`** — full stack: `schemas` / `repository` / `service` / `router`.
+  Self-service registration (creates a PENDING_APPROVAL school), super-admin onboarding,
+  approve / suspend transitions, list + filter, `GET /schools/current`.
+- ✅ **`modules/auth`** — full stack across three tables. Register → email-verify (OTP) →
+  login with account lockout and role-based 2FA → token issue → refresh (rotate +
+  revoke-on-use) → logout → forgot / reset password (revokes all sessions) → `GET /me`.
+- ✅ **`alembic/versions/`** — the bootstrap migration creates `schools`, `users`,
+  `otp_codes`, `refresh_tokens`. `schools` carries a hand-written **id-based** RLS policy
+  (a school *is* the tenant); the three auth tables are deliberately outside RLS with DML
+  grants only. Verified: applies, downgrades, and `alembic check` reports no drift.
+- ✅ `scripts/create_super_admin.py` — seed the first platform operator (uses
+  `session_scope`, since there is no request context to read the tenant from).
+- ✅ Tests: existing skeleton smoke tests plus DB-backed integration tests that run the
+  app as the restricted `sms_app` role, including a **cross-tenant RLS isolation** suite
+  proving PostgreSQL refuses cross-tenant reads *and* writes. `make check` is green.
+
+Two foundation fixes were needed to make the above actually work, both documented at
+their site:
+
+- **Enum columns.** The status/role/plan columns were `String(32)` annotated as enums, so
+  reads came back as plain `str` and the models' `is`-based `is_active` / `can_authenticate`
+  always returned False (login was structurally impossible). They now use `str_enum(...)`
+  (`db/base.py`): VARCHAR **+ CHECK** with `values_callable`, which is the "VARCHAR + CHECK"
+  design this doc already described, and returns real `StrEnum` members.
+- **`from alembic.rls import …`.** The installed `alembic` distribution shadowed the local
+  `alembic/` directory, so the documented helper import never resolved. `alembic/env.py`
+  now extends `alembic.__path__` so the convention works for every future migration.
+
 ### Not started
 
-- ⬜ **`app/modules/` is empty** — every business feature
-- ⬜ **`alembic/versions/` is empty** — no tables exist yet
-- ⬜ No `schools` table yet (note: `TenantMixin` already references `schools.id`, so the
-  tenancy module must be the **first** one built)
+- ⬜ **`modules/students`** and beyond — classes, attendance, timetable, fees, …
 - ⬜ No frontend directory (config anticipates Next.js on :3000)
 - ⬜ No CI pipeline file
 
-### The suggested build order
+### The remaining build order
 
-1. **`modules/tenancy`** — the `schools` table. Everything else foreign-keys to it, so it
-   must come first.
-2. **`modules/auth`** — users, login, refresh, the `otp_codes` table that gives
-   `core/otp.py` its expiry / attempt-limit / single-use state.
-3. **`modules/students`** — the first real domain, and the template for the rest.
+1. ✅ **`modules/tenancy`** — the `schools` table (done).
+2. ✅ **`modules/auth`** — users, login, refresh, OTP state (done).
+3. **`modules/students`** — the first real domain, and the template for the rest. This is
+   the first module that uses the standard `setup_tenant_table()` RLS helper (`school_id`
+   based), now that the import path is fixed.
 4. Then: classes, attendance, timetable, fees…
 
 ### Where to look when you are stuck

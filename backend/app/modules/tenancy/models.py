@@ -35,7 +35,7 @@ from enum import StrEnum
 from sqlalchemy import DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.base import Base, str_enum
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 
@@ -98,23 +98,26 @@ class School(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     # No `index=True`: ix_schools_status_created_at below covers status-only
     # filtering via its leftmost prefix.
     status: Mapped[SchoolStatus] = mapped_column(
-        String(32),
+        str_enum(SchoolStatus, name="status"),
         nullable=False,
         default=SchoolStatus.PENDING_APPROVAL,
     )
-    """Stored as String, not a PostgreSQL ENUM type, deliberately.
+    """Stored as VARCHAR + CHECK, not a PostgreSQL ENUM type, deliberately.
 
     Adding a value to a PG enum requires ALTER TYPE, which historically could not
     run inside a transaction and still cannot be reversed in a downgrade. A
-    VARCHAR + CHECK constraint gives the same integrity with migrations that are
-    trivially reversible. The Python `StrEnum` supplies type safety in the app.
+    VARCHAR + CHECK constraint (see `str_enum` in db/base.py) gives the same
+    integrity with migrations that are trivially reversible, and returns real
+    `StrEnum` members in Python so lifecycle checks are type-safe.
     """
 
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # --- Subscription ------------------------------------------------------
     plan: Mapped[SubscriptionPlan] = mapped_column(
-        String(32), nullable=False, default=SubscriptionPlan.TRIAL
+        str_enum(SubscriptionPlan, name="plan"),
+        nullable=False,
+        default=SubscriptionPlan.TRIAL,
     )
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
