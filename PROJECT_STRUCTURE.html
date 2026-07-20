@@ -1,0 +1,2013 @@
+<title>Project Structure — Complete Guide</title>
+<style>
+  :root {
+    --paper:      #EEF1F4;
+    --surface:    #FFFFFF;
+    --surface-2:  #E3E9EE;
+    --ink:        #17202A;
+    --ink-2:      #46545F;
+    --ink-3:      #6E7D89;
+    --rule:       #C9D3DB;
+    --rule-2:     #9FADB8;
+    --accent:     #1B5E9E;
+    --accent-bg:  #DEE9F4;
+    --flag:       #9A5B12;
+    --flag-bg:    #F4E9D9;
+    --good:       #2C6A4F;
+    --code-bg:    #E6ECF1;
+    --code-ink:   #1B2733;
+    --comment:    #6E7D89;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #101820;
+      --surface:    #16202B;
+      --surface-2:  #1E2B38;
+      --ink:        #DDE5EC;
+      --ink-2:      #A2B0BC;
+      --ink-3:      #7C8B98;
+      --rule:       #2A3846;
+      --rule-2:     #3D4E5E;
+      --accent:     #6BA8E0;
+      --accent-bg:  #1A2C3D;
+      --flag:       #D9A159;
+      --flag-bg:    #2A2318;
+      --good:       #63B08A;
+      --code-bg:    #0C131A;
+      --code-ink:   #CBD6E0;
+      --comment:    #74838F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #101820;
+    --surface:    #16202B;
+    --surface-2:  #1E2B38;
+    --ink:        #DDE5EC;
+    --ink-2:      #A2B0BC;
+    --ink-3:      #7C8B98;
+    --rule:       #2A3846;
+    --rule-2:     #3D4E5E;
+    --accent:     #6BA8E0;
+    --accent-bg:  #1A2C3D;
+    --flag:       #D9A159;
+    --flag-bg:    #2A2318;
+    --good:       #63B08A;
+    --code-bg:    #0C131A;
+    --code-ink:   #CBD6E0;
+    --comment:    #74838F;
+  }
+  :root[data-theme="light"] {
+    --paper:      #EEF1F4;
+    --surface:    #FFFFFF;
+    --surface-2:  #E3E9EE;
+    --ink:        #17202A;
+    --ink-2:      #46545F;
+    --ink-3:      #6E7D89;
+    --rule:       #C9D3DB;
+    --rule-2:     #9FADB8;
+    --accent:     #1B5E9E;
+    --accent-bg:  #DEE9F4;
+    --flag:       #9A5B12;
+    --flag-bg:    #F4E9D9;
+    --good:       #2C6A4F;
+    --code-bg:    #E6ECF1;
+    --code-ink:   #1B2733;
+    --comment:    #6E7D89;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--rule-2);
+    padding: 72px 0 28px;
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 18px;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(34px, 5.2vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 20px;
+  }
+  .standfirst {
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin: 0 0 22px;
+  }
+  .stackline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 24px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    padding: 4px 9px;
+    border: 1px solid var(--rule-2);
+    color: var(--ink-2);
+    background: var(--surface);
+  }
+
+  /* ---------- sidebar ---------- */
+
+  .toc {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 36px 0 48px;
+  }
+  .toc-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 4px;
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: toc;
+  }
+  .toc a {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 4px;
+    padding: 7px 0;
+    font-size: 13.5px;
+    line-height: 1.35;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .toc a::before {
+    counter-increment: toc;
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .toc a:hover { color: var(--ink); }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .toc a.on { color: var(--accent); font-weight: 600; }
+  .toc a.on::before { color: var(--accent); }
+
+  /* ---------- main column ---------- */
+
+  main { padding: 36px 0 140px; min-width: 0; }
+
+  section { padding-top: 40px; margin-bottom: 26px; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .sec-no {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(26px, 3.4vw, 34px);
+    line-height: 1.15;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+    margin: 0 0 24px;
+  }
+  h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 22px;
+    line-height: 1.25;
+    text-wrap: balance;
+    margin: 44px 0 14px;
+  }
+  h4 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    margin: 34px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h4 .role {
+    font-family: var(--sans);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--ink-3);
+  }
+
+  p { margin: 0 0 16px; max-width: 68ch; }
+  main ul, main ol { margin: 0 0 18px; padding-left: 22px; max-width: 68ch; }
+  main li { margin-bottom: 7px; }
+  main li::marker { color: var(--ink-3); }
+
+  strong { font-weight: 650; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .star { color: var(--flag); font-style: normal; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.87em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1.5px 5px;
+    border-radius: 2px;
+  }
+  .path {
+    font-family: var(--mono);
+    font-size: 0.87em;
+    color: var(--accent);
+    background: var(--accent-bg);
+    padding: 1.5px 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  /* ---------- code blocks ---------- */
+
+  .scroll { overflow-x: auto; margin: 0 0 22px; }
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 16px 18px;
+    margin: 0;
+    min-width: min-content;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+  pre .c { color: var(--comment); font-style: italic; }
+  pre .hl { color: var(--flag); font-style: normal; }
+  .tree pre { font-size: 12.5px; line-height: 1.7; }
+
+  /* ---------- tables ---------- */
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: max-content;
+    font-size: 14.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  thead th {
+    text-align: left;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 0 18px 9px 0;
+    border-bottom: 1px solid var(--rule-2);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 10px 18px 10px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td:first-child { color: var(--ink); }
+  .cmp td:first-child { color: var(--ink-3); }
+  .cmp td:nth-child(2) { font-weight: 600; }
+
+  /* ---------- callouts ---------- */
+
+  .rule-box {
+    border-top: 2px solid var(--flag);
+    background: var(--flag-bg);
+    padding: 18px 20px;
+    margin: 26px 0;
+    max-width: 68ch;
+  }
+  .rule-box .tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--flag);
+    display: block;
+    margin-bottom: 9px;
+  }
+  .rule-box p { margin: 0 0 10px; }
+  .rule-box p:last-child { margin-bottom: 0; }
+
+  .note {
+    border-left: 2px solid var(--rule-2);
+    padding: 2px 0 2px 18px;
+    margin: 22px 0;
+    color: var(--ink-2);
+    max-width: 66ch;
+  }
+  .note p:last-child { margin-bottom: 0; }
+
+  /* ---------- layer diagram ---------- */
+
+  .layers { max-width: 640px; margin: 0 0 24px; border: 1px solid var(--rule-2); }
+  .layer { padding: 14px 18px; border-bottom: 1px solid var(--rule); background: var(--surface); }
+  .layer:last-child { border-bottom: none; }
+  .layer .lname {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .layer .lfile { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin-left: 10px; }
+  .layer .ldesc { font-size: 14px; color: var(--ink-2); margin-top: 5px; line-height: 1.5; }
+
+  /* ---------- status lists ---------- */
+
+  .status { list-style: none; padding: 0; max-width: 68ch; }
+  .status li {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--rule);
+    margin: 0;
+  }
+  .status li::before { font-family: var(--mono); font-size: 13px; }
+  .status .done::before { content: "✓"; color: var(--good); }
+  .status .todo::before { content: "○"; color: var(--ink-3); }
+  .status .todo { color: var(--ink-2); }
+
+  /* ---------- request trace ---------- */
+
+  .trace { list-style: none; padding: 0; counter-reset: step; max-width: 72ch; }
+  .trace > li {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule);
+    margin: 0;
+  }
+  .trace > li::before {
+    counter-increment: step;
+    content: counter(step);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    padding-top: 4px;
+    border-top: 1px solid var(--rule-2);
+    height: 0;
+    line-height: 0;
+    padding-top: 12px;
+  }
+  .trace .tname { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+  .trace .tdesc { font-size: 14px; color: var(--ink-2); line-height: 1.5; margin-top: 3px; }
+  .trace .tdesc em { color: var(--flag); font-style: normal; }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--rule-2);
+    padding: 28px 0 60px;
+    font-size: 14px;
+    color: var(--ink-3);
+    max-width: 68ch;
+  }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; gap: 0; }
+    .toc {
+      position: static;
+      max-height: none;
+      padding: 24px 0 0;
+      border-bottom: 1px solid var(--rule);
+    }
+    .toc ol { columns: 2; column-gap: 28px; }
+    .masthead { padding-top: 44px; }
+  }
+  @media (max-width: 560px) {
+    .toc ol { columns: 1; }
+    .shell { padding: 0 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+  html { scroll-behavior: smooth; }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">School Management System · Backend</p>
+    <h1>Project Structure — Complete Guide</h1>
+    <p class="standfirst">
+      Every folder and every file in this project: <strong>what</strong> it is, <strong>where</strong> it lives,
+      and <strong>why</strong> it exists. Wherever a Python concept has a Node/Express equivalent, the
+      equivalent is given side by side.
+    </p>
+    <p class="standfirst" style="font-family: var(--sans); font-size: 16px;">
+      Written for a MERN developer moving to Python. Read it top to bottom once. After that, use the
+      <a href="#s4">Directory Map</a> and <a href="#s9">How to add a feature</a> as your daily reference.
+    </p>
+    <div class="stackline">
+      <span class="chip">Python 3.13</span>
+      <span class="chip">FastAPI</span>
+      <span class="chip">Pydantic v2</span>
+      <span class="chip">SQLAlchemy 2.x async</span>
+      <span class="chip">Alembic</span>
+      <span class="chip">PostgreSQL</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Table of contents">
+    <div class="toc-label">Contents</div>
+    <ol>
+      <li><a href="#s1">What this project is, and where it is right now</a></li>
+      <li><a href="#s2">The mental model: MERN → FastAPI</a></li>
+      <li><a href="#s3">Every dependency, and its Node equivalent</a></li>
+      <li><a href="#s4">The full directory tree</a></li>
+      <li><a href="#s5">File-by-file: what, where, why</a></li>
+      <li><a href="#s6">The life of a request</a></li>
+      <li><a href="#s7">The four layers, and the one rule</a></li>
+      <li><a href="#s8">Multi-tenancy</a></li>
+      <li><a href="#s9">How to add a new feature</a></li>
+      <li><a href="#s10">Python things that trip up MERN devs</a></li>
+      <li><a href="#s11">Command cheat sheet</a></li>
+      <li><a href="#s12">What exists vs what is still empty</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ============ 1 ============ -->
+    <section id="s1">
+      <p class="sec-no">Section 01</p>
+      <h2>What this project is, and where it is right now</h2>
+
+      <p><strong>What:</strong> A multi-tenant SaaS backend for schools. "Multi-tenant" means one running
+      application and one database serve many schools, and no school can ever see another school's data.</p>
+
+      <p><strong>Stack:</strong> Python 3.13 · FastAPI · Pydantic v2 · SQLAlchemy 2.x (async) · Alembic ·
+      PostgreSQL.</p>
+
+      <p><strong>Current state — important:</strong> this is a <strong>complete, working foundation</strong>
+      with the first business module delivered. Think of it as the moment in a MERN project where
+      <code>app.js</code>, <code>config/</code>, <code>middleware/</code>, <code>utils/</code>, error handling,
+      auth helpers and the DB connection are all done — and the first real feature has landed on top.</p>
+
+      <p>Concretely:</p>
+      <ul>
+        <li>The app boots and serves <code>/health</code> <strong>with no database at all</strong>
+          (<code>DB_ENABLED=false</code>).</li>
+        <li><span class="path">app/modules/</span> now contains <code>tenancy</code> and <code>auth</code>,
+          delivered end to end. Everything after that is still to come.</li>
+        <li><span class="path">alembic/versions/</span> holds the bootstrap migration creating
+          <code>schools</code>, <code>users</code>, <code>otp_codes</code>, <code>refresh_tokens</code>.</li>
+        <li>There is <strong>no frontend folder yet</strong>. The config points at a future Next.js app on
+          <code>http://localhost:3000</code>.</li>
+      </ul>
+
+      <div class="note">
+        <p>Everything in this document that describes <span class="path">app/modules/students/</span> is
+        describing the <strong>pattern you will follow</strong>, not code that exists today. See
+        <a href="#s12">§12</a> for the exact state of play.</p>
+      </div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section id="s2">
+      <p class="sec-no">Section 02</p>
+      <h2>The mental model: MERN → FastAPI</h2>
+
+      <p>The single biggest adjustment is this: <strong>Express is a library you assemble by hand; FastAPI is
+      a framework that reads your type hints and does work for you.</strong></p>
+
+      <p>In Express you write:</p>
+      <div class="scroll"><pre><code>router.post('/students', authMiddleware, validate(studentSchema), async (req, res) =&gt; {
+  const student = await Student.create(req.body);
+  res.status(201).json(student);
+});</code></pre></div>
+
+      <p>Four separate things there: routing, auth, validation, and the handler. You wired each one manually,
+      and none of them are connected to your docs.</p>
+
+      <p>In FastAPI you write:</p>
+      <div class="scroll"><pre><code>@router.post("/students", status_code=201)
+async def create_student(
+    payload: StudentCreate,       <span class="c"># &lt;- validation. Pydantic parses &amp; validates the body.</span>
+    db: DbSession,                <span class="c"># &lt;- dependency injection. Gives you a DB session.</span>
+    user: CurrentUser,            <span class="c"># &lt;- auth. Rejects the request if the JWT is bad.</span>
+) -&gt; StudentRead:                 <span class="c"># &lt;- response shape. Also documents the endpoint.</span>
+    return await StudentService(db).create(payload)</code></pre></div>
+
+      <p>The <strong>type annotations are the wiring</strong>. FastAPI reads them at import time and:</p>
+      <ul>
+        <li>parses + validates the request body against <code>StudentCreate</code> (returns 422 if invalid),</li>
+        <li>runs the auth dependency behind <code>CurrentUser</code> before your function body,</li>
+        <li>opens a database session, and closes/commits it after,</li>
+        <li>serialises the return value through <code>StudentRead</code>,</li>
+        <li>generates OpenAPI docs at <code>/docs</code> describing all of the above.</li>
+      </ul>
+
+      <p>You never call <code>next()</code>. You never touch <code>req</code> or <code>res</code> unless you
+      specifically ask for them. <strong>This is Dependency Injection (DI)</strong>, and it is the core FastAPI
+      idea — the rough equivalent of Express middleware, but per-parameter, typed, testable, and
+      auto-documented.</p>
+
+      <h3>The concept table</h3>
+      <div class="scroll">
+        <table class="cmp">
+          <thead><tr><th>MERN / Express</th><th>Here</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>app.js</code> / <code>server.js</code></td><td><span class="path">app/main.py</span></td><td>Composition root — builds the app</td></tr>
+            <tr><td><code>express()</code></td><td><code>FastAPI()</code></td><td></td></tr>
+            <tr><td><code>express.Router()</code></td><td><code>APIRouter()</code></td><td></td></tr>
+            <tr><td>Middleware <code>(req,res,next)</code></td><td>Middleware <strong>and</strong> Dependencies</td><td>Middleware for edge concerns; DI for per-route needs</td></tr>
+            <tr><td><code>req.user</code> set by middleware</td><td><code>CurrentUser</code> dep + ContextVar</td><td>Typed, not a magic property bolted onto a request object</td></tr>
+            <tr><td>Mongoose schema</td><td>SQLAlchemy model (<code>models.py</code>)</td><td>Defines the <strong>database table</strong></td></tr>
+            <tr><td>Joi / Zod schema</td><td>Pydantic schema (<code>schemas.py</code>)</td><td>Defines the <strong>API contract</strong>. Separate on purpose — see <a href="#s7">§7</a></td></tr>
+            <tr><td><code>controllers/</code></td><td><code>router.py</code></td><td>HTTP in, HTTP out. Thin</td></tr>
+            <tr><td>Business logic in the controller</td><td><code>service.py</code></td><td>Where it actually belongs</td></tr>
+            <tr><td><code>Model.find()</code> scattered about</td><td><code>repository.py</code></td><td>All SQL in one place per domain</td></tr>
+            <tr><td><code>process.env.X</code> anywhere</td><td><span class="path">app/core/config.py</span> <strong>only</strong></td><td>One typed, validated place</td></tr>
+            <tr><td><code>try/catch</code> + <code>res.status(400)</code></td><td><code>raise NotFoundError(...)</code></td><td>Services raise domain errors; one handler maps them to HTTP</td></tr>
+            <tr><td><code>async/await</code> on Promises</td><td><code>async/await</code> on coroutines</td><td>Nearly identical syntax, different machinery</td></tr>
+            <tr><td><code>package.json</code></td><td><code>pyproject.toml</code></td><td></td></tr>
+            <tr><td><code>package-lock.json</code></td><td><code>uv.lock</code></td><td></td></tr>
+            <tr><td><code>node_modules/</code></td><td><code>.venv/</code></td><td>Per-project, gitignored</td></tr>
+            <tr><td><code>npm run &lt;script&gt;</code></td><td><code>make &lt;target&gt;</code></td><td>See the Makefile</td></tr>
+            <tr><td><code>nodemon</code></td><td><code>uvicorn --reload</code></td><td></td></tr>
+            <tr><td>Mongo "just add a field"</td><td><strong>Alembic migration required</strong></td><td>Biggest workflow change. See <a href="#s10">§10</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section id="s3">
+      <p class="sec-no">Section 03</p>
+      <h2>Every dependency, and its Node equivalent</h2>
+
+      <p>Defined in <span class="path">backend/pyproject.toml</span>.</p>
+
+      <h3>Runtime dependencies</h3>
+      <div class="scroll">
+        <table class="cmp">
+          <thead><tr><th>Package</th><th>Node equivalent</th><th>What it does here</th></tr></thead>
+          <tbody>
+            <tr><td><code>fastapi</code></td><td><code>express</code></td><td>The web framework</td></tr>
+            <tr><td><code>uvicorn[standard]</code></td><td><code>node</code> itself</td><td>The ASGI server that runs the app</td></tr>
+            <tr><td><code>python-multipart</code></td><td><code>multer</code> / <code>body-parser</code></td><td>Parses form data and file uploads</td></tr>
+            <tr><td><code>pydantic</code></td><td><code>zod</code> / <code>joi</code></td><td>Validation + serialisation, driven by type hints</td></tr>
+            <tr><td><code>pydantic-settings</code></td><td><code>dotenv</code> + manual validation</td><td>Loads <code>.env</code> into a <strong>typed, validated</strong> object</td></tr>
+            <tr><td><code>email-validator</code></td><td><code>validator.isEmail</code></td><td>Powers Pydantic's <code>EmailStr</code> type</td></tr>
+            <tr><td><code>sqlalchemy[asyncio]</code></td><td><code>mongoose</code> / <code>prisma</code></td><td>The ORM</td></tr>
+            <tr><td><code>asyncpg</code></td><td><code>pg</code> driver</td><td>Async PostgreSQL driver</td></tr>
+            <tr><td><code>alembic</code></td><td><code>prisma migrate</code> / <code>knex migrate</code></td><td>Schema migrations</td></tr>
+            <tr><td><code>pyjwt</code></td><td><code>jsonwebtoken</code></td><td>Signs and verifies JWTs</td></tr>
+            <tr><td><code>pwdlib[argon2]</code></td><td><code>bcrypt</code></td><td>Password hashing (Argon2id — stronger than bcrypt)</td></tr>
+            <tr><td><code>structlog</code></td><td><code>winston</code> / <code>pino</code></td><td>Structured JSON logging</td></tr>
+            <tr><td><code>aiosmtplib</code></td><td><code>nodemailer</code></td><td>Sends email over SMTP, without blocking</td></tr>
+            <tr><td><code>jinja2</code></td><td><code>ejs</code> / <code>handlebars</code></td><td>Renders the email HTML templates</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Dev dependencies</h3>
+      <div class="scroll">
+        <table class="cmp">
+          <thead><tr><th>Package</th><th>Node equivalent</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>pytest</code></td><td><code>jest</code> / <code>mocha</code></td><td>Test runner</td></tr>
+            <tr><td><code>pytest-asyncio</code></td><td>(built into jest)</td><td>Lets tests be <code>async def</code></td></tr>
+            <tr><td><code>pytest-cov</code></td><td><code>nyc</code> / <code>--coverage</code></td><td>Coverage reports</td></tr>
+            <tr><td><code>httpx</code></td><td><code>supertest</code> / <code>axios</code></td><td>Test client — calls the app <strong>in-process</strong>, no network</td></tr>
+            <tr><td><code>ruff</code></td><td><code>eslint</code> + <code>prettier</code> <strong>combined</strong></td><td>Linting <strong>and</strong> formatting, one very fast tool</td></tr>
+            <tr><td><code>mypy</code></td><td><code>tsc --noEmit</code></td><td>Static type checking. Configured in <code>strict</code> mode</td></tr>
+            <tr><td><code>aiosqlite</code></td><td><code>mongodb-memory-server</code></td><td>In-memory DB for fast unit tests</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <p><strong>Note on two deliberate choices</strong> (documented in
+        <span class="path">app/core/security.py</span>): <code>PyJWT</code> is used instead of the more
+        commonly-blogged <code>python-jose</code> (unmaintained, algorithm-confusion CVEs), and
+        <code>pwdlib[argon2]</code> instead of <code>passlib[bcrypt]</code> (passlib crashes against bcrypt
+        ≥ 4.1). If you follow an older FastAPI tutorial, it will tell you to use the broken ones.</p>
+      </div>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section id="s4">
+      <p class="sec-no">Section 04</p>
+      <h2>The full directory tree</h2>
+
+      <div class="scroll tree"><pre><code>School Management System/
+├── PROJECT_STRUCTURE.md          <span class="c">← you are here</span>
+├── .claude/                      <span class="c">← AI tooling config. Not part of the app.</span>
+└── backend/                      <span class="c">← the entire Python application</span>
+    │
+    ├── pyproject.toml            <span class="c">← package.json: deps + tool config (ruff, mypy, pytest)</span>
+    ├── uv.lock                   <span class="c">← package-lock.json: exact resolved versions</span>
+    ├── Makefile                  <span class="c">← npm scripts: `make dev`, `make test`, `make check`</span>
+    ├── README.md                 <span class="c">← architecture rationale (read it, it's good)</span>
+    ├── .env                      <span class="c">← YOUR secrets. Gitignored. Never commit.</span>
+    ├── .env.example              <span class="c">← the template. Committed. Every var documented.</span>
+    ├── .gitignore
+    ├── alembic.ini               <span class="c">← migration tool config</span>
+    ├── docker-compose.yml        <span class="c">← local PostgreSQL + API stack</span>
+    │
+    ├── .venv/                    <span class="c">← node_modules equivalent. Gitignored.</span>
+    ├── .ruff_cache/  .mypy_cache/  .pytest_cache/   <span class="c">← tool caches. Gitignored.</span>
+    │
+    ├── app/                      <span class="hl">← ★ ALL APPLICATION CODE</span>
+    │   ├── __init__.py           <span class="c">← marks `app` as a Python package (see §10)</span>
+    │   ├── main.py               <span class="hl">← ★ entry point. Builds &amp; wires the whole app.</span>
+    │   │
+    │   ├── core/                 <span class="c">← foundations. No HTTP, no SQL. Pure logic.</span>
+    │   │   ├── config.py         <span class="c">← the ONLY place that reads env vars</span>
+    │   │   ├── context.py        <span class="c">← per-request ambient state (request id, tenant)</span>
+    │   │   ├── security.py       <span class="c">← password hashing + JWT create/verify</span>
+    │   │   ├── otp.py            <span class="c">← one-time-password generation &amp; verification</span>
+    │   │   ├── exceptions.py     <span class="c">← domain error classes (NotFoundError, etc.)</span>
+    │   │   └── logging.py        <span class="c">← structlog setup</span>
+    │   │
+    │   ├── db/                   <span class="c">← database plumbing. No business logic.</span>
+    │   │   ├── base.py           <span class="c">← the SQLAlchemy `Base` every model inherits</span>
+    │   │   ├── mixins.py         <span class="c">← reusable column sets (uuid pk, timestamps, tenant)</span>
+    │   │   ├── session.py        <span class="hl">← ★ engine, session factory, RLS tenant binding</span>
+    │   │   └── registry.py       <span class="c">← imports every model so Alembic can see them</span>
+    │   │
+    │   ├── common/               <span class="c">← generic building blocks shared by all modules</span>
+    │   │   ├── repository.py     <span class="hl">← ★ generic async CRUD base class</span>
+    │   │   ├── schemas.py        <span class="c">← Page[T], PageParams, SortParams, ProblemDetail</span>
+    │   │   └── email/
+    │   │       ├── sender.py     <span class="c">← SMTP + console transports</span>
+    │   │       ├── templates.py  <span class="c">← Jinja2 rendering</span>
+    │   │       └── templates/
+    │   │           ├── otp.html
+    │   │           └── otp.txt
+    │   │
+    │   ├── api/                  <span class="c">← the HTTP edge</span>
+    │   │   ├── deps.py           <span class="hl">← ★ reusable dependencies (auth, db, pagination)</span>
+    │   │   ├── errors.py         <span class="hl">← ★ the ONLY place domain errors → HTTP responses</span>
+    │   │   └── v1/
+    │   │       ├── router.py     <span class="c">← mounts every module's router</span>
+    │   │       └── routes/
+    │   │           └── health.py <span class="c">← /health and /health/ready</span>
+    │   │
+    │   ├── middleware/
+    │   │   └── request_context.py <span class="c">← request id + access logging</span>
+    │   │
+    │   └── modules/              <span class="hl">← ★ ALL BUSINESS FEATURES GO HERE</span>
+    │       ├── tenancy/              <span class="c">(done — schools, registration, approval)</span>
+    │       └── auth/                 <span class="c">(done — register, login, 2FA, refresh, reset)</span>
+    │                                 <span class="c">students/, classes/, fees/, attendance/ … to come</span>
+    │
+    ├── alembic/                  <span class="c">← database migrations</span>
+    │   ├── env.py                <span class="c">← migration runtime config</span>
+    │   ├── rls.py                <span class="c">← Row-Level Security DDL helpers</span>
+    │   ├── script.py.mako        <span class="c">← template for generated migration files</span>
+    │   └── versions/             <span class="c">← the bootstrap migration lives here</span>
+    │
+    ├── tests/
+    │   ├── conftest.py           <span class="c">← shared fixtures (auto-discovered by pytest)</span>
+    │   ├── unit/                 <span class="c">← no I/O. Fast.</span>
+    │   │   ├── test_otp.py
+    │   │   └── test_email.py
+    │   └── integration/          <span class="c">← full HTTP requests through the real app</span>
+    │       └── test_health.py
+    │
+    ├── scripts/
+    │   ├── init-db.sql           <span class="c">← creates extensions + the restricted `sms_app` role</span>
+    │   └── create_super_admin.py <span class="c">← seed the first platform operator</span>
+    │
+    └── docker/
+        └── Dockerfile            <span class="c">← multi-stage production image</span></code></pre></div>
+
+      <p><span class="star">★</span> marks the files you will read and edit most often.</p>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section id="s5">
+      <p class="sec-no">Section 05</p>
+      <h2>File-by-file: what, where, why</h2>
+
+      <p>Every source file in this project opens with a docstring explaining its own purpose. That is
+      deliberate — open the file and the "why" is right there. This section is the index.</p>
+
+      <h3>5.1 Root config files</h3>
+
+      <h4>pyproject.toml <span class="role">— your package.json</span></h4>
+      <p>One file, four jobs:</p>
+      <ul>
+        <li><code>[project] dependencies</code> — runtime packages (like <code>dependencies</code>)</li>
+        <li><code>[dependency-groups] dev</code> — dev packages (like <code>devDependencies</code>)</li>
+        <li><code>[tool.ruff]</code> — linter + formatter rules (your <code>.eslintrc</code> + <code>.prettierrc</code>)</li>
+        <li><code>[tool.mypy]</code> — type checker rules (your <code>tsconfig.json</code>)</li>
+        <li><code>[tool.pytest.ini_options]</code> — test runner config (your <code>jest.config.js</code>)</li>
+      </ul>
+      <p>Node scatters these across five dotfiles; Python standardised on one. Two settings worth knowing:
+      <code>strict = true</code> under <code>[tool.mypy]</code> — full type checking, like
+      <code>"strict": true</code> in tsconfig; and <code>asyncio_mode = "auto"</code> — you can write
+      <code>async def test_x()</code> without decorating each test.</p>
+
+      <h4>uv.lock <span class="role">— your package-lock.json</span></h4>
+      <p>Exact resolved versions of every transitive dependency. <strong>Commit it.</strong> Never edit it by
+      hand. <code>uv</code> is the package manager — a very fast Rust-based replacement for <code>pip</code>,
+      made by the same team as <code>ruff</code>.</p>
+
+      <h4>Makefile <span class="role">— your npm scripts</span></h4>
+      <p>Python has no <code>"scripts"</code> field, so a Makefile fills the gap. Run <code>make help</code> to
+      list everything. Key targets: <code>make dev</code>, <code>make test</code>, <code>make check</code>,
+      <code>make migration</code>, <code>make migrate</code>.</p>
+      <p>Why it matters: CI runs the exact same <code>make check</code> you run locally, so "passes on my
+      machine" and "passes in CI" mean the same thing.</p>
+
+      <h4>.env / .env.example</h4>
+      <p><code>.env</code> holds your real secrets and is gitignored. <code>.env.example</code> is the
+      committed template. <strong>Every variable in <code>.env.example</code> maps 1:1 to a field on the
+      <code>Settings</code> class in <code>config.py</code></strong> — that mapping is the contract. If you add
+      a setting, add it in both places.</p>
+
+      <h4>alembic.ini</h4>
+      <p>Migration tool config. Note that <code>sqlalchemy.url</code> is deliberately <strong>blank</strong> —
+      the connection string is injected at runtime from <code>config.py</code>, so credentials never end up in
+      a committed file.</p>
+
+      <h4>docker-compose.yml</h4>
+      <p>Spins up PostgreSQL 18 (on host port <strong>5433</strong>, to avoid clashing with a local PostgreSQL
+      on 5432) plus the API. Runs <code>scripts/init-db.sql</code> automatically on first boot. Optional — if
+      you already have PostgreSQL locally, just point <code>.env</code> at it.</p>
+
+      <h3>5.2 app/main.py — the composition root</h3>
+
+      <p><strong>What:</strong> builds and configures the <code>FastAPI</code> instance.<br>
+      <strong>Why it exists:</strong> every app needs one place where settings, logging, middleware, routers,
+      error handlers and the database are wired together. That is the <em>Composition Root</em> pattern —
+      dependencies are assembled here and nowhere else.</p>
+
+      <p><strong>It contains no endpoints.</strong> If you find yourself adding a route here, it belongs in a
+      module router instead.</p>
+
+      <p><strong>1. <code>create_app()</code> is a factory</strong>, not a module-level
+      <code>app = FastAPI()</code>. A factory lets tests build a fresh, independently-configured app per test
+      with no import-time side effects. The <code>app = create_app()</code> line at the bottom exists only
+      because <code>uvicorn app.main:app</code> needs an importable attribute.</p>
+
+      <p><strong>2. <code>lifespan</code> replaces <code>@app.on_event("startup")</code>.</strong> Startup and
+      shutdown live in a single context manager, so setup and its matching teardown sit adjacent in the code —
+      you cannot add a resource and forget to release it. The DB connection pool is created here, not at import
+      time, so importing <code>app.main</code> never opens a socket.</p>
+
+      <div class="scroll"><pre><code>@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_logging(settings)
+    if settings.DB_ENABLED:
+        init_engine(settings)
+    yield                          <span class="c"># ← the app serves requests here</span>
+    await dispose_engine()         <span class="c"># ← shutdown</span></code></pre></div>
+
+      <p><strong>3. Middleware order is reversed and this is load-bearing.</strong> Starlette applies
+      middleware in <strong>reverse</strong> registration order — the <strong>last</strong> one added is the
+      <strong>outermost</strong> wrapper. The code adds <code>RequestContext</code> → <code>GZip</code> →
+      <code>CORS</code> → <code>TrustedHost</code>, producing the chain:</p>
+
+      <div class="scroll"><pre><code>TrustedHost → CORS → GZip → RequestContext → your route</code></pre></div>
+
+      <p><code>RequestContext</code> is innermost so its timing measurement covers route execution rather than
+      compression.</p>
+
+      <h3>5.3 app/core/ — foundations</h3>
+
+      <p>Pure logic. Nothing in here imports <code>fastapi</code>, touches HTTP, or runs SQL. That is what makes
+      it all trivially unit-testable.</p>
+
+      <h4>config.py</h4>
+      <p><strong>The only module in the codebase allowed to read the environment.</strong> Nothing else may call
+      <code>os.getenv</code>. That keeps configuration typed, validated at startup, and discoverable in one
+      place.</p>
+      <p><code>Settings</code> is a <code>pydantic_settings.BaseSettings</code> subclass — declare a field with
+      a type and Pydantic reads it from <code>.env</code>, coerces it, and validates it <strong>at boot</strong>.
+      A missing or malformed value crashes the app at startup rather than at 3am on the first request that
+      touches it.</p>
+
+      <div class="scroll"><pre><code>class Settings(BaseSettings):
+    APP_NAME: str = "School Management System"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30      <span class="c"># "30" from .env becomes int 30</span>
+    CORS_ORIGINS: list[str] = Field(default_factory=list)   <span class="c"># parses JSON from .env</span></code></pre></div>
+
+      <p>Two custom validators refuse to boot production with an insecure config:</p>
+      <ul>
+        <li><code>EMAIL_BACKEND=console</code> in production → <strong>crash</strong>. The console backend
+          writes OTP codes to the log in plaintext and sends no actual mail, so it would be both a credential
+          leak and a total outage of signup/reset/2FA.</li>
+        <li>A default <code>SECRET_KEY</code> in production/staging → <strong>crash</strong>. A weak signing key
+          means anyone can forge a JWT, and the JWT carries the <code>school_id</code> claim, which <em>is</em>
+          the tenant boundary.</li>
+      </ul>
+      <p><code>get_settings()</code> is wrapped in <code>@lru_cache</code> — it is a singleton, but exposed as a
+      <em>function</em> so tests can override it via FastAPI's <code>dependency_overrides</code>.</p>
+
+      <h4>context.py</h4>
+      <p><strong>The problem it solves:</strong> three facts are needed almost everywhere but belong in no
+      function signature — the request id (for log correlation), the current school (needed by every query), and
+      the acting user (for audit columns). Threading them through router → service → repository → model as
+      explicit arguments would pollute every signature in the codebase.</p>
+      <p><strong>The solution:</strong> <code>ContextVar</code>. This is Python's async-safe equivalent of
+      Node's <code>AsyncLocalStorage</code>. Each asyncio task gets its own copy, so <strong>two concurrent
+      requests can never see each other's tenant</strong>.</p>
+
+      <div class="scroll"><pre><code>_school_id: ContextVar[UUID | None] = ContextVar("school_id", default=None)</code></pre></div>
+
+      <p>Who writes to it, who reads it:</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>File</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><span class="path">middleware/request_context.py</span></td><td><strong>writes</strong> <code>request_id</code> at the edge</td></tr>
+            <tr><td><span class="path">api/deps.py</span></td><td><strong>writes</strong> <code>school_id</code> / <code>user_id</code> after verifying the JWT</td></tr>
+            <tr><td><span class="path">db/session.py</span></td><td><strong>reads</strong> <code>school_id</code> → issues <code>SET LOCAL app.current_school_id</code></td></tr>
+            <tr><td><span class="path">core/logging.py</span></td><td><strong>reads</strong> <code>request_id</code> → stamps every log line</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>This ContextVar is the link in the chain that makes tenant isolation work. See <a href="#s8">§8</a>.</p>
+
+      <h4>security.py</h4>
+      <p>Four functions, nothing else: <code>hash_password</code>, <code>verify_password</code>,
+      <code>create_access_token</code>, <code>decode_token</code>. Pure computation — it knows nothing about
+      users, sessions or the database. That is the auth service's job.</p>
+      <p>The important part is what goes into an access token:</p>
+
+      <div class="scroll"><pre><code>{
+  "sub": "&lt;user uuid&gt;",   <span class="c"># RFC 7519 requires this to be a string</span>
+  "typ": "access",        <span class="c"># checked on decode → a refresh token can never be replayed</span>
+  "sid": "&lt;school uuid&gt;", <span class="hl"># ★ THE TENANT BOUNDARY</span>
+  "role": "teacher",
+  "sa": false,            <span class="c"># super admin</span>
+  "iat": ..., "exp": ..., "jti": "&lt;uuid&gt;"   <span class="c"># jti enables future revocation</span>
+}</code></pre></div>
+
+      <p>The <strong>refresh</strong> token deliberately carries <strong>no</strong> tenant or role claims —
+      those are re-read from the database on refresh, so a revoked user or changed role takes effect within one
+      access-token lifetime (30 min) rather than one refresh-token lifetime (7 days).</p>
+      <p><code>decode_token</code> passes <code>algorithms=[...]</code> as an allowlist, which blocks the classic
+      <code>alg: none</code> forgery attack.</p>
+
+      <h4>otp.py</h4>
+      <p>Generates and verifies the 6-digit codes used for signup verification, password reset and login 2FA.
+      Read the module docstring — it explains four decisions in detail:</p>
+      <ol>
+        <li><strong><code>secrets</code>, never <code>random</code>.</strong> <code>random</code> is a Mersenne
+          Twister seeded from the clock; observing a few outputs lets an attacker predict all subsequent codes.</li>
+        <li><strong>HMAC-SHA256 with a server-side pepper</strong>, not Argon2 and not a bare hash. A 6-digit
+          code has only 10⁶ possibilities — a plain SHA-256 of it is brute-forced from a database dump in under
+          a second. HMAC keyed with <code>SECRET_KEY</code> (which the database does not contain) makes a dump
+          useless, and verifies in microseconds.</li>
+        <li><strong>The purpose is bound into the digest.</strong> The hash covers
+          <code>purpose|identifier|code</code>. Without this, a code mailed for "verify your email" could be
+          replayed against the password-reset endpoint.</li>
+        <li><strong><code>hmac.compare_digest</code>, not <code>==</code>.</strong> <code>==</code>
+          short-circuits at the first differing byte, leaking the digest one byte at a time through timing.</li>
+      </ol>
+      <p>It deliberately does <strong>not</strong> handle expiry, attempt-counting or single-use enforcement —
+      those are <em>state</em>, and state lives in the database, owned by the auth service.</p>
+
+      <h4>exceptions.py</h4>
+      <p>The domain error hierarchy. <strong>This is one of the most important patterns to internalise.</strong></p>
+      <p>In Express you probably did <code>res.status(404).json({ error: 'not found' })</code> inside a service
+      function. That couples the service to HTTP — the moment you want to call it from a CLI script, a
+      background worker, or a test, it breaks.</p>
+      <p>Here, services raise a domain error and know nothing about HTTP:</p>
+      <div class="scroll"><pre><code>raise NotFoundError("Student not found.")</code></pre></div>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Class</th><th>Status</th><th>Code</th></tr></thead>
+          <tbody>
+            <tr><td><code>ValidationError</code></td><td>422</td><td><code>VALIDATION_ERROR</code></td></tr>
+            <tr><td><code>NotFoundError</code></td><td>404</td><td><code>NOT_FOUND</code></td></tr>
+            <tr><td><code>ConflictError</code></td><td>409</td><td><code>CONFLICT</code></td></tr>
+            <tr><td><code>AuthenticationError</code></td><td>401</td><td><code>UNAUTHENTICATED</code></td></tr>
+            <tr><td><code>AuthorizationError</code></td><td>403</td><td><code>FORBIDDEN</code></td></tr>
+            <tr><td><code>RateLimitError</code></td><td>429</td><td><code>RATE_LIMITED</code></td></tr>
+            <tr><td><code>ExternalServiceError</code></td><td>502</td><td><code>EXTERNAL_SERVICE_ERROR</code></td></tr>
+            <tr><td><code>ServiceUnavailableError</code></td><td>503</td><td><code>SERVICE_UNAVAILABLE</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>A single handler in <span class="path">api/errors.py</span> — the <em>only</em> file that knows about
+      both vocabularies — translates them into HTTP responses.</p>
+
+      <div class="rule-box">
+        <span class="tag">Rule</span>
+        <p><strong>Never raise <code>HTTPException</code> from a service.</strong> Only routers and dependencies
+        may do that, and even then, prefer an <code>AppError</code>.</p>
+      </div>
+
+      <h4>logging.py</h4>
+      <p><code>structlog</code> config. Two things it buys you over <code>print</code>:</p>
+      <ul>
+        <li><strong>Every log line is automatically stamped</strong> with <code>request_id</code>,
+          <code>school_id</code> and <code>user_id</code>, pulled from the ContextVar by a processor. You never
+          pass them manually. In a multi-tenant incident the first question is always "which school, which
+          request?"</li>
+        <li><strong>Console renderer locally, JSON in production</strong> — one switch,
+          <code>LOG_JSON</code>. JSON output is ingestible by CloudWatch / Loki / Datadog.</li>
+      </ul>
+      <p>Usage everywhere: <code>logger = get_logger(__name__)</code> at module scope, then
+      <code>logger.info("student_created", student_id=str(sid))</code> — event name first, then keyword fields.
+      Not f-strings.</p>
+
+      <h3>5.4 app/db/ — database plumbing</h3>
+
+      <h4>base.py</h4>
+      <p>Defines <code>Base</code>, the declarative base every model inherits from. Two features:</p>
+      <p><strong>A naming convention for constraints.</strong> Without it PostgreSQL invents names like
+      <code>students_school_id_fkey1</code>, which differ between environments — so Alembic cannot reliably
+      <code>DROP</code> them and your downgrade migrations break. <strong>Do not change this convention after
+      the first migration ships.</strong></p>
+      <p><strong>Automatic table names.</strong> <code>class StudentEnrollment(Base)</code> → table
+      <code>student_enrollments</code>. Convention over configuration; a model can still override
+      <code>__tablename__</code> for irregular plurals.</p>
+
+      <h4>mixins.py</h4>
+      <p>Roughly forty tables will need the same four things. Mixins give one definition and forty consistent
+      usages. You compose them:</p>
+      <div class="scroll"><pre><code>class Student(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteMixin):
+    name: Mapped[str] = mapped_column(String(120))</code></pre></div>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Mixin</th><th>Adds</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><code>UUIDPrimaryKeyMixin</code></td><td><code>id: UUID</code></td><td>Sequential integers are enumerable — <code>GET /students/1..N</code> from a rival school is a real attack. UUIDs also let ids be generated before insert (idempotent retries, offline clients)</td></tr>
+            <tr><td><code>TimestampMixin</code></td><td><code>created_at</code>, <code>updated_at</code></td><td>Uses the <strong>database</strong> clock (<code>server_default=func.now()</code>), not the app clock — multiple app instances drift</td></tr>
+            <tr><td><code>SoftDeleteMixin</code></td><td><code>deleted_at</code></td><td>Deleting a student must not destroy their fee history, attendance record or certificates — those are financial and legal records</td></tr>
+            <tr><td><code>TenantMixin</code></td><td><code>school_id</code> FK</td><td><span class="star">★</span> Required on <strong>every</strong> tenant-owned table. <code>nullable=False</code> (an orphan row is invisible to RLS and becomes a permanent leak), <code>ondelete="CASCADE"</code> (GDPR-style deletion), and indexed (RLS adds an implicit <code>WHERE school_id = ...</code> to <em>every</em> query)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Note: <code>SoftDeleteMixin</code> means every query must filter <code>deleted_at IS NULL</code>.
+      <code>BaseRepository</code> applies that automatically so call sites cannot forget.</p>
+
+      <h4>session.py <span class="role">★ the most important file in db/</span></h4>
+      <p>Owns four things:</p>
+      <p><strong>1. The engine</strong> (one per process — like a Mongo connection pool). Built
+      <strong>lazily</strong> by <code>init_engine()</code> during startup, not at import time, which is what
+      lets the test suite and the DB-less phase of development import the app freely.</p>
+      <p>Pool settings worth knowing: <code>pool_pre_ping=True</code> verifies a pooled connection is alive
+      before handing it out (without it, connections killed by a proxy surface as random 500s), and
+      <code>pool_recycle=1800</code> stays below typical cloud idle timeouts.</p>
+
+      <p><strong>2. The <code>get_db</code> dependency</strong> — this is your unit of work:</p>
+      <div class="scroll"><pre><code>async def get_db():
+    async with factory() as session:
+        await _apply_tenant_guc(session, get_school_id(), is_super_admin())
+        try:
+            yield session
+            await session.commit()      <span class="c"># commit on success</span>
+        except Exception:
+            await session.rollback()    <span class="c"># rollback on ANY exception</span>
+            raise</code></pre></div>
+
+      <p><strong>One request = one transaction = atomic.</strong> A service that writes to three tables gets
+      atomicity for free.</p>
+
+      <div class="rule-box">
+        <span class="tag">Rule — remember this one</span>
+        <p><strong>Services never call <code>session.commit()</code>.</strong> They call
+        <code>session.flush()</code> when they need a generated id before the request ends.
+        <code>get_db</code> owns the commit.</p>
+      </div>
+
+      <p><strong>3. The RLS tenant binding</strong> — <code>_apply_tenant_guc</code> copies the tenant from the
+      verified JWT into a PostgreSQL session variable. This is the bridge that makes the whole isolation
+      mechanism work. See <a href="#s8">§8</a>.</p>
+
+      <p><strong>4. <code>session_scope()</code></strong> — a context manager for code running
+      <strong>outside</strong> a request (background jobs, seed scripts, CLI commands). No HTTP request means no
+      ambient context, so the tenant must be passed explicitly:</p>
+      <div class="scroll"><pre><code>async with session_scope(school_id) as session:
+    await StudentRepository(session).list()</code></pre></div>
+
+      <h4>registry.py <span class="role">— small file, catastrophic failure mode if ignored</span></h4>
+      <p>SQLAlchemy only knows about a model once its module has been imported. Alembic's autogenerate compares
+      <code>Base.metadata</code> against the live database — so a model that was never imported is
+      <em>absent</em> from the metadata, and autogenerate will read its existing table as "not in the model" and
+      generate a <strong><code>DROP TABLE</code></strong>.</p>
+      <p>This file makes the import explicit and reviewable:</p>
+      <div class="scroll"><pre><code>from app.modules.students import models as student_models  <span class="c"># noqa: F401</span></code></pre></div>
+
+      <div class="rule-box">
+        <span class="tag">Rule</span>
+        <p>Every new <span class="path">app/modules/&lt;name&gt;/models.py</span> <strong>MUST</strong> be added
+        here, in the same commit that creates it.</p>
+      </div>
+
+      <h3>5.5 app/common/ — shared building blocks</h3>
+
+      <h4>repository.py <span class="role">★ generic async CRUD</span></h4>
+      <p>About 80% of data access in a CRUD-heavy system is the same six operations against different tables.</p>
+      <div class="scroll"><pre><code>class StudentRepository(BaseRepository[Student]):
+    model = Student
+    sortable_fields = frozenset({"name", "admission_number", "created_at"})
+
+    async def get_by_admission_number(self, num: str) -&gt; Student | None:
+        return await self.find_one(Student.admission_number == num)</code></pre></div>
+
+      <p>You get for free: <code>get</code>, <code>find_one</code>, <code>exists</code>, <code>count</code>,
+      <code>list</code> (paginated), <code>create</code>, <code>update</code>, <code>soft_delete</code>,
+      <code>hard_delete</code>.</p>
+
+      <p>Details worth knowing:</p>
+      <ul>
+        <li><strong><code>sortable_fields</code> is an allowlist, and it is empty by default.</strong>
+          <code>sort_by</code> arrives as a raw string from the client; <code>apply_sort</code> rejects anything
+          not on the list. Never interpolate a client string into <code>ORDER BY</code>.</li>
+        <li><strong>Sorting always appends <code>, id</code></strong> as a tiebreaker. Unstable ordering is a
+          classic pagination bug — rows shuffle between pages and users see duplicates.</li>
+        <li><strong><code>_base_select</code> deliberately does NOT filter <code>school_id</code>.</strong>
+          Tenant scoping is enforced by PostgreSQL RLS at the connection level. Adding it here too would mean a
+          missing filter is survivable — which is exactly the complacency RLS is meant to remove.</li>
+        <li><strong><code>create</code> calls <code>flush()</code> then <code>refresh()</code>, not
+          <code>commit()</code>.</strong> See the rule above.</li>
+        <li><strong><code>list</code> returns <code>(rows, total)</code>, not a <code>Page</code>.</strong> The
+          repository must not depend on API-layer schemas; the <em>service</em> assembles the <code>Page</code>.
+          Dependency arrow points inward.</li>
+        <li><strong><code>update</code> expects <code>model_dump(exclude_unset=True)</code></strong> so "field
+          omitted" and "field explicitly set to null" stay distinguishable — the difference between PATCH
+          semantics and accidental data loss.</li>
+      </ul>
+
+      <h4>schemas.py</h4>
+      <p>Cross-cutting Pydantic contracts:</p>
+      <ul>
+        <li><strong><code>BaseSchema</code></strong> — base for every schema in the project.
+          <code>from_attributes=True</code> lets you build a schema straight from an ORM object:
+          <code>StudentRead.model_validate(student_orm)</code>. <code>str_strip_whitespace=True</code> turns
+          <code>" Ahmed "</code> into <code>"Ahmed"</code>.</li>
+        <li><strong><code>PageParams</code></strong> — <code>?page=1&amp;size=20</code>, used as a dependency.
+          Offset pagination (not cursor) because admin tables need "jump to page 7" and a total count.</li>
+        <li><strong><code>SortParams</code></strong> — <code>?sort_by=name&amp;sort_dir=asc</code>.</li>
+        <li><strong><code>Page[T]</code></strong> — the response shape of every list endpoint. FastAPI renders
+          each parameterisation as its own OpenAPI schema, so your frontend gets a precise
+          <code>PageStudentRead</code> TypeScript type instead of <code>Page&lt;any&gt;</code>.</li>
+        <li><strong><code>ProblemDetail</code></strong> — the RFC 9457 error body.</li>
+      </ul>
+
+      <div class="note">
+        <p><strong>Design decision worth flagging:</strong> there is <strong>no success envelope</strong>. No
+        <code>{"success": true, "data": {...}}</code>. HTTP already encodes success in the status code, and an
+        envelope makes generated client types markedly worse. Errors <em>do</em> get a structured body, because
+        HTTP does not standardise one.</p>
+      </div>
+
+      <h4>email/sender.py</h4>
+      <p><code>EmailSender</code> is a <code>Protocol</code> — Python's structural typing, closest to a
+      TypeScript <code>interface</code>. Any object with a matching <code>async def send(self, message)</code>
+      satisfies it, so a test fake needs no import and no inheritance.</p>
+      <p>Two backends:</p>
+      <ul>
+        <li><strong><code>ConsoleEmailSender</code></strong> — logs the message, sends nothing. <strong>This is
+          the default.</strong> A misconfigured test run that emails real parents is unrecoverable; the failure
+          mode of this default is "no email sent", which is always recoverable.</li>
+        <li><strong><code>SmtpEmailSender</code></strong> — real delivery via <code>aiosmtplib</code>. Not
+          stdlib <code>smtplib</code>, because that is <strong>blocking</strong>: one slow send would stall the
+          entire event loop and freeze every concurrent request in the process.</li>
+      </ul>
+      <p>Two SMTP details that bite people: every message is <code>multipart/alternative</code> (HTML
+      <strong>and</strong> plaintext — an OTP that renders as raw HTML tags in a text-only client is unreadable,
+      and Gmail penalises HTML-only mail), and <code>use_tls</code> (implicit TLS, port 465) vs
+      <code>start_tls</code> (STARTTLS upgrade, port 587) are <strong>mutually exclusive</strong>. Setting both
+      raises; setting neither sends credentials in the clear. Nodemailer's <code>secure: true</code> is
+      <code>SMTP_USE_TLS</code>.</p>
+      <p><strong>Sending is never awaited on the request path</strong> — SMTP handshake + TLS against Gmail is
+      commonly 500ms–3s. The auth service dispatches sends via FastAPI's <code>BackgroundTasks</code>.</p>
+
+      <h4>email/templates.py + templates/</h4>
+      <p>Jinja2 rendering. <code>autoescape</code> is <strong>on</strong> — template context includes
+      user-controlled values like a school's name, and a school named
+      <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> must not become executable markup. Jinja2's default is
+      off, which is the wrong default for HTML.</p>
+      <p><code>StrictUndefined</code> turns a typo'd variable into a loud render-time error instead of silently
+      producing "Your code is:" with no code.</p>
+
+      <h3>5.6 app/api/ — the HTTP edge</h3>
+
+      <h4>deps.py <span class="role">★ where the DI model clicks</span></h4>
+      <p>The style used throughout is <code>Annotated</code> aliases:</p>
+      <div class="scroll"><pre><code>DbSession = Annotated[AsyncSession, Depends(get_tenant_db)]
+CurrentUser = Annotated[Principal, Depends(get_current_principal)]
+
+<span class="c"># then in a route, this reads like plain typed Python:</span>
+async def list_students(db: DbSession, user: CurrentUser) -&gt; Page[StudentRead]: ...</code></pre></div>
+
+      <p>What is available:</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Alias</th><th>Gives you</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>SettingsDep</code></td><td><code>Settings</code></td><td>Overridable in tests</td></tr>
+            <tr><td><code>CurrentUser</code></td><td><code>Principal</code></td><td>Decoded JWT. <strong>Zero DB queries</strong> — everything needed is in the signed token</td></tr>
+            <tr><td><code>CurrentSchool</code></td><td><code>UUID</code></td><td>Requires a tenant-scoped caller; 403 otherwise</td></tr>
+            <tr><td><code>SuperAdmin</code></td><td><code>Principal</code></td><td>Platform-level routes only</td></tr>
+            <tr><td><code>DbSession</code></td><td><code>AsyncSession</code></td><td><strong>Authenticated + tenant-bound.</strong> Use this by default</td></tr>
+            <tr><td><code>PublicDbSession</code></td><td><code>AsyncSession</code></td><td>Unauthenticated (login, public admissions form). No tenant → RLS tables return zero rows</td></tr>
+            <tr><td><code>Pagination</code></td><td><code>PageParams</code></td><td></td></tr>
+            <tr><td><code>Sorting</code></td><td><code>SortParams</code></td><td></td></tr>
+            <tr><td><code>SearchQuery</code></td><td><code>str | None</code></td><td></td></tr>
+            <tr><td><code>require_roles("admin")</code></td><td>dependency</td><td>Use in <code>dependencies=[Depends(...)]</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Two subtleties that are easy to break:</strong></p>
+      <p><strong>1. <code>get_current_principal</code> has a deliberate side effect.</strong> It writes
+      <code>school_id</code> into the ContextVar. That side effect <em>is</em> the tenant isolation mechanism —
+      <code>get_db</code> reads it moments later.</p>
+      <p><strong>2. <code>get_tenant_db</code> has an "unused" parameter that is not decoration:</strong></p>
+      <div class="scroll"><pre><code>async def get_tenant_db(
+    _principal: CurrentUser,                      <span class="hl"># ← forces auth to resolve FIRST</span>
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -&gt; AsyncSession:
+    return session</code></pre></div>
+      <p>FastAPI resolves the dependency graph depth-first. Without <code>_principal</code>, <code>get_db</code>
+      could run <em>before</em> the JWT was decoded, producing a session with <strong>no tenant bound</strong>.
+      Removing that parameter would silently disable tenant isolation. Leave it.</p>
+
+      <h4>errors.py <span class="role">★ domain errors → HTTP</span></h4>
+      <p>The <strong>only</strong> module allowed to know both the domain vocabulary (<code>AppError</code>) and
+      the HTTP vocabulary. That is what lets services stay transport-agnostic.</p>
+      <p>Every error — from any source — comes out as <strong>RFC 9457 Problem Details</strong>, with content
+      type <code>application/problem+json</code>:</p>
+      <div class="scroll"><pre><code>{
+  "type": "https://docs.example.com/errors/not-found",
+  "title": "NotFound",
+  "status": 404,
+  "detail": "Student not found.",
+  "instance": "3fa85f64-...",     <span class="c">// the request id — quotable in a support ticket</span>
+  "code": "NOT_FOUND"             <span class="c">// stable machine code the frontend branches on</span>
+}</code></pre></div>
+
+      <p>Handlers registered, most to least specific:</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Exception</th><th>→</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td><code>AppError</code></td><td>its own status</td><td>Message returned <strong>verbatim</strong> (it was written for the client)</td></tr>
+            <tr><td><code>RequestValidationError</code></td><td>422</td><td>Pydantic's <code>loc</code> tuple flattened to a dotted field path that maps onto a form field</td></tr>
+            <tr><td><code>StarletteHTTPException</code></td><td>as-is</td><td>Catches framework 404s/405s so they match the same shape</td></tr>
+            <tr><td><code>IntegrityError</code></td><td>409</td><td>Safety net for the race where two requests both pass a uniqueness pre-check</td></tr>
+            <tr><td><code>SQLAlchemyError</code></td><td>503</td><td></td></tr>
+            <tr><td><code>Exception</code></td><td>500</td><td><strong>Generic message only.</strong> Full traceback logged server-side</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>The security rule encoded here:</strong> expected errors return their message; unexpected ones
+      return a fixed string. An unhandled <code>IntegrityError</code> echoed to the client would disclose table
+      names, column names and constraint definitions.</p>
+
+      <h4>v1/router.py</h4>
+      <p>Composition only — no handlers. Every module's router gets mounted here in one line, so
+      <code>main.py</code> never needs editing when a module is added. The commented-out lines are the delivery
+      roadmap, and their order controls section ordering in the Swagger docs.</p>
+      <p><strong>Why version the API:</strong> the frontend and any mobile apps deploy independently of this
+      backend. A URL version segment lets you ship a breaking change as <code>/api/v2</code> while
+      <code>/api/v1</code> keeps serving existing clients.</p>
+
+      <h4>v1/routes/health.py</h4>
+      <p>Mounted <strong>outside</strong> the version prefix (<code>/health</code>, not
+      <code>/api/v1/health</code>) because an orchestrator's probe URL must not break when the API moves to v2.</p>
+      <ul>
+        <li><strong><code>/health</code> (liveness)</strong> — "is this process alive?" Never touches the
+          database. If it fails, the orchestrator <strong>restarts</strong> the container.</li>
+        <li><strong><code>/health/ready</code> (readiness)</strong> — "can this process serve traffic?" Runs
+          <code>SELECT 1</code>. If it fails, the orchestrator stops <strong>routing</strong> to it but does not
+          restart it.</li>
+      </ul>
+      <p>Conflating them means a brief database blip triggers a restart storm across every instance
+      simultaneously — turning a short outage into a total one.</p>
+
+      <h3>5.7 app/middleware/request_context.py</h3>
+      <p>Two things must happen at the very edge of every request, before any route code runs: assign a
+      correlation id, and start the access-log timer. Middleware is the right place because it wraps
+      <em>every</em> request, including ones that never reach a route (404s, validation failures).</p>
+      <ul>
+        <li>Honours an inbound <code>X-Request-ID</code> if a gateway or the frontend already set one — that is
+          what makes a trace span multiple services.</li>
+        <li>Publishes it into the ContextVar so logs and error bodies pick it up.</li>
+        <li>Emits one structured access-log line per request with its duration.</li>
+        <li>Adds <code>Server-Timing: app;dur=12.3</code> to the response, so browser devtools chart backend
+          latency alongside network time.</li>
+        <li><strong>Always resets the ContextVar in <code>finally</code></strong> — asyncio tasks are reused,
+          and a stale id would mislabel a later log line.</li>
+      </ul>
+
+      <h3>5.8 app/modules/ — where your features go <span class="star">★</span></h3>
+      <p>This is the most important directory in the project.</p>
+      <p>The common FastAPI tutorial layout groups by <em>technical layer</em>: one <code>models/</code>
+      directory, one <code>services/</code> directory, one <code>routers/</code> directory. That works up to
+      roughly ten tables. This system has eight domains heading toward forty-plus tables, so it groups by
+      <strong>domain</strong> instead, with the layers <em>inside</em> each module — a <strong>modular
+      monolith</strong>:</p>
+
+      <div class="scroll"><pre><code>app/modules/students/
+├── __init__.py
+├── models.py       <span class="c">SQLAlchemy tables + constraints</span>
+├── schemas.py      <span class="c">Pydantic request/response contracts</span>
+├── repository.py   <span class="c">data access (SQL only)</span>
+├── service.py      <span class="c">business rules</span>
+└── router.py       <span class="c">HTTP endpoints</span></code></pre></div>
+
+      <p>Why this scales better here:</p>
+      <ul>
+        <li><strong>Change locality.</strong> "Add a guardian phone number" touches five files in
+          <strong>one</strong> directory, not five files scattered across five directories.</li>
+        <li><strong>Reviewable boundaries.</strong> An import of <code>modules.finance</code> from inside
+          <code>modules.students</code> is visible in a diff and can be challenged. With flat layers,
+          cross-domain coupling is invisible.</li>
+        <li><strong>Extraction path.</strong> If one module ever needs to become its own service, a
+          self-contained directory with explicit imports is a day of work. Untangling flat layers is a
+          quarter.</li>
+      </ul>
+      <p>Planned modules: <code>tenancy</code> and <code>auth</code> (both delivered), then
+      <code>students</code>, <code>classes</code>, <code>attendance</code>, <code>timetable</code>,
+      <code>fees</code>, and more.</p>
+      <p>If you have done Nest.js, this is exactly its module concept. If you have only done Express, it is
+      <code>routes/students.js</code> + <code>models/Student.js</code> + <code>services/studentService.js</code>
+      collapsed into one folder.</p>
+
+      <h3>5.9 alembic/ — migrations</h3>
+      <p>This is the biggest workflow change from MongoDB. <strong>You cannot just add a field.</strong> The
+      database has a fixed schema, and changing it requires a versioned, reviewable, reversible migration
+      file.</p>
+      <p>Think <code>prisma migrate</code> or <code>knex migrate</code>, but with autogeneration: Alembic
+      <strong>diffs your Python models against the live database</strong> and writes the migration for you.</p>
+
+      <h4>env.py</h4>
+      <p>Supplies Alembic with two things from the application itself, so there is one definition of each and
+      they cannot drift: the DSN (from <code>config.py</code>) and the target schema
+      (<code>Base.metadata</code>).</p>
+      <p>Configured with <code>compare_type=True</code> and <code>compare_server_default=True</code> — both off
+      by default in Alembic, and both off means silent schema drift.</p>
+
+      <div class="rule-box">
+        <span class="tag">Critical operational note</span>
+        <p>Alembic connects as the table <strong>owner</strong> (needs DDL rights, and implicitly bypasses RLS).
+        The application connects as <code>sms_app</code>, which has DML rights only and no
+        <code>BYPASSRLS</code>. Using one role for both would silently disable every RLS policy.</p>
+      </div>
+
+      <h4>rls.py <span class="role">★ Row-Level Security helpers</span></h4>
+      <p>Alembic's autogenerate understands tables, columns, indexes and constraints. It does
+      <strong>not</strong> understand Row-Level Security — it will never emit
+      <code>ENABLE ROW LEVEL SECURITY</code> or <code>CREATE POLICY</code>. Left to hand-written SQL, sooner or
+      later a table ships with a <code>school_id</code> column but no policy, and that table silently leaks
+      every school's data to every other school.</p>
+      <p>These helpers make the correct thing a one-liner:</p>
+      <div class="scroll"><pre><code>from alembic.rls import setup_tenant_table
+
+def upgrade():
+    op.create_table("students", ...)
+    setup_tenant_table("students")     <span class="hl"># ← grant + enable RLS + install the policy</span></code></pre></div>
+      <p>The generated policy has both <code>USING</code> (filters which rows are <strong>visible</strong>) and
+      <code>WITH CHECK</code> (validates rows being <strong>written</strong>). Both are required — a
+      <code>USING</code>-only policy would let School A insert a row stamped with School B's id.</p>
+
+      <h4>versions/</h4>
+      <p>Generated migrations land here, named
+      <code>2026_07_19_1430-a1b2c3d4e5f6_add_students_table.py</code>. Timestamped so chronological sort order
+      makes the history readable, which bare hashes do not. <strong>Commit them. Never edit one after it has
+      been applied anywhere.</strong></p>
+
+      <h3>5.10 tests/</h3>
+      <p>pytest, not jest, but the shape is familiar.</p>
+      <h4>conftest.py</h4>
+      <p>Shared fixtures. <strong><code>conftest.py</code> is auto-discovered by pytest</strong> — fixtures
+      defined here are available in every test file with no imports. Roughly your <code>jest.setup.js</code>,
+      but the fixtures are injected by parameter name:</p>
+      <div class="scroll"><pre><code>async def test_health(client: AsyncClient):    <span class="c"># ← `client` fixture injected by name</span>
+    response = await client.get("/health")</code></pre></div>
+      <p>Three fixtures: <code>settings</code> (built explicitly with <code>_env_file=None</code> so tests never
+      read your local <code>.env</code>), <code>app</code> (a fresh app <strong>per test</strong>, so a
+      dependency override in one test cannot affect another), and <code>client</code> (an
+      <code>httpx.AsyncClient</code> wired straight to the ASGI app — <strong>no network, no port
+      binding</strong>, but the real middleware and exception-handler stack).</p>
+      <p><code>unit/</code> = no I/O, fast. <code>integration/</code> = full HTTP requests through the real
+      app.</p>
+
+      <h3>5.11 scripts/init-db.sql</h3>
+      <p>Run once per database, as a superuser. Two jobs:</p>
+      <p><strong>Extensions:</strong> <code>pgcrypto</code> (server-side UUID defaults), <code>pg_trgm</code>
+      (trigram indexes — the global-search omnibar needs these, or <code>ILIKE '%ahmed%'</code> degrades to a
+      full table scan on every keystroke), <code>unaccent</code> ("Zoë" matches "Zoe").</p>
+      <p><strong>The <code>sms_app</code> role.</strong> This is the one that matters. PostgreSQL grants two
+      silent RLS exemptions: superusers bypass it entirely, and table <strong>owners</strong> bypass it unless
+      the table is set to <code>FORCE</code>. So an app connecting as <code>postgres</code> has every policy
+      silently disabled. <code>sms_app</code> is <code>NOSUPERUSER</code>, <code>NOCREATEDB</code>,
+      <code>NOCREATEROLE</code>, <code>NOBYPASSRLS</code>, owns nothing, and cannot create anything. It can only
+      ever run DML.</p>
+      <p>Runs automatically on first boot of the docker-compose <code>db</code> service. For a local PostgreSQL,
+      run it by hand: <code>psql -U postgres -d school_manage_db -f scripts/init-db.sql</code></p>
+
+      <h3>5.12 docker/Dockerfile</h3>
+      <p>Multi-stage build. The builder stage carries <code>uv</code>, build toolchains and caches — none of
+      which belong in the running image (every extra binary is attack surface). Only the virtualenv and
+      application code are copied forward: roughly 1.2GB → 250MB.</p>
+      <p>Dependency files are copied <strong>first, alone</strong>, so Docker's layer cache makes a code-only
+      rebuild take seconds instead of minutes. Runs as unprivileged <code>appuser</code>. No
+      <code>--reload</code> and no <code>--workers</code> — process count is the orchestrator's job.</p>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section id="s6">
+      <p class="sec-no">Section 06</p>
+      <h2>The life of a request, end to end</h2>
+
+      <p>Trace <code>GET /api/v1/students?page=2</code> through the whole system:</p>
+
+      <ol class="trace">
+        <li><div><div class="tname">uvicorn</div><div class="tdesc">receives the HTTP request</div></div></li>
+        <li><div><div class="tname">TrustedHostMiddleware</div><div class="tdesc">production only: is the Host header legitimate?</div></div></li>
+        <li><div><div class="tname">CORSMiddleware</div><div class="tdesc">is this Origin allowed?</div></div></li>
+        <li><div><div class="tname">GZipMiddleware</div><div class="tdesc">will compress the response on the way back out</div></div></li>
+        <li><div><div class="tname">RequestContextMiddleware</div><div class="tdesc">generates or reuses <code>X-Request-ID</code> → <code>set_request_id(...)</code> into the ContextVar → starts the timer</div></div></li>
+        <li><div><div class="tname">FastAPI resolves dependencies (depth-first)</div><div class="tdesc">
+          <code>CurrentUser</code> → <code>get_current_principal()</code>: reads the <code>Authorization: Bearer</code> header, <code>decode_token()</code> verifies signature + expiry + <code>typ</code> claim, then <em>★ <code>set_school_id(...)</code> → ContextVar</em>.<br>
+          <code>DbSession</code> → <code>get_tenant_db()</code> → <code>get_db()</code>: opens an AsyncSession (a transaction begins), then <em>★ <code>SELECT set_config('app.current_school_id', '&lt;uuid&gt;', true)</code></em>.<br>
+          <code>Pagination</code> → <code>PageParams(page=2, size=20)</code>.
+        </div></div></li>
+        <li><div><div class="tname">The route handler runs — thin</div><div class="tdesc">Delegates immediately: <code>return await StudentService(db).list_students(params)</code></div></div></li>
+        <li><div><div class="tname">Service</div><div class="tdesc">business rules. Checks permissions, orchestrates. No SQL, no HTTP.</div></div></li>
+        <li><div><div class="tname">Repository</div><div class="tdesc">builds and executes the SELECT.</div></div></li>
+        <li><div><div class="tname">PostgreSQL evaluates the RLS policy</div><div class="tdesc"><code>WHERE school_id = current_setting('app.current_school_id')::uuid</code> — <em>★ rows belonging to other schools do not exist as far as this query is concerned.</em></div></div></li>
+        <li><div><div class="tname">Service wraps the rows</div><div class="tdesc">in <code>Page[StudentRead]</code></div></div></li>
+        <li><div><div class="tname">FastAPI serialises</div><div class="tdesc">via the <code>response_model</code></div></div></li>
+        <li><div><div class="tname">get_db commits</div><div class="tdesc">the transaction, and closes the session</div></div></li>
+        <li><div><div class="tname">RequestContextMiddleware</div><div class="tdesc">adds <code>X-Request-ID</code> + <code>Server-Timing</code>, logs the access line</div></div></li>
+        <li><div><div class="tname">GZip compresses, CORS adds headers</div><div class="tdesc">response goes out</div></div></li>
+      </ol>
+
+      <div class="note">
+        <p><strong>If anything raises at any point in steps 7–11:</strong> <code>get_db</code> rolls back the
+        transaction and re-raises → <span class="path">api/errors.py</span> catches it → renders an RFC 9457
+        Problem Details body carrying the request id → <code>RequestContextMiddleware</code> still logs the
+        failed request.</p>
+      </div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section id="s7">
+      <p class="sec-no">Section 07</p>
+      <h2>The four layers, and the one rule that holds them together</h2>
+
+      <div class="layers">
+        <div class="layer">
+          <span class="lname">Router</span><span class="lfile">app/modules/&lt;m&gt;/router.py</span>
+          <div class="ldesc">HTTP only: parse, validate, delegate. NEVER contains business rules.</div>
+        </div>
+        <div class="layer">
+          <span class="lname">Service</span><span class="lfile">app/modules/&lt;m&gt;/service.py</span>
+          <div class="ldesc">Business rules, orchestration, transaction boundaries. Knows NOTHING about HTTP.</div>
+        </div>
+        <div class="layer">
+          <span class="lname">Repository</span><span class="lfile">app/modules/&lt;m&gt;/repository.py</span>
+          <div class="ldesc">SQL only. Knows NOTHING about business rules.</div>
+        </div>
+        <div class="layer">
+          <span class="lname">Model</span><span class="lfile">app/modules/&lt;m&gt;/models.py</span>
+          <div class="ldesc">SQLAlchemy tables + constraints.</div>
+        </div>
+      </div>
+
+      <div class="rule-box">
+        <span class="tag">The dependency rule</span>
+        <p><strong>Arrows point downward only.</strong> A service may import a repository. A repository may
+        <strong>never</strong> import a service. A service may <strong>never</strong> import
+        <code>fastapi</code>.</p>
+      </div>
+
+      <p>That last clause is the one that pays off. It is what makes a service reusable from a CLI command, a
+      background worker, or a test — with no HTTP client involved.</p>
+
+      <h3>Why models.py and schemas.py are separate files</h3>
+      <p>This surprises people coming from Mongoose, where one schema does everything.</p>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th></th><th>models.py (SQLAlchemy)</th><th>schemas.py (Pydantic)</th></tr></thead>
+          <tbody>
+            <tr><td>Describes</td><td>The <strong>database table</strong></td><td>The <strong>API contract</strong></td></tr>
+            <tr><td>Contains</td><td>Columns, indexes, FKs, constraints</td><td>Fields the client may send / will receive</td></tr>
+            <tr><td>Example field</td><td><code>password_hash</code></td><td>✗ never exposed</td></tr>
+            <tr><td>Example field</td><td><code>id</code>, <code>created_at</code></td><td>✓ in <code>StudentRead</code>, ✗ in <code>StudentCreate</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>You typically write three or four Pydantic schemas per model:</p>
+      <div class="scroll"><pre><code>class StudentCreate(BaseSchema):    <span class="c"># what the client may POST</span>
+    name: str
+    admission_number: str
+
+class StudentUpdate(BaseSchema):    <span class="c"># what the client may PATCH — all optional</span>
+    name: str | None = None
+
+class StudentRead(BaseSchema):      <span class="c"># what the API returns</span>
+    id: UUID
+    name: str
+    created_at: datetime</code></pre></div>
+
+      <p>Separating them is what stops mass-assignment bugs (a client POSTing
+      <code>{"role": "admin", "school_id": "&lt;someone else's&gt;"}</code> and having it silently applied) and
+      accidental field leaks.</p>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section id="s8">
+      <p class="sec-no">Section 08</p>
+      <h2>Multi-tenancy: the thing that makes this project unusual</h2>
+
+      <p>One database. Many schools. <strong>A school must never see another school's data.</strong></p>
+      <p>Most systems attempt this with <code>WHERE school_id = ?</code> in every query. That is one forgotten
+      filter away from a permanent, silent data breach. This project does not rely on it.</p>
+
+      <h3>Three layers, only one of which is a real boundary</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Layer</th><th>Mechanism</th><th>Strength</th></tr></thead>
+          <tbody>
+            <tr><td>1. Application</td><td><code>WHERE school_id = ...</code> in queries</td><td><strong>Weak</strong> — one forgotten filter leaks forever</td></tr>
+            <tr><td>2. <strong>Database</strong></td><td><strong>RLS policy on every tenant table</strong></td><td><strong>Strong — the database refuses</strong></td></tr>
+            <tr><td>3. Role</td><td>App connects as <code>sms_app</code> (<code>NOBYPASSRLS</code>, owns nothing)</td><td>Required for layer 2 to function</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The chain, end to end</h3>
+      <div class="scroll"><pre><code>1. User logs in
+       → security.py signs a JWT containing a `sid` (school id) claim
+
+2. Request arrives with that token
+       → deps.py::get_current_principal verifies the signature
+       → publishes school_id into a ContextVar          <span class="c">[core/context.py]</span>
+
+3. The DB session is opened
+       → session.py::get_db reads that ContextVar
+       → SELECT set_config('app.current_school_id', '&lt;uuid&gt;', true)
+
+4. Any query runs
+       → PostgreSQL appends the RLS policy predicate automatically:
+             school_id = current_setting('app.current_school_id')::uuid</code></pre></div>
+
+      <p>So the tenant boundary is enforced by <strong>PostgreSQL, on every statement</strong> — including raw
+      SQL, ad-hoc ORM queries, and code written by a developer who never read this document. That is the entire
+      point.</p>
+
+      <h3>Three ways to silently disable all of it</h3>
+      <ol>
+        <li><strong>Connecting as <code>postgres</code> or as the table owner.</strong> Superusers and owners
+          bypass RLS. Hence the separate <code>sms_app</code> role, and <code>FORCE ROW LEVEL SECURITY</code> on
+          every table.</li>
+        <li><strong>Using <code>SET</code> instead of <code>SET LOCAL</code> /
+          <code>set_config(..., true)</code>.</strong> The value would survive past <code>COMMIT</code> and leak
+          onto the next request that reuses the pooled connection.</li>
+        <li><strong>A <code>USING</code> clause with no <code>WITH CHECK</code>.</strong> A user could
+          <em>write</em> rows into another tenant even though they cannot read them back.</li>
+      </ol>
+      <p><span class="path">alembic/rls.py</span> wraps the correct DDL so no migration has to get this right by
+      hand.</p>
+
+      <h3>Cross-tenant reads return 404, never 403</h3>
+      <p>A 403 would confirm the resource exists — which is itself a cross-tenant information leak. Under RLS
+      this falls out naturally: another school's row simply is not returned, so the service sees
+      <code>None</code> and raises <code>NotFoundError</code>.</p>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section id="s9">
+      <p class="sec-no">Section 09</p>
+      <h2>How to add a new feature, start to finish</h2>
+
+      <p>Worked example: <strong>add a Students module.</strong></p>
+
+      <h3>Step 1 — create the module directory</h3>
+      <div class="scroll"><pre><code>mkdir -p app/modules/students &amp;&amp; touch app/modules/students/__init__.py</code></pre></div>
+
+      <h3>Step 2 — models.py (the database table)</h3>
+      <div class="scroll"><pre><code>from sqlalchemy import String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+from app.db.mixins import SoftDeleteMixin, TenantMixin, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+class Student(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteMixin):
+    admission_number: Mapped[str] = mapped_column(String(32))
+    full_name: Mapped[str] = mapped_column(String(160))
+
+    <span class="c"># Scoped to the school, not global — two schools may legitimately reuse a number.</span>
+    __table_args__ = (UniqueConstraint("school_id", "admission_number"),)</code></pre></div>
+
+      <h3>Step 3 — register it in db/registry.py <span class="star">★</span></h3>
+      <div class="scroll"><pre><code>from app.modules.students import models as student_models  <span class="c"># noqa: F401</span></code></pre></div>
+      <p><strong>Do this in the same commit.</strong> Skipping it makes Alembic generate a
+      <code>DROP TABLE</code>.</p>
+
+      <h3>Step 4 — generate and edit the migration</h3>
+      <div class="scroll"><pre><code>make migration m="add students table"</code></pre></div>
+      <p>Then <strong>open the generated file</strong> in <span class="path">alembic/versions/</span> and add the
+      RLS calls — Alembic cannot infer them:</p>
+      <div class="scroll"><pre><code>from alembic.rls import disable_tenant_rls, setup_tenant_table
+
+def upgrade() -&gt; None:
+    op.create_table("students", ...)      <span class="c"># ← autogenerated</span>
+    setup_tenant_table("students")        <span class="hl"># ← you add this</span>
+
+def downgrade() -&gt; None:
+    disable_tenant_rls("students")        <span class="hl"># ← you add this</span>
+    op.drop_table("students")             <span class="c"># ← autogenerated</span></code></pre></div>
+      <p>Apply it: <code>make migrate</code></p>
+
+      <h3>Step 5 — schemas.py (the API contract)</h3>
+      <div class="scroll"><pre><code>from uuid import UUID
+from app.common.schemas import BaseSchema
+
+class StudentCreate(BaseSchema):
+    admission_number: str
+    full_name: str
+
+class StudentUpdate(BaseSchema):
+    full_name: str | None = None
+
+class StudentRead(BaseSchema):
+    id: UUID
+    admission_number: str
+    full_name: str</code></pre></div>
+      <p>Note <code>StudentCreate</code> has no <code>school_id</code> — the client must never supply it. The
+      service takes it from the verified token.</p>
+
+      <h3>Step 6 — repository.py</h3>
+      <div class="scroll"><pre><code>from app.common.repository import BaseRepository
+from app.modules.students.models import Student
+
+class StudentRepository(BaseRepository[Student]):
+    model = Student
+    sortable_fields = frozenset({"full_name", "admission_number", "created_at"})
+
+    async def get_by_admission_number(self, number: str) -&gt; Student | None:
+        return await self.find_one(Student.admission_number == number)</code></pre></div>
+
+      <h3>Step 7 — service.py</h3>
+      <div class="scroll"><pre><code>from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.schemas import Page, PageParams
+from app.core.context import require_school_id
+from app.core.exceptions import ConflictError, NotFoundError
+from app.modules.students.repository import StudentRepository
+from app.modules.students.schemas import StudentCreate, StudentRead
+
+
+class StudentService:
+    def __init__(self, session: AsyncSession) -&gt; None:
+        self.repo = StudentRepository(session)
+
+    async def create(self, payload: StudentCreate) -&gt; StudentRead:
+        if await self.repo.get_by_admission_number(payload.admission_number):
+            raise ConflictError("That admission number is already in use.")
+
+        student = await self.repo.create(
+            **payload.model_dump(),
+            school_id=require_school_id(),   <span class="hl"># from the token, never from the client</span>
+        )
+        return StudentRead.model_validate(student)
+
+    async def get(self, student_id: UUID) -&gt; StudentRead:
+        student = await self.repo.get(student_id)
+        if student is None:
+            raise NotFoundError("Student not found.")   <span class="c"># also covers cross-tenant</span>
+        return StudentRead.model_validate(student)
+
+    async def list(self, params: PageParams) -&gt; Page[StudentRead]:
+        rows, total = await self.repo.list(params=params)
+        return Page.create([StudentRead.model_validate(r) for r in rows], total, params)</code></pre></div>
+      <p>No <code>fastapi</code> import. No <code>commit()</code>. That is the shape to aim for.</p>
+
+      <h3>Step 8 — router.py</h3>
+      <div class="scroll"><pre><code>from uuid import UUID
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import DbSession, Pagination, require_roles
+from app.common.schemas import Page
+from app.modules.students.schemas import StudentCreate, StudentRead
+from app.modules.students.service import StudentService
+
+router = APIRouter()
+
+
+@router.get("", response_model=Page[StudentRead])
+async def list_students(db: DbSession, params: Pagination) -&gt; Page[StudentRead]:
+    return await StudentService(db).list(params)
+
+
+@router.post(
+    "",
+    response_model=StudentRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles("school_admin", "registrar"))],
+)
+async def create_student(payload: StudentCreate, db: DbSession) -&gt; StudentRead:
+    return await StudentService(db).create(payload)
+
+
+@router.get("/{student_id}", response_model=StudentRead)
+async def get_student(student_id: UUID, db: DbSession) -&gt; StudentRead:
+    return await StudentService(db).get(student_id)</code></pre></div>
+      <p>Every handler is one line of delegation. That is the target.</p>
+
+      <h3>Step 9 — mount it in api/v1/router.py</h3>
+      <div class="scroll"><pre><code>from app.modules.students.router import router as students_router
+
+api_router.include_router(students_router, prefix="/students", tags=["Students"])</code></pre></div>
+
+      <h3>Step 10 — test and verify</h3>
+      <div class="scroll"><pre><code>make check          <span class="c"># lint + typecheck + tests</span>
+make dev            <span class="c"># then open http://localhost:8000/docs</span></code></pre></div>
+
+      <h3>The checklist, condensed</h3>
+      <ul class="status">
+        <li class="todo"><code>models.py</code> — include <code>TenantMixin</code> if the table is tenant-owned</li>
+        <li class="todo"><strong>Add the import to <code>db/registry.py</code></strong></li>
+        <li class="todo"><code>make migration</code> — then <strong>add <code>setup_tenant_table()</code> to the generated file</strong></li>
+        <li class="todo"><code>make migrate</code></li>
+        <li class="todo"><code>schemas.py</code> — Create / Update / Read</li>
+        <li class="todo"><code>repository.py</code> — set <code>model</code> and <code>sortable_fields</code></li>
+        <li class="todo"><code>service.py</code> — business rules; raise <code>AppError</code>s, never <code>HTTPException</code></li>
+        <li class="todo"><code>router.py</code> — thin handlers</li>
+        <li class="todo">Mount in <code>api/v1/router.py</code></li>
+        <li class="todo">Tests</li>
+        <li class="todo"><code>make check</code></li>
+      </ul>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section id="s10">
+      <p class="sec-no">Section 10</p>
+      <h2>Python things that trip up MERN developers</h2>
+
+      <h3>__init__.py — the empty files everywhere</h3>
+      <p>A directory becomes an importable Python <strong>package</strong> by containing
+      <code>__init__.py</code>. Those zero-byte files are not clutter; delete one and
+      <code>from app.core.config import Settings</code> stops working. Roughly analogous to an
+      <code>index.js</code> barrel file, except often intentionally empty.</p>
+
+      <h3>Imports are absolute, from the project root</h3>
+      <div class="scroll"><pre><code>from app.core.config import get_settings      <span class="c"># ✓</span>
+from ..core.config import get_settings        <span class="c"># ✗ relative — avoid</span></code></pre></div>
+      <p>There is no <code>require()</code> and no <code>module.exports</code>. Every top-level name in a module
+      is importable by default; <code>_leading_underscore</code> is the convention for "private" (a convention,
+      not enforced).</p>
+
+      <h3>from __future__ import annotations at the top of every file</h3>
+      <p>Makes all type annotations lazily evaluated strings. It lets you reference a class before it is defined
+      and use modern syntax (<code>str | None</code>) on older interpreters, and it removes runtime cost from
+      annotations. <strong>Copy it into every new file</strong> — it is the house style here.</p>
+
+      <h3>Type hints are checked, not decorative</h3>
+      <p><code>mypy</code> runs in <code>strict</code> mode (<code>make typecheck</code>). Unlike TypeScript,
+      Python does not <em>enforce</em> types at runtime — but mypy will fail your build, and Pydantic
+      <em>does</em> enforce them at API boundaries.</p>
+      <p>Modern syntax used throughout (Python 3.13, so no <code>Optional</code>/<code>List</code>/<code>Dict</code>):</p>
+      <div class="scroll"><pre><code>str | None                    <span class="c"># not Optional[str]</span>
+list[str]                     <span class="c"># not List[str]</span>
+dict[str, Any]                <span class="c"># not Dict[str, Any]</span>
+class Page[T](BaseModel)      <span class="c"># PEP 695 generics, not Generic[T]</span></code></pre></div>
+      <p><code>ruff</code> will auto-fix the old forms if you slip.</p>
+
+      <h3>async looks the same but works differently</h3>
+      <p>Syntax is nearly identical to JS. The difference: <strong>Python has one event loop and it blocks
+      easily.</strong> A synchronous call inside an <code>async def</code> freezes <em>every</em> concurrent
+      request in the process — not just the current one.</p>
+      <div class="scroll"><pre><code>import time, requests
+time.sleep(1)                        <span class="c"># ✗ blocks the whole event loop</span>
+requests.get(url)                    <span class="c"># ✗ blocking HTTP library</span>
+
+import asyncio, httpx
+await asyncio.sleep(1)               <span class="c"># ✓</span>
+async with httpx.AsyncClient() as c: <span class="c"># ✓</span>
+    await c.get(url)</code></pre></div>
+      <p>This is exactly why the project uses <code>asyncpg</code> (not <code>psycopg2</code>) and
+      <code>aiosmtplib</code> (not <code>smtplib</code>). Ruff's <code>ASYNC</code> lint rules catch many of
+      these automatically.</p>
+      <p>There is no <code>.then()</code> and no <code>Promise.all</code> — the equivalent is
+      <code>asyncio.gather(...)</code>.</p>
+
+      <h3>The database has a fixed schema</h3>
+      <p>The single biggest change from MongoDB. There is no "just add a field to the document". Adding a field
+      = edit the model + generate a migration + apply it. Every environment goes through the same versioned
+      migration files, in the same order.</p>
+      <p>It feels slower for the first week. It also means production can never silently contain three different
+      shapes of the same record.</p>
+
+      <h3>Virtual environments</h3>
+      <p><code>.venv/</code> is this project's <code>node_modules/</code>. Two ways to work with it:</p>
+      <div class="scroll"><pre><code>uv run pytest                <span class="c"># ← recommended: uv handles the venv for you</span>
+<span class="c"># or</span>
+source .venv/bin/activate    <span class="c"># ← activate it in your shell first</span>
+pytest</code></pre></div>
+      <p>The Makefile uses <code>uv run</code> everywhere, so <code>make test</code> works with no activation.</p>
+
+      <h3>Protocol is a TypeScript interface</h3>
+      <div class="scroll"><pre><code>class EmailSender(Protocol):
+    async def send(self, message: EmailMessage) -&gt; None: ...</code></pre></div>
+      <p>Structural typing: any object with a matching <code>send</code> satisfies it. No inheritance required —
+      which is exactly what makes test fakes trivial.</p>
+
+      <h3>Dataclasses vs Pydantic models</h3>
+      <p>Both look like classes with typed fields. The difference is <strong>validation</strong>:</p>
+      <ul>
+        <li><code>@dataclass</code> — a plain typed container, no validation. Used for internal objects like
+          <code>Principal</code> and <code>EmailMessage</code>, where the data is already trusted.</li>
+        <li><code>BaseModel</code> (Pydantic) — parses and <strong>validates</strong>. Used at every boundary:
+          API request/response bodies, and environment config.</li>
+      </ul>
+      <p>Rule of thumb: crossing a trust boundary → Pydantic. Internal plumbing → dataclass.</p>
+
+      <h3>Ruff replaces four tools</h3>
+      <p><code>make format</code> = eslint --fix + prettier. <code>make lint</code> = eslint. One binary, and it
+      is roughly 100× faster than the Python tools it replaces.</p>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section id="s11">
+      <p class="sec-no">Section 11</p>
+      <h2>Command cheat sheet</h2>
+
+      <p>Everything runs from <span class="path">backend/</span>.</p>
+
+      <h3>First-time setup</h3>
+      <div class="scroll"><pre><code>cd backend
+uv venv --python 3.13         <span class="c"># create .venv</span>
+uv sync                       <span class="c"># npm install</span>
+cp .env.example .env          <span class="c"># then set SECRET_KEY</span></code></pre></div>
+      <p>Generate a real secret key:</p>
+      <div class="scroll"><pre><code>python -c "import secrets; print(secrets.token_urlsafe(64))"</code></pre></div>
+
+      <h3>Daily</h3>
+      <div class="scroll">
+        <table class="cmp">
+          <thead><tr><th>Command</th><th>Node equivalent</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td><code>make dev</code></td><td><code>npm run dev</code></td><td>Hot-reload server on :8000</td></tr>
+            <tr><td><code>make test</code></td><td><code>npm test</code></td><td>Run the suite</td></tr>
+            <tr><td><code>make test-cov</code></td><td><code>npm test -- --coverage</code></td><td>With a coverage report</td></tr>
+            <tr><td><code>make lint</code></td><td><code>npx eslint .</code></td><td>Check lint</td></tr>
+            <tr><td><code>make format</code></td><td><code>npx eslint --fix . &amp;&amp; npx prettier -w .</code></td><td>Auto-fix + format</td></tr>
+            <tr><td><code>make typecheck</code></td><td><code>npx tsc --noEmit</code></td><td>mypy strict</td></tr>
+            <tr><td><strong><code>make check</code></strong></td><td>—</td><td><strong>lint + typecheck + test. What CI runs. Run before every commit.</strong></td></tr>
+            <tr><td><code>make help</code></td><td><code>npm run</code></td><td>List all targets</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Database</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Command</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td><code>make migration m="add students table"</code></td><td>Generate a migration from model changes</td></tr>
+            <tr><td><code>make migrate</code></td><td>Apply all pending migrations</td></tr>
+            <tr><td><code>make downgrade</code></td><td>Roll back the most recent one</td></tr>
+            <tr><td><code>make history</code></td><td>Show migration history</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Docker</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Command</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td><code>make docker-up</code></td><td>Start PostgreSQL + API</td></tr>
+            <tr><td><code>make docker-down</code></td><td>Stop (data preserved)</td></tr>
+            <tr><td><code>make docker-reset</code></td><td>Stop <strong>and destroy the volume</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Once running</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>URL</th><th>What</th></tr></thead>
+          <tbody>
+            <tr><td><code>localhost:8000/docs</code></td><td>Swagger UI — interactive, try endpoints live</td></tr>
+            <tr><td><code>localhost:8000/redoc</code></td><td>ReDoc — cleaner reference docs</td></tr>
+            <tr><td><code>localhost:8000/openapi.json</code></td><td>The raw spec (generate a TS client from this)</td></tr>
+            <tr><td><code>localhost:8000/health</code></td><td>Liveness</td></tr>
+            <tr><td><code>localhost:8000/health/ready</code></td><td>Readiness</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>All three docs URLs are <strong>disabled in production</strong> — they leak the full API surface.</p>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section id="s12">
+      <p class="sec-no">Section 12</p>
+      <h2>What exists vs what is still empty</h2>
+
+      <h3>Foundation — done and working</h3>
+      <ul class="status">
+        <li class="done">Application skeleton, boots with <strong>no database</strong> (<code>DB_ENABLED=false</code>)</li>
+        <li class="done">Typed, validated configuration with production safety guards</li>
+        <li class="done">Structured logging with automatic request/tenant correlation</li>
+        <li class="done">Full error-handling pipeline (RFC 9457 Problem Details)</li>
+        <li class="done">Password hashing (Argon2id) + JWT issue/verify</li>
+        <li class="done">OTP generation/verification primitives</li>
+        <li class="done">Email transport (console + SMTP) with HTML/plaintext templates</li>
+        <li class="done">Generic async repository with pagination, sorting, soft delete</li>
+        <li class="done">Database session management with RLS tenant binding</li>
+        <li class="done">Model mixins (uuid pk, timestamps, soft delete, tenant)</li>
+        <li class="done">Auth/tenant/role/pagination dependencies</li>
+        <li class="done">Health + readiness probes</li>
+        <li class="done">Alembic configured, with RLS migration helpers</li>
+        <li class="done">Docker + docker-compose, <code>sms_app</code> role bootstrap</li>
+        <li class="done">Test harness (unit + integration), ruff, mypy strict, Makefile</li>
+      </ul>
+
+      <h3>Module 1 — Tenancy &amp; Auth — delivered end to end</h3>
+      <ul class="status">
+        <li class="done"><strong><code>modules/tenancy</code></strong> — full stack:
+          <code>schemas</code> / <code>repository</code> / <code>service</code> / <code>router</code>.
+          Self-service registration (creates a <code>PENDING_APPROVAL</code> school), super-admin onboarding,
+          approve / suspend transitions, list + filter, <code>GET /schools/current</code>.</li>
+        <li class="done"><strong><code>modules/auth</code></strong> — full stack across three tables.
+          Register → email-verify (OTP) → login with account lockout and role-based 2FA → token issue → refresh
+          (rotate + revoke-on-use) → logout → forgot / reset password (revokes all sessions) →
+          <code>GET /me</code>.</li>
+        <li class="done"><strong><code>alembic/versions/</code></strong> — the bootstrap migration creates
+          <code>schools</code>, <code>users</code>, <code>otp_codes</code>, <code>refresh_tokens</code>.
+          <code>schools</code> carries a hand-written <strong>id-based</strong> RLS policy (a school <em>is</em>
+          the tenant); the three auth tables are deliberately outside RLS with DML grants only. Verified:
+          applies, downgrades, and <code>alembic check</code> reports no drift.</li>
+        <li class="done"><code>scripts/create_super_admin.py</code> — seed the first platform operator (uses
+          <code>session_scope</code>, since there is no request context to read the tenant from).</li>
+        <li class="done">Tests: skeleton smoke tests plus DB-backed integration tests that run the app as the
+          restricted <code>sms_app</code> role, including a <strong>cross-tenant RLS isolation</strong> suite
+          proving PostgreSQL refuses cross-tenant reads <em>and</em> writes. <code>make check</code> is
+          green.</li>
+      </ul>
+
+      <p>Two foundation fixes were needed to make the above actually work, both documented at their site:</p>
+      <ul>
+        <li><strong>Enum columns.</strong> The status/role/plan columns were <code>String(32)</code> annotated as
+          enums, so reads came back as plain <code>str</code> and the models' <code>is</code>-based
+          <code>is_active</code> / <code>can_authenticate</code> always returned False (login was structurally
+          impossible). They now use <code>str_enum(...)</code> (<span class="path">db/base.py</span>): VARCHAR
+          <strong>+ CHECK</strong> with <code>values_callable</code>, which is the "VARCHAR + CHECK" design this
+          doc already described, and returns real <code>StrEnum</code> members.</li>
+        <li><strong><code>from alembic.rls import …</code></strong> The installed <code>alembic</code>
+          distribution shadowed the local <span class="path">alembic/</span> directory, so the documented helper
+          import never resolved. <span class="path">alembic/env.py</span> now extends
+          <code>alembic.__path__</code> so the convention works for every future migration.</li>
+      </ul>
+
+      <h3>Not started</h3>
+      <ul class="status">
+        <li class="todo"><strong><code>modules/students</code></strong> and beyond — classes, attendance,
+          timetable, fees, …</li>
+        <li class="todo">No frontend directory (config anticipates Next.js on :3000)</li>
+        <li class="todo">No CI pipeline file</li>
+      </ul>
+
+      <h3>The remaining build order</h3>
+      <ol>
+        <li><strong><code>modules/tenancy</code></strong> — the <code>schools</code> table. <em>Done.</em></li>
+        <li><strong><code>modules/auth</code></strong> — users, login, refresh, OTP state. <em>Done.</em></li>
+        <li><strong><code>modules/students</code></strong> — the first real domain, and the template for the
+          rest. This is the first module that uses the standard <code>setup_tenant_table()</code> RLS helper
+          (<code>school_id</code> based), now that the import path is fixed.</li>
+        <li>Then: classes, attendance, timetable, fees…</li>
+      </ol>
+
+      <h3>Where to look when you are stuck</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Question</th><th>File</th></tr></thead>
+          <tbody>
+            <tr><td>Why is the architecture like this?</td><td><span class="path">backend/README.md</span></td></tr>
+            <tr><td>What environment variables exist?</td><td><span class="path">backend/.env.example</span> + <span class="path">app/core/config.py</span></td></tr>
+            <tr><td>What commands can I run?</td><td><code>make help</code> / <span class="path">backend/Makefile</span></td></tr>
+            <tr><td>How do I get the DB session / current user?</td><td><span class="path">app/api/deps.py</span></td></tr>
+            <tr><td>What CRUD do I get for free?</td><td><span class="path">app/common/repository.py</span></td></tr>
+            <tr><td>Which error should I raise?</td><td><span class="path">app/core/exceptions.py</span></td></tr>
+            <tr><td>How does tenant isolation work?</td><td><span class="path">app/db/session.py</span> + <span class="path">alembic/rls.py</span></td></tr>
+            <tr><td>How do I write a test?</td><td><span class="path">backend/tests/conftest.py</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rule-box">
+        <span class="tag">One habit worth forming</span>
+        <p>Every source file in this project starts with a docstring explaining <em>why it exists</em>,
+        <em>what it is responsible for</em>, and <em>what it interacts with</em>. Before changing a file, read
+        its docstring. Before adding a file, write one.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    Generated from <code>PROJECT_STRUCTURE.md</code>. When the two disagree, the Markdown source in the
+    repository is authoritative — update it first, then regenerate this page.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+    var map = {};
+    links.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+
+    var sections = Array.prototype.slice.call(document.querySelectorAll('main section'));
+    var current = null;
+
+    function mark(id) {
+      if (current === id) return;
+      current = id;
+      links.forEach(function (a) { a.classList.remove('on'); });
+      if (map[id]) map[id].classList.add('on');
+    }
+
+    var observer = new IntersectionObserver(function (entries) {
+      var visible = entries
+        .filter(function (e) { return e.isIntersecting; })
+        .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+      if (visible.length) mark(visible[0].target.id);
+    }, { rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+
+    sections.forEach(function (s) { observer.observe(s); });
+  })();
+</script>
