@@ -1,4 +1,4 @@
-on: [push]
+on: [push, pull_request, issues, fork, watch]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -7,12 +7,12 @@ jobs:
       - name: whatsapp-notify
         id: whatsapp-notify
         env:
-          account_sid: ${{ secrets.account_sid }}
-          auth_token: ${{ secrets.auth_token }}
-          to_whatsapp_no: ${{ secrets.to_whatsapp_no }}
+          ACCOUNT_SID: ${{ secrets.ACCOUNT_SID }}
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          TO_WHATSAPP_NUMBER: ${{ secrets.TO_WHATSAPP_NUMBER }}
 
 
-        uses: ishween/whatsapp-push-notify-action@master
+        uses: kaviadigdarshan/whatsapp-actions@main
       
       - name : Run
         run: |
