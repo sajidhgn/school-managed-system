@@ -1,0 +1,25 @@
+name: Push Notification Telegram
+
+on:
+  push:
+    branches: [ main, master ] # Change this to your preferred branch
+
+jobs:
+  telegram-notification:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Send Telegram Notification
+      uses: appleboy/telegram-action@master
+      with:
+        to: ${{ secrets.TELEGRAM_TO }}
+        token: ${{ secrets.TELEGRAM_TOKEN }}
+        format: markdown
+        message: |
+          *New Push to Repository!* 🚀
+          
+          *Repository:* ${{ github.repository }}
+          *Commit Message:* ${{ github.event.head_commit.message }}
+          *Author:* ${{ github.event.head_commit.author.name }}
+          
+          [View Commit Changes](${{ github.event.head_commit.url }})
