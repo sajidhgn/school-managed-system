@@ -35,6 +35,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.api.errors import register_exception_handlers
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
+from app.core.cache import dispose_cache, init_cache
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, init_engine
@@ -75,11 +76,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             hint="Set DB_ENABLED=true once PostgreSQL is provisioned.",
         )
 
+    if settings.REDIS_ENABLED:
+        init_cache(settings)
+    else:
+        # Not an error. Permission resolution falls back to Postgres on every
+        # request -- correct, just slower. Logged at warning so a production
+        # deployment that forgot to enable it is visible in the startup line rather
+        # than discovered from a latency graph.
+        logger.warning(
+            "permission_cache_disabled",
+            hint="Set REDIS_ENABLED=true to cache permission sets; falling back to Postgres.",
+        )
+
     yield  # ---- application serves requests here ----
 
     logger.info("application_shutting_down")
     if settings.DB_ENABLED:
         await dispose_engine()
+    await dispose_cache()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -91,10 +105,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         summary="Multi-tenant school management platform",
         description=(
-            "Backend API for the School Management System.\n\n"
-            "**Tenant isolation** is enforced by PostgreSQL Row-Level Security: the "
-            "`school_id` claim in your JWT scopes every query. Cross-tenant reads "
-            "return 404, never 403, so resource existence is never disclosed."
+            "EduCloud API -- identity, tenancy, RBAC, plans and invitations.\n\n"
+            "**Tenant isolation** is enforced by PostgreSQL Row-Level Security. The "
+            "`org` claim in your access token scopes every query at the database "
+            "level; cross-tenant reads return 404, never 403, so resource existence "
+            "is never disclosed.\n\n"
+            "**School scoping** is a second, softer boundary inside the organization: "
+            "a school-scoped membership sees only its own campus, while an "
+            "organization owner spans all of them.\n\n"
+            "**Permissions** are `resource:action` strings resolved per request from "
+            "the caller's role. They are deliberately not embedded in the token, so "
+            "revoking access takes effect on the very next request."
         ),
         lifespan=lifespan,
         docs_url=settings.docs_url,

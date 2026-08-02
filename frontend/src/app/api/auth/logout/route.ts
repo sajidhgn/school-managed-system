@@ -1,31 +1,33 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-import { backendUrl } from "@/lib/api/config";
-import { clearSession, getRefreshToken } from "@/lib/auth/session";
+import { clearSession, fetchWithSession } from "@/lib/auth/session";
 
 /**
  * Sign out.
  *
- * Revokes the refresh token upstream so it cannot be replayed, then clears the
- * cookies. The cookies are cleared even if revocation fails — a user who
- * clicked "log out" must end up logged out locally regardless.
+ * Tells the backend to revoke the session, then clears the local cookies —
+ * IN THAT ORDER, and the local clear happens regardless of what the backend said.
+ *
+ * If revocation fails (the backend is down, the token already expired), clearing
+ * locally anyway is still correct: the user asked to be signed out and must appear
+ * signed out. A logout that leaves the user logged in because a network call failed
+ * is the worst possible failure mode for this particular button — especially on a
+ * shared machine, which is common in a staff room.
  */
-export async function POST() {
-  const refresh = await getRefreshToken();
 
-  if (refresh) {
-    try {
-      await fetch(backendUrl("/auth/logout"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ refresh_token: refresh }),
-        cache: "no-store",
-      });
-    } catch {
-      // Network failure to the backend must not trap the user in a session.
-    }
+export const dynamic = "force-dynamic";
+
+export async function POST(request: NextRequest) {
+  const everywhere = request.nextUrl.searchParams.get("all") === "true";
+
+  try {
+    await fetchWithSession(everywhere ? "/auth/logout-all" : "/auth/logout", {
+      method: "POST",
+    });
+  } catch {
+    // Deliberately swallowed — see the docstring.
   }
 
   await clearSession();
-  return NextResponse.json({ detail: "Signed out." }, { status: 200 });
+  return NextResponse.json({ message: "Signed out." });
 }

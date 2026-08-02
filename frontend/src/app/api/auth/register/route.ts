@@ -3,22 +3,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { backendUrl } from "@/lib/api/config";
 
 /**
- * Register a school and its first admin.
+ * Self-service signup.
  *
- * No session is established: the backend puts the user in
- * `pending_verification` and emails a code, so the client is sent on to
- * /verify-email rather than into the dashboard.
+ * Deliberately sets NO cookies. The backend returns 201 with no tokens, because
+ * login is blocked until the emailed verification link is followed — that gate is
+ * what stops signup from becoming a way to send mail from our domain to arbitrary
+ * addresses.
+ *
+ * A thin pass-through rather than a client-side `fetch` to the API, for one reason:
+ * the browser must never learn the FastAPI origin. Everything crosses through the
+ * Next.js server.
  */
+
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const body = await request.text();
 
   const upstream = await fetch(backendUrl("/auth/register"), {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": request.headers.get("x-forwarded-for") ?? "",
+      "user-agent": request.headers.get("user-agent") ?? "",
+    },
+    body,
     cache: "no-store",
   });
 
-  const payload = await upstream.json().catch(() => ({}));
-  return NextResponse.json(payload, { status: upstream.status });
+  return new NextResponse(await upstream.text(), {
+    status: upstream.status,
+    headers: { "content-type": "application/json" },
+  });
 }

@@ -32,6 +32,25 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: sms-redis
+    # Backs the permission cache keyed `perm:{role_id}:{pv}` (spec §4.2).
+    #
+    # NO PERSISTENCE, deliberately: `--save ""` disables RDB snapshots. Everything
+    # stored here is a cache-aside copy of Postgres, so a restart losing it costs one
+    # cold read per role, not correctness. Persisting it would mean a restarted Redis
+    # could serve permission sets from before a role edit -- durability working
+    # against us.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6380:6379"   # 6380 on the host to avoid clashing with a local Redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build:
       context: .
@@ -39,6 +58,8 @@ services:
     container_name: sms-api
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       ENVIRONMENT: local
@@ -49,8 +70,16 @@ services:
       POSTGRES_USER: sms_app
       POSTGRES_PASSWORD: sms_app_password
       POSTGRES_DB: school_manage_db
+      # Alembic must connect as the schema OWNER, not as the app role. Table owners
+      # bypass RLS unless FORCE is set, so sharing one role would silently disable
+      # every tenant-isolation policy the migrations just created.
+      MIGRATION_USER: postgres
+      MIGRATION_PASSWORD: postgres
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: local-development-secret-not-for-any-real-deployment
       CORS_ORIGINS: '["http://localhost:3000"]'
+      FRONTEND_URL: http://localhost:3000
     ports:
       - "8000:8000"
     volumes:

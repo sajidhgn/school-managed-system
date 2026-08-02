@@ -15,10 +15,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Page, PageParams, SortParams
-from app.core.context import require_school_id
+from app.core.context import require_organization_id, require_school_id
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.modules.academics.models import SchoolClass, Section
@@ -33,7 +34,7 @@ from app.modules.academics.schemas import (
     SectionSummary,
     SectionUpdate,
 )
-from app.modules.auth.models import User, UserRole
+from app.modules.rbac.models import Membership, MembershipStatus
 
 logger = get_logger(__name__)
 
@@ -56,8 +57,14 @@ class AcademicsService:
 
         school_class = await self.classes.create(
             **payload.model_dump(),
-            # From the verified JWT, never the request body. Omitting it does not
-            # create an orphan row -- the RLS WITH CHECK rejects the INSERT outright.
+            # Both from the verified JWT, never the request body.
+            #
+            # `organization_id` is the RLS key: omitting it does not create an orphan
+            # row, because the WITH CHECK policy rejects the INSERT outright.
+            # `school_id` is the campus scope, which the policy does NOT enforce --
+            # it is enforced by the permission dependency having put the caller's
+            # school in the context in the first place.
+            organization_id=require_organization_id(),
             school_id=require_school_id(),
         )
         logger.info("class_created", class_id=str(school_class.id), level=school_class.level)
@@ -128,6 +135,9 @@ class AcademicsService:
 
         section = await self.sections.create(
             class_id=school_class.id,
+            # Inherited from the parent class rather than re-read from context, so a
+            # section can never end up scoped differently from the class it belongs to.
+            organization_id=school_class.organization_id,
             school_id=school_class.school_id,
             **payload.model_dump(),
         )
@@ -236,17 +246,39 @@ class AcademicsService:
     # -- internals ----------------------------------------------------------
 
     async def _assert_is_teacher(self, user_id: UUID) -> None:
-        """A class teacher must be a real, active member of staff at this school.
+        """A class teacher must hold an active membership at this school.
 
-        The lookup runs on the tenant-bound session, so a user id belonging to
-        another school simply is not found -- the tenant check is implicit in RLS
-        rather than an explicit school_id comparison that could be forgotten.
+        =====================================================================
+        CHECKED THROUGH `memberships`, NOT THROUGH A ROLE COLUMN ON `users`
+        =====================================================================
+            `users` is global and carries no role -- a person can be a teacher at one
+            school and an accountant at another (spec decision D4). "Is this user a
+            teacher?" is therefore not a question about the user at all; it is a
+            question about a membership in a specific school.
+
+            The lookup runs on the tenant-bound session, so a membership from another
+            organization is filtered out by RLS and reads as absent. The explicit
+            `school_id` comparison narrows it further to this campus -- the soft
+            boundary RLS deliberately does not police.
+
+        Any active membership qualifies, rather than a hardcoded list of role codes.
+        Customers create custom roles ("Head of Year", "Senior Tutor"), and a check
+        against `role.code in ('teacher', 'principal')` would reject exactly the
+        staff those roles were created for.
         """
-        user = await self.session.get(User, user_id)
-        if user is None or user.school_id is None:
-            raise NotFoundError("Teacher not found.")
-        if user.role not in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
-            raise ValidationError(
-                "A class teacher must be a teacher or school admin.",
-                code="INVALID_CLASS_TEACHER",
+        membership = (
+            await self.session.execute(
+                select(Membership).where(
+                    Membership.user_id == user_id,
+                    Membership.school_id == require_school_id(),
+                    Membership.status == MembershipStatus.ACTIVE,
+                    Membership.deleted_at.is_(None),
+                )
             )
+        ).scalar_one_or_none()
+
+        if membership is None:
+            # 404 rather than 422: from the caller's perspective there is no such
+            # person at this school, and confirming the user exists elsewhere on the
+            # platform would leak across the tenant boundary.
+            raise NotFoundError("Teacher not found at this school.")

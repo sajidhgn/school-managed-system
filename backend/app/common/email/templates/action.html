@@ -1,0 +1,120 @@
+{# Link-action email: verify address, reset password, accept invitation.
+
+   EMAIL HTML IS NOT WEB HTML. Constraints this template works within:
+     * Tables for layout, not flexbox/grid — Outlook's rendering engine is Word.
+     * Inline styles only — Gmail strips <style> blocks in some clients.
+     * No external CSS, no webfonts, no JavaScript.
+     * ~600px max width — the widest that renders without horizontal scroll in
+       most desktop preview panes.
+
+   WHY THE URL APPEARS TWICE — as a button AND as copyable text.
+     Corporate mail gateways rewrite links for scanning, some clients strip the
+     <a> from a styled button, and a user forwarding the mail to their phone often
+     loses the markup. A visible URL costs one dull paragraph and is the difference
+     between "click here" working for 97% of recipients and for all of them.
+#}
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+  {{ preheader }}
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background-color:#f4f5f7;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">
+
+        <tr>
+          <td style="padding:32px 40px 8px 40px;text-align:center;">
+            {% if logo_url %}
+              <img src="{{ logo_url }}" alt="{{ app_name }}" width="140"
+                   style="max-width:140px;height:auto;border:0;">
+            {% else %}
+              <div style="font-size:19px;font-weight:600;color:#0f172a;letter-spacing:-0.01em;">
+                {{ app_name }}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 40px 0 40px;">
+            <h1 style="margin:0 0 12px 0;font-size:21px;font-weight:600;color:#0f172a;">
+              {{ subject }}
+            </h1>
+            <p style="margin:0 0 4px 0;font-size:15px;line-height:1.6;color:#334155;">
+              Hi {{ greeting_name }},
+            </p>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">
+              {{ action_text }}
+            </p>
+          </td>
+        </tr>
+
+        {% if details %}
+        <tr>
+          <td style="padding:20px 40px 0 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="background-color:#f8fafc;border-radius:10px;">
+              {% for label, value in details %}
+              <tr>
+                <td style="padding:10px 16px;font-size:13px;color:#64748b;width:38%;">{{ label }}</td>
+                <td style="padding:10px 16px;font-size:14px;color:#0f172a;font-weight:500;">{{ value }}</td>
+              </tr>
+              {% endfor %}
+            </table>
+          </td>
+        </tr>
+        {% endif %}
+
+        <tr>
+          <td style="padding:28px 40px 8px 40px;text-align:center;">
+            {# A table-wrapped anchor, not a styled <div>: Outlook ignores padding
+               on inline elements, so the button would collapse to bare text. #}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+              <tr>
+                <td style="border-radius:8px;background-color:#0f172a;">
+                  <a href="{{ action_url }}"
+                     style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:600;
+                            color:#ffffff;text-decoration:none;border-radius:8px;">
+                    {{ button_label }}
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:12px 40px 0 40px;">
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">
+              If the button does not work, copy and paste this link into your browser:
+            </p>
+            {# word-break so a long signed URL wraps instead of forcing the whole
+               email into horizontal scroll. #}
+            <p style="margin:6px 0 0 0;font-size:12px;line-height:1.5;color:#475569;word-break:break-all;">
+              {{ action_url }}
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 40px 8px 40px;">
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">
+              This link expires in {{ expiry_text }}. {{ security_note }}
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:20px 40px 32px 40px;border-top:1px solid #e2e8f0;">
+            <p style="margin:16px 0 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
+              {{ app_name }} — sent automatically, please do not reply.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

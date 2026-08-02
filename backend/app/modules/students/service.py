@@ -19,10 +19,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Page, PageParams, SortParams
-from app.core.context import require_school_id
+from app.core.context import require_organization_id, require_school_id
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.logging import get_logger
 from app.modules.academics.service import AcademicsService
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.students.models import Student, StudentStatus
 from app.modules.students.repository import StudentRepository
 from app.modules.students.schemas import (
@@ -55,12 +56,13 @@ class StudentService:
             await self.academics.assert_section_capacity(payload.section_id)
 
         if payload.status is StudentStatus.ACTIVE:
-            await self._assert_seat_available()
+            await self._reserve_seat()
 
         student = await self.repo.create(
             **payload.model_dump(),
-            # From the verified JWT, never the request body. A client that could
-            # supply this could write a row into another tenant.
+            # Both from the verified JWT, never the request body. A client that could
+            # supply `organization_id` could write a row into another tenant.
+            organization_id=require_organization_id(),
             school_id=require_school_id(),
         )
         logger.info(
@@ -107,7 +109,7 @@ class StudentService:
         # Reactivating a student consumes a seat, so the plan limit applies again.
         new_status = values.get("status")
         if new_status is StudentStatus.ACTIVE and student.status is not StudentStatus.ACTIVE:
-            await self._assert_seat_available()
+            await self._reserve_seat()
 
         updated = await self.repo.update(student, **values)
         logger.info("student_updated", student_id=str(student_id), fields=sorted(values))
@@ -141,30 +143,47 @@ class StudentService:
         """
         from app.db.session import bind_tenant  # local: avoids an import cycle at module load
 
-        # Bind BEFORE the lookup, not after. `schools` is itself RLS-protected with
-        # an id-based policy, so on an unauthenticated session with no tenant bound
-        # the predicate is `id = NULL` and every school reads as missing -- the
-        # lookup below would 404 even for a perfectly valid application.
+        # =====================================================================
+        # A TWO-STEP BIND, BECAUSE THE CALLER KNOWS THE SCHOOL BUT NOT THE ORG
+        # =====================================================================
+        #   `schools` is RLS-protected on `organization_id`. An anonymous applicant
+        #   has a school id from a public admissions link and no idea which
+        #   organization owns it -- so the org GUC cannot be set before the lookup,
+        #   and with it empty the policy matches zero rows and every school reads as
+        #   missing.
         #
-        # Binding an attacker-supplied id grants nothing: the policy then exposes
-        # exactly that one school, and the existence/active check immediately after
-        # is what actually authorises the write.
-        await bind_tenant(self.session, payload.school_id)
-
+        #   So: arm the cross-tenant read just long enough to resolve school -> org,
+        #   then bind that organization properly for the INSERT.
+        #
+        #   Binding an attacker-supplied school id grants nothing. The window is a
+        #   single primary-key SELECT, it exposes only the row whose id was already
+        #   supplied, and the `is_active` check immediately after is what actually
+        #   authorises the write. Crucially the second bind is NOT platform-admin, so
+        #   the INSERT is governed by the ordinary WITH CHECK policy.
+        await bind_tenant(self.session, None, platform_admin=True)
         school = await self.session.get(School, payload.school_id)
+
         if school is None or not school.is_active:
             # Deliberately identical to the not-found case. Distinguishing "no such
             # school" from "suspended school" would leak tenant existence to an
             # unauthenticated caller.
+            await bind_tenant(self.session, None)
             raise NotFoundError("School not found or not accepting applications.")
+
+        organization_id = school.organization_id
+        await bind_tenant(self.session, organization_id, school_id=school.id)
 
         prefix = f"{datetime.now(UTC).year}-"
         admission_number = await self.repo.next_admission_number(prefix)
 
         student = await self.repo.create(
             **payload.model_dump(exclude={"school_id"}),
+            organization_id=organization_id,
             school_id=school.id,
             admission_number=admission_number,
+            # PENDING, so a public application consumes no plan seat until staff
+            # accept it. Otherwise anyone with the link could exhaust a school's
+            # student allowance by submitting the form repeatedly.
             status=StudentStatus.PENDING,
         )
         logger.info(
@@ -188,15 +207,27 @@ class StudentService:
             raise NotFoundError("Student not found.")
         return student
 
-    async def _assert_seat_available(self) -> None:
-        """Enforce the tenant's plan seat limit (`schools.max_students`)."""
-        school = await self.session.get(School, require_school_id())
-        if school is None:  # pragma: no cover - implies a token for a deleted tenant
-            raise NotFoundError("School not found.")
-        enrolled = await self.repo.count_enrolled()
-        if enrolled >= school.max_students:
-            raise ConflictError(
-                f"Your plan allows {school.max_students} enrolled students "
-                f"and {enrolled} are already active. Upgrade to add more.",
-                code="STUDENT_LIMIT_REACHED",
-            )
+    async def _reserve_seat(self) -> None:
+        """Consume one student seat against the organization's plan.
+
+        =====================================================================
+        WHY THIS REPLACED A `COUNT(*) >= school.max_students` CHECK
+        =====================================================================
+            The old form had two problems that the entitlement service exists to fix.
+
+            RACE. Counting and then inserting is a read-modify-write with no lock
+            between the halves. Two simultaneous enrolments both count 499 against a
+            500 limit, both pass, and the school ends up with 501. The limit was not
+            enforced, merely usually observed. `check_and_consume` fuses the check
+            into the UPDATE's WHERE clause, so the database serialises them.
+
+            WRONG SCOPE. The limit belongs to the ORGANIZATION's plan, not to one
+            campus -- a group of three schools buys 2,500 students between them, not
+            2,500 each. The old `schools.max_students` column could not express that.
+
+            It also now raises 402 with the limit and an upgrade URL, rather than a
+            409, so the frontend can show an upgrade prompt instead of an error.
+        """
+        await EntitlementService(self.session).check_and_consume(
+            require_organization_id(), "max_students"
+        )

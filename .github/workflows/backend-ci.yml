@@ -1,0 +1,152 @@
+# Backend quality gate (spec §10 phase 0: "Repo, Docker Compose, Alembic, CI").
+#
+# WHY THIS RUNS AGAINST A REAL POSTGRES RATHER THAN SQLITE
+#   The most important tests in this suite assert Row-Level Security behaviour, and
+#   RLS is a PostgreSQL feature. Against SQLite they would pass trivially and prove
+#   nothing -- the isolation gates would be green on a schema with no policies at all.
+#
+# WHY THE APP CONNECTS AS `sms_app` AND NOT AS `postgres`
+#   PostgreSQL exempts superusers and table owners from RLS. A CI run as `postgres`
+#   would silently bypass every policy, so a regression that leaked one tenant's data
+#   into another would still show a green build. The restricted role is the entire
+#   point of the test setup.
+
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master]
+    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+
+concurrency:
+  # A newer commit supersedes an in-flight run on the same ref. Without this, a
+  # branch pushed three times in a minute runs three full suites and the first two
+  # results are meaningless by the time they finish.
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: school_manage_db
+        ports: ["5432:5432"]
+        # The job must not start migrating before the server accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test
+      DB_ENABLED: "true"
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: sms_app            # restricted, NOBYPASSRLS -- see the header
+      POSTGRES_PASSWORD: sms_app_password
+      POSTGRES_DB: school_manage_db
+      MIGRATION_USER: postgres          # Alembic needs DDL rights and owns the schema
+      MIGRATION_PASSWORD: postgres
+      SECRET_KEY: ci-secret-key-not-used-in-any-real-environment
+      REDIS_ENABLED: "false"            # tests assert on Postgres, the source of truth
+      PAYMENT_GATEWAY: mock
+      PAYMENT_GATEWAY_SECRET: test-webhook-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Bootstrap database (extensions + restricted role)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d school_manage_db \
+            -v ON_ERROR_STOP=1 -f scripts/init-db.sql
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Verify RLS is armed on every tenant table
+        # A cheap, explicit gate ahead of the suite. If the migration shipped a table
+        # with `organization_id NOT NULL` and no forced policy, fail here with a clear
+        # message rather than inside whichever test happens to touch it first.
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d school_manage_db -tAc "
+            SELECT string_agg(c.relname, ', ')
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN information_schema.columns col
+              ON col.table_name = c.relname
+             AND col.table_schema = 'public'
+             AND col.column_name = 'organization_id'
+             AND col.is_nullable = 'NO'
+            WHERE n.nspname = 'public' AND c.relkind = 'r'
+              AND NOT (c.relrowsecurity AND c.relforcerowsecurity);
+          " > /tmp/unprotected.txt
+          if [ -s /tmp/unprotected.txt ] && [ -n "$(tr -d '[:space:]' < /tmp/unprotected.txt)" ]; then
+            echo "::error::Tenant tables without forced RLS: $(cat /tmp/unprotected.txt)"
+            exit 1
+          fi
+          echo "All tenant tables have forced RLS."
+
+      - name: Seed permissions and plans
+        # The suite needs the free plan to exist -- every organization gets a
+        # subscription on email verification.
+        run: uv run python -m app.cli seed
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Typecheck
+        run: uv run mypy app
+
+      - name: Tests
+        run: uv run pytest --cov --cov-report=term-missing
+
+      - name: Verify migrations are reversible
+        # Spec's own migration checklist: "Does downgrade() actually reverse
+        # upgrade()?" Asserted in CI rather than trusted, because a broken downgrade
+        # is only ever discovered during an incident, which is the worst moment.
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: Verify openapi.json is up to date
+        # The frontend generates its TypeScript types from this file. A stale spec
+        # means the frontend compiles against an API that no longer exists.
+        run: |
+          uv run python scripts/dump_openapi.py
+          git diff --exit-code openapi.json \
+            || (echo "::error::openapi.json is stale -- run 'make openapi' and commit."; exit 1)

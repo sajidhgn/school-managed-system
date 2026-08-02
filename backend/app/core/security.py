@@ -1,19 +1,46 @@
-"""Password hashing and JWT issuance/verification.
+"""Password hashing, JWT issuance/verification, and opaque token handling.
 
 WHY THIS FILE EXISTS
     Cryptographic primitives are easy to get subtly wrong and must never be
     scattered. One module owns hashing and token handling; the rest of the app
-    calls these four functions and nothing else.
+    calls these functions and nothing else.
 
 RESPONSIBILITY
-    * Hash and verify passwords.
-    * Mint and decode signed JWTs.
+    * Hash and verify passwords (Argon2id).
+    * Mint and decode signed access JWTs carrying the tenant context.
+    * Generate and digest the opaque tokens used for refresh, invitations,
+      email verification and password reset.
     It does NOT know about users, sessions, or the database -- that is the auth
     service's job. This module is pure computation and therefore trivially testable.
 
 INTERACTIONS
     * `modules/auth/service.py` calls it to log users in and issue token pairs.
-    * `api/deps.py` calls `decode_token` to authenticate incoming requests.
+    * `api/deps.py` calls `decode_access_token` to authenticate incoming requests.
+    * `modules/invitations`, `modules/billing` use the opaque-token helpers.
+
+=============================================================================
+TWO KINDS OF TOKEN, AND WHY THEY ARE DIFFERENT SHAPES
+=============================================================================
+    ACCESS  -- a signed JWT, 15 minutes, stateless. Verifying it is a signature
+               check with no database round-trip, which is what makes it cheap
+               enough to put on every request. The cost of statelessness is that
+               it cannot be revoked before it expires; 15 minutes is the accepted
+               exposure window.
+
+    REFRESH -- 256 bits of opaque randomness, 30 days, stored only as a SHA-256
+               digest. Deliberately NOT a JWT: a refresh token's whole purpose is
+               to be revocable, so it must be looked up in the database anyway,
+               and making it self-describing would only leak claims to whoever
+               steals it. Because it is checked against a row on every use, we can
+               implement rotation with reuse detection (see the auth service).
+
+    WHY SHA-256 AND NOT ARGON2 FOR THE OPAQUE TOKENS
+        Argon2 is deliberately slow, which is correct for passwords -- they are
+        low-entropy and must resist offline brute force. These tokens carry 256
+        bits of entropy from `secrets`, so brute force is not a threat model and
+        slowness would just be latency on the refresh hot path. What we need is a
+        one-way digest so a database leak does not hand over live sessions, and
+        SHA-256 provides exactly that.
 
 DEVIATIONS FROM THE SKILL PLAYBOOK (both are security-relevant, not stylistic):
     1. `python-jose` -> `PyJWT`. python-jose is effectively unmaintained and has
@@ -27,9 +54,13 @@ DEVIATIONS FROM THE SKILL PLAYBOOK (both are security-relevant, not stylistic):
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 from uuid import UUID, uuid4
 
 import jwt
@@ -41,16 +72,35 @@ from app.core.exceptions import AuthenticationError
 # Argon2id with library defaults (tuned to OWASP guidance).
 _password_hasher = PasswordHash.recommended()
 
+# Number of random bytes in an opaque token. 32 bytes = 256 bits, which is far
+# beyond any feasible guessing attack and matches spec §7.1's `token_urlsafe(32)`.
+_OPAQUE_TOKEN_BYTES = 32
+
 
 class TokenType(StrEnum):
-    """Access vs refresh.
+    """Access vs refresh, encoded in the `typ` claim... of the access token only.
 
-    Encoded in the `typ` claim and checked on decode, so a refresh token can never
-    be replayed as an access token (a classic privilege-escalation bug).
+    Refresh tokens are opaque and carry no claims at all, so there is nothing to
+    confuse them with. This enum survives so `decode_access_token` can assert it is
+    not being handed some other JWT the system might mint later.
     """
 
     ACCESS = "access"
-    REFRESH = "refresh"
+
+
+class PrincipalType(StrEnum):
+    """Which authentication surface a token belongs to -- the `typ` claim (spec §4.2).
+
+    THIS SEPARATION IS LOAD-BEARING. A platform super admin and an organization user
+    authenticate through different endpoints, are stored in different tables, and
+    must never be interchangeable. Without an explicit claim, the only thing
+    distinguishing them would be the presence of an `org` claim -- and "absent claim"
+    is a terrible thing to hang a privilege boundary on, because a bug that drops the
+    claim silently promotes a tenant user to platform scope.
+    """
+
+    TENANT = "tenant"
+    PLATFORM = "platform"
 
 
 # ---------------------------------------------------------------------------
@@ -72,86 +122,179 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
+# A pre-computed hash of a value nobody can supply, used to burn the same CPU time
+# on a missing account as on a real one. See `dummy_password_verify`.
+_DUMMY_HASH = _password_hasher.hash(secrets.token_urlsafe(32))
+
+
+def dummy_password_verify() -> None:
+    """Burn one Argon2 verification's worth of time, deliberately.
+
+    WHY THIS EXISTS (spec §4.4 + §12 "Auth")
+        Argon2 is slow by design -- tens of milliseconds. If login skips it when the
+        email is unknown, "unknown address" returns in 2ms and "known address, wrong
+        password" in 60ms. That difference is trivially measurable over a network and
+        turns the login endpoint into a user-enumeration oracle: an attacker learns
+        which of a leaked address list are real customers of this platform, which for
+        a school system means learning which schools are clients.
+
+        Identical response bodies are not enough on their own. The timing must match
+        too, which is what this call buys.
+    """
+    _password_hasher.verify("not-the-password", _DUMMY_HASH)
+
+
 # ---------------------------------------------------------------------------
-# Tokens
+# Opaque tokens (refresh, invitation, verification, reset)
 # ---------------------------------------------------------------------------
 
 
-def _create_token(
-    *,
-    subject: UUID,
-    token_type: TokenType,
-    expires_delta: timedelta,
-    claims: dict[str, Any] | None = None,
-    settings: Settings | None = None,
-) -> str:
-    settings = settings or get_settings()
-    now = datetime.now(UTC)
-    payload: dict[str, Any] = {
-        "sub": str(subject),  # RFC 7519 requires `sub` to be a string
-        "typ": token_type.value,
-        "iat": now,
-        "exp": now + expires_delta,
-        "jti": str(uuid4()),  # unique id -> enables future token revocation
-        **(claims or {}),
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+def generate_opaque_token() -> str:
+    """Return a fresh 256-bit URL-safe token. The RAW value; never persist it."""
+    return secrets.token_urlsafe(_OPAQUE_TOKEN_BYTES)
+
+
+def hash_token(raw_token: str) -> str:
+    """SHA-256 hex digest of an opaque token -- what actually goes in the database.
+
+    Spec §4.4: "look up by hash, never by raw value". Storing the raw token would
+    mean a read-only database leak hands the attacker every live session, every
+    pending invitation and every password-reset link. Storing the digest means it
+    hands them nothing usable.
+    """
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def tokens_match(raw_token: str, stored_hash: str) -> bool:
+    """Timing-safe comparison of a presented token against a stored digest.
+
+    `compare_digest` rather than `==` because Python's string equality short-circuits
+    on the first differing byte. An attacker who can measure that can recover a
+    digest byte by byte. The lookup itself is by hash (an indexed equality search
+    inside the database), and this guards the final confirmation.
+    """
+    return hmac.compare_digest(hash_token(raw_token), stored_hash)
+
+
+# ---------------------------------------------------------------------------
+# Access tokens
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class AccessClaims:
+    """The decoded, validated payload of an access token (spec §4.2).
+
+    A typed object rather than a raw dict so that a typo in a claim name is a
+    static error instead of a silent `None` that reads as "no organization" --
+    which, in a system where the org claim IS the tenant boundary, would be a
+    fail-open bug.
+    """
+
+    user_id: UUID
+    principal_type: PrincipalType
+    session_id: UUID
+    membership_id: UUID | None = None
+    organization_id: UUID | None = None
+    school_id: UUID | None = None
+    role_code: str | None = None
+    permissions_version: int | None = None
+
+    @property
+    def is_platform(self) -> bool:
+        return self.principal_type is PrincipalType.PLATFORM
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
+        """Build from raw JWT claims, rejecting anything malformed.
+
+        Every parse failure becomes `AuthenticationError`, never a `ValueError`
+        escaping as a 500. A token we cannot understand is a token we do not trust.
+        """
+
+        def _uuid(key: str) -> UUID | None:
+            raw = payload.get(key)
+            return UUID(raw) if raw else None
+
+        try:
+            user_id = UUID(payload["sub"])
+            session_id = UUID(payload["sid"])
+            principal_type = PrincipalType(payload["typ"])
+            return cls(
+                user_id=user_id,
+                principal_type=principal_type,
+                session_id=session_id,
+                membership_id=_uuid("mid"),
+                organization_id=_uuid("org"),
+                school_id=_uuid("sch"),
+                role_code=payload.get("rol"),
+                permissions_version=payload.get("pv"),
+            )
+        except (KeyError, ValueError) as exc:
+            raise AuthenticationError("Token claims are malformed.", code="TOKEN_INVALID") from exc
 
 
 def create_access_token(
-    subject: UUID,
     *,
+    user_id: UUID,
+    session_id: UUID,
+    principal_type: PrincipalType = PrincipalType.TENANT,
+    membership_id: UUID | None = None,
+    organization_id: UUID | None = None,
     school_id: UUID | None = None,
-    role: str | None = None,
-    is_super_admin: bool = False,
+    role_code: str | None = None,
+    permissions_version: int | None = None,
     settings: Settings | None = None,
 ) -> str:
-    """Mint a short-lived access token.
+    """Mint a short-lived access token for exactly one membership.
 
-    THE `school_id` CLAIM IS THE TENANT BOUNDARY. It is copied into the PostgreSQL
-    session variable that Row-Level Security policies read. Because the token is
-    signed, a client cannot alter it to read another school's data. This is why
-    SECRET_KEY strength is enforced in `config.py`.
+    THE `org` CLAIM IS THE TENANT BOUNDARY. It is copied into the PostgreSQL session
+    variable that every RLS policy reads. Because the token is signed, a client
+    cannot alter it to read another organization's data -- which is why the key
+    strength checks in `config.py` are not ceremony.
+
+    ONE MEMBERSHIP AT A TIME (spec decision D4). A human may be a teacher at School A
+    and an accountant at School B; the token names one of those, and switching costs
+    a re-issue via `POST /auth/context`. The alternative -- a token listing every
+    membership -- would mean every request carries ambient authority the user did not
+    ask to exercise, and one confused-deputy bug would cross a school boundary.
+
+    PERMISSIONS ARE NOT IN THE TOKEN. Only `pv` (the role's permissions_version) is.
+    The permission set is resolved from Redis on each request, keyed by
+    `(role_id, pv)`. Embedding the set would mean a principal who revokes a teacher's
+    access waits a full token lifetime for it to take effect -- the classic
+    "I removed their access 15 minutes ago and they can still delete records" bug.
+    Bumping `pv` invalidates every existing token for that role instantly.
     """
     settings = settings or get_settings()
-    claims: dict[str, Any] = {"sa": is_super_admin}
+    now = datetime.now(UTC)
+
+    payload: dict[str, Any] = {
+        "sub": str(user_id),  # RFC 7519 requires `sub` to be a string
+        "typ": principal_type.value,
+        "sid": str(session_id),
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        "jti": str(uuid4()),
+    }
+    # Absent rather than null: a claim that is not there cannot be mistaken for a
+    # claim whose value happens to be falsy.
+    if membership_id is not None:
+        payload["mid"] = str(membership_id)
+    if organization_id is not None:
+        payload["org"] = str(organization_id)
     if school_id is not None:
-        claims["sid"] = str(school_id)
-    if role is not None:
-        claims["role"] = role
+        payload["sch"] = str(school_id)
+    if role_code is not None:
+        payload["rol"] = role_code
+    if permissions_version is not None:
+        payload["pv"] = permissions_version
 
-    return _create_token(
-        subject=subject,
-        token_type=TokenType.ACCESS,
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-        claims=claims,
-        settings=settings,
-    )
+    return jwt.encode(payload, settings.jwt_signing_key, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_refresh_token(subject: UUID, *, settings: Settings | None = None) -> str:
-    """Mint a long-lived refresh token.
-
-    Deliberately carries NO tenant or role claims: those must be re-read from the
-    database on refresh, so that a revoked user or changed role takes effect within
-    one access-token lifetime rather than one refresh-token lifetime.
-    """
-    settings = settings or get_settings()
-    return _create_token(
-        subject=subject,
-        token_type=TokenType.REFRESH,
-        expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-        settings=settings,
-    )
-
-
-def decode_token(
-    token: str,
-    *,
-    expected_type: TokenType = TokenType.ACCESS,
-    settings: Settings | None = None,
-) -> dict[str, Any]:
-    """Verify signature + expiry and return the claims.
+def decode_access_token(token: str, *, settings: Settings | None = None) -> AccessClaims:
+    """Verify signature + expiry and return typed claims.
 
     Raises `AuthenticationError` (never a raw JWT exception) so callers depend only
     on our domain vocabulary.
@@ -160,17 +303,17 @@ def decode_token(
     try:
         payload: dict[str, Any] = jwt.decode(
             token,
-            settings.SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],  # allowlist -> blocks `alg: none`
-            options={"require": ["exp", "sub", "typ"]},
+            settings.jwt_verification_key,
+            # An ALLOWLIST, not a preference. Without it PyJWT would honour the
+            # token's own `alg` header, and an attacker could present `alg: none`
+            # (no signature) or downgrade RS256 to HS256 using the public key as the
+            # HMAC secret. Both are real, repeatedly-exploited JWT attacks.
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"require": ["exp", "sub", "typ", "sid"]},
         )
     except jwt.ExpiredSignatureError as exc:
         raise AuthenticationError("Token has expired.", code="TOKEN_EXPIRED") from exc
     except jwt.InvalidTokenError as exc:
         raise AuthenticationError("Token is invalid.", code="TOKEN_INVALID") from exc
 
-    if payload.get("typ") != expected_type.value:
-        raise AuthenticationError(
-            f"Expected a {expected_type.value} token.", code="TOKEN_WRONG_TYPE"
-        )
-    return payload
+    return AccessClaims.from_payload(payload)

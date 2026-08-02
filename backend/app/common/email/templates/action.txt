@@ -1,0 +1,27 @@
+{# Plaintext alternative.
+
+   NOT optional. A multipart/alternative message without a text part is scored as
+   likely spam by most filters, and text-only clients (and screen readers in some
+   configurations) render the raw HTML source otherwise.
+
+   The URL goes on its own line with no surrounding punctuation, so that client-side
+   linkifiers do not swallow a trailing full stop into the href.
+#}
+{{ subject }}
+
+Hi {{ greeting_name }},
+
+{{ action_text }}
+{% if details %}
+{% for label, value in details %}
+{{ label }}: {{ value }}
+{% endfor %}
+{% endif %}
+{{ button_label }}:
+
+{{ action_url }}
+
+This link expires in {{ expiry_text }}. {{ security_note }}
+
+--
+{{ app_name }} — sent automatically, please do not reply.

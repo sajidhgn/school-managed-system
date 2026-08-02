@@ -19,35 +19,52 @@ INTERACTIONS
 RULE
     Every new `app/modules/<name>/models.py` MUST be added below in the same commit
     that creates it.
+
+ON ORDERING
+    Foreign keys are declared as strings (`ForeignKey("users.id")`) and resolved
+    lazily when mappers are first configured, so import order does not affect
+    correctness. The grouping below follows the dependency direction anyway --
+    platform, then identity, then tenancy, then everything scoped by it -- because a
+    reader tracing where `organization_id` comes from should not have to jump around.
 """
 
 from __future__ import annotations
 
 from app.db.base import Base
 
-# Module 2 -- Student Information System
-# `academics` first: `students.Student.section_id` has a ForeignKey to
-# `sections.id`, so that table must already be in Base.metadata when the Student
-# mapper is configured.
+# --- Academic modules (scoped by organization_id + school_id) ---------------
+# `academics` before `students`: `students.Student.section_id` references
+# `sections.id`, and keeping the declaration order aligned with the dependency
+# keeps mapper-configuration errors readable when one is misdeclared.
 from app.modules.academics import models as academics_models
 
-# Module 1 -- Tenancy & Access Control
+# --- Identity (global, no tenant column): users, sessions, email tokens -----
 from app.modules.auth import models as auth_models
-from app.modules.students import models as student_models
-from app.modules.tenancy import models as tenancy_models
 
-# ---------------------------------------------------------------------------
-# Module 3 -- Academics & Daily Ops
-# from app.modules.attendance import models as attendance_models
-# from app.modules.timetable import models as timetable_models
-#
-# ... one line per module as it is implemented.
-# ---------------------------------------------------------------------------
+# --- Billing: subscriptions, invoices, usage counters, webhook ledger -------
+from app.modules.billing import models as billing_models
+
+# --- Invitations: the only entry path into an existing organization ---------
+from app.modules.invitations import models as invitation_models
+
+# --- Platform (no RLS): operators, plan catalog, platform audit -------------
+from app.modules.platform_admin import models as platform_models
+
+# --- Access control: permission catalog, roles, memberships, audit ----------
+from app.modules.rbac import models as rbac_models
+from app.modules.students import models as student_models
+
+# --- Tenancy: organizations (the RLS key) and schools -----------------------
+from app.modules.tenancy import models as tenancy_models
 
 __all__ = [
     "Base",
     "academics_models",
     "auth_models",
+    "billing_models",
+    "invitation_models",
+    "platform_models",
+    "rbac_models",
     "student_models",
     "tenancy_models",
 ]

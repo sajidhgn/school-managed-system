@@ -1,160 +1,162 @@
-# Frontend — School Management System
+# EduCloud — Frontend
 
-Next.js 15 (App Router) admin interface for the FastAPI backend in [`../backend`](../backend).
+Next.js 15 (App Router) interface for the FastAPI backend in [`../backend`](../backend).
+Implements `educloud-core-spec.md` phases 6–8: marketing site, tenant admin panel,
+and platform operator console.
 
 | Concern | Choice |
 | --- | --- |
 | Framework | Next.js 15 App Router, React 19 |
-| Language | TypeScript, `strict` |
-| Server state | TanStack Query v5 |
+| Language | TypeScript, `strict`, `typedRoutes` |
+| Server state | Server Components for reads, route handlers for writes |
 | Styling | Tailwind CSS v4 + shadcn/ui components |
 | Forms | React Hook Form + Zod |
 | Types | Generated from the backend's OpenAPI schema |
+| i18n | `en` / `ur` with RTL, from day one |
 
 ---
 
-## The frontend does not touch PostgreSQL
+## Three surfaces, one app
 
-It has no database driver and no connection string. Every read and write goes
-through the FastAPI API, because the backend is where the rules live:
-
-- **JWT authentication** — who is asking
-- **`require_roles(...)`** — whether they may
-- **Row-Level Security** — which tenant's rows they can even see
-- **Pydantic validation** — whether the payload is legal
-
-A direct database connection from the browser or from Next.js would bypass all
-four. The data flow is:
+Spec §9 defines three route groups with different auth postures. They are kept
+structurally apart, not merely conventionally:
 
 ```
-Browser ──> Next.js route handler (/api/bff/*) ──> FastAPI ──> PostgreSQL
-            attaches the Bearer token             enforces auth,
-            from an httpOnly cookie               RLS, validation
+src/app/
+  (marketing)/     public — landing, pricing, signup, login, invite/accept
+  (app)/           tenant admin panel — requires a validated session
+  platform/        operator console — separate login, separate cookies, dark chrome
 ```
 
-### Why the proxy exists
+`platform/` is a real path segment rather than a route group, because it needs its
+own URL prefix. Its session lives in **different cookies** from the tenant app
+(`educloud_platform_*` vs `educloud_*`), which is what makes spec §9's "unreachable
+with a tenant token and vice versa" structural instead of a check someone can forget.
+The backend's `typ` claim is the actual enforcement.
 
-The browser never holds a token. `POST /api/auth/login` forwards credentials to
-FastAPI and stores the returned token pair in **httpOnly** cookies, which client
-JavaScript cannot read. Every subsequent request goes to `/api/bff/*`, which
-attaches the `Authorization` header server-side and transparently refreshes an
-expired access token before retrying once.
-
-The practical consequence: an XSS bug in this app cannot exfiltrate a school
-admin's session token.
+An operator can be signed into both at once — common while debugging a customer
+issue — and signing out of one does not sign them out of the other.
 
 ---
 
-## Setup
+## The token never reaches the browser
 
-### 1. Install
+```
+Browser ──> Next.js route handler ──> FastAPI ──> PostgreSQL
+         (opaque httpOnly cookie)   (Bearer token)
+```
+
+The Next.js server is a **confidential client**. It calls FastAPI with
+`X-Token-Transport: body`, reads the token pair from the response *headers*, and
+stores it in its own httpOnly cookies. The browser holds a cookie it cannot read and
+talks only to `/api/bff/*`.
+
+So a token is never in `localStorage`, never in a JSON body a script can see, and
+never in the browser bundle. An XSS payload here cannot exfiltrate a session — it can
+only ride along on requests while the tab is open, which is a far smaller blast
+radius.
+
+**Reads bypass the BFF.** A Server Component is already on the server and already has
+the session; routing its request out to `/api/bff/*` and back would be a pointless
+round trip through this app's own process. So server components call
+`serverGet()` (which uses `fetchWithSession`), and client components call the BFF.
+One session, two entry points, one copy of the refresh logic.
+
+**Token-minting endpoints are not proxyable.** `auth/login`, `auth/refresh`,
+`auth/context` and `invitations/accept` are on the BFF's blocklist — proxying them
+would hand raw tokens to client JS. Each has a dedicated handler under `/api/auth/*`
+that keeps them server-side.
+
+---
+
+## Permissions
+
+```tsx
+<Can permission="member:invite">
+  <Button>Invite staff</Button>
+</Can>
+```
+
+**UI hiding is cosmetic only** (spec §9). Every check maps to a `require("...")`
+dependency on the server, which is what actually enforces access. Hiding a button the
+API would reject keeps the interface honest about what the user can do; it keeps
+nobody out.
+
+Checks are **permission strings, not role names**. Customers create custom roles —
+"Head of Year", "Registrar" — and `role === "school_admin"` cannot express them. It
+would force every school wanting a different job title to be handed the full admin
+role, which is how least-privilege quietly stops being practised.
+
+The permission set arrives once from `GET /auth/me` in the app-group layout and is
+published through `<SessionProvider>`. Fetching it per component would render the nav
+with no permissions and then rebuild it — which reads as broken even though it
+settles correctly.
+
+---
+
+## Context switching
+
+A person can be a teacher at one school and an accountant at another. The header
+switcher calls `POST /auth/context`, which **re-issues the token** scoped to the
+chosen membership — the permission set, the school scope and the RLS organization all
+change with it. The server genuinely starts answering as that person in that place.
+
+That is why switching goes through a route handler and then `router.refresh()`,
+rather than setting client state: the source of truth is an httpOnly cookie, and a
+client that "remembered" a different context than the cookie carries would show one
+school's chrome around another school's data.
+
+Login has a matching case. A user with several memberships gets
+`select_required: true` and **no session yet** — not an error, just an unanswered
+question. Guessing would drop a teacher into the wrong school's data.
+
+---
+
+## i18n and RTL
+
+`en` and `ur`, wired on day one because spec §9 is explicit that retrofitting RTL
+costs 3× more. The expensive part is never the translation files — it is that a
+codebase written without RTL accumulates thousands of directional assumptions
+(`ml-4`, `text-left`, `border-r`) that all have to be found and converted.
+
+So: `dir` is set on `<html>` from the resolved locale, and every directional utility
+in this codebase is **logical** (`ms-*`, `pe-*`, `text-start`, `border-e`). Components
+need no locale-aware styling at all.
+
+The Urdu catalog is intentionally partial — its type is derived from the English one,
+so a missing key is a compile error, and untranslated entries hold their English text
+rather than blocking the build.
+
+---
+
+## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local
+cp .env.example .env.local     # then set API_BASE_URL
+
+npm run dev                    # http://localhost:3000
+npm run typecheck
+npm run build
 ```
 
-`.env.local` values are server-side only — there is deliberately no
-`NEXT_PUBLIC_` API URL, since the browser never calls FastAPI directly.
+The backend must be running and seeded (`make seed` in `../backend`) — the pricing
+page reads `GET /public/plans`, and signup needs the free plan to exist.
 
-### 2. Connect the backend to PostgreSQL
-
-The backend ships with `DB_ENABLED=false`, which lets it boot and serve
-`/health` without a database. Auth and every data route need a real database, so
-enable it before using the UI.
+### Regenerating API types
 
 ```bash
-cd ../backend
-
-createdb -U postgres school_manage_db
-
-# Extensions + the restricted app role. Needs a superuser; sms_app must NOT own
-# tables, or it would silently bypass RLS.
-psql -U postgres -d school_manage_db -f scripts/init-db.sql
-
-# init-db.sql hardcodes the role password, so align it with .env:
-psql -U postgres -d school_manage_db \
-  -c "ALTER ROLE sms_app WITH PASSWORD '<your POSTGRES_PASSWORD>';"
-
-make migrate
+cd ../backend && make openapi
+cd ../frontend && npm run gen:api
 ```
 
-`backend/.env` needs all four of these:
+`src/lib/api/schema.d.ts` is **generated — never edit it**. A renamed backend field
+becomes a TypeScript error at the call site that reads it, which is the entire point.
+Backend CI fails if `openapi.json` is stale, so the two cannot drift silently.
 
-```ini
-DB_ENABLED=true
-POSTGRES_PASSWORD=<the password you gave sms_app>
-
-# Required. init-db.sql REVOKEs CREATE on public from sms_app, so Alembic
-# cannot run as the app role — it must connect as the schema owner. Leaving
-# MIGRATION_USER empty makes it fall back to sms_app and `make migrate` fails
-# with "permission denied for schema public".
-MIGRATION_USER=postgres
-MIGRATION_PASSWORD=<postgres password>
-```
-
-Docker alternative, if you prefer it to a local PostgreSQL:
-
-```bash
-cd ../backend && make docker-up
-```
-
-### 3. Run both services
-
-```bash
-cd ../backend && make dev     # http://localhost:8000
-cd ../frontend && npm run dev # http://localhost:3000
-```
-
-The backend's `CORS_ORIGINS` already lists `http://localhost:3000`.
-
-### 4. Create the first super admin
-
-```bash
-cd ../backend && uv run python scripts/create_super_admin.py
-```
-
-School admins self-register at `/register`; a super admin approves them from
-`/schools`.
-
----
-
-## Keeping types in sync with the API
-
-`src/lib/api/schema.d.ts` is **generated** — never edit it. After any backend
-route or schema change:
-
-```bash
-cd ../backend  && uv run python scripts/dump_openapi.py
-cd ../frontend && npm run gen:api && npm run typecheck
-```
-
-A renamed or removed backend field becomes a TypeScript error rather than a
-runtime `undefined` in production. `src/lib/api/types.ts` holds readable aliases
-over the generated types; the display-label maps there are exhaustive `Record`s,
-so a new backend enum variant fails to compile until the UI handles it.
-
----
-
-## Routes
-
-| Route | Access | Purpose |
-| --- | --- | --- |
-| `/login` | Public | Sign in, including the 2FA challenge step |
-| `/register` | Public | Register a school + its first admin |
-| `/verify-email` | Public | Email verification code |
-| `/forgot-password`, `/reset-password` | Public | Password reset |
-| `/admissions/[schoolId]` | Public | Admission application form for parents |
-| `/dashboard` | All roles | Headline numbers and recent activity |
-| `/students`, `/students/[id]` | Admin (write), Teacher (read) | Student directory |
-| `/classes` | Admin (write), Teacher (read) | Classes and sections |
-| `/admissions-queue` | School admin | Approve/reject pending applications |
-| `/schools` | Super admin | Onboard, approve, suspend tenants |
-| `/settings` | All roles | Profile, school details, theme |
-
-Role checks in `src/lib/auth/permissions.ts` decide what the UI **shows**. They
-are not security — each one mirrors a `require_roles(...)` dependency in the
-backend, which is what actually enforces access.
+Generation runs with `--default-non-nullable false`: without it, backend fields that
+have defaults are typed as *required* in request bodies, and every form would have to
+resend values the server already knows.
 
 ---
 
@@ -163,28 +165,50 @@ backend, which is what actually enforces access.
 ```
 src/
   app/
-    (auth)/            login, register, verify-email, forgot/reset password
-    (dashboard)/       authenticated app — layout re-validates the session
-    admissions/        public application form
+    (marketing)/   landing, pricing, auth forms, invite/accept
+    (app)/         dashboard, schools, members, roles, invitations,
+                   billing, settings, audit, students, classes
+    platform/      operator console
     api/
-      auth/            login/logout/register — mint and clear httpOnly cookies
-      bff/[...path]/   authenticated proxy to FastAPI, refreshes on 401
+      auth/        login, context, logout, register, accept-invite   (mint sessions)
+      platform/    operator login/logout
+      bff/         the proxy for everything else
   components/
-    ui/                shadcn/ui primitives
-    layout/            app shell, sidebar, user menu
-  hooks/               TanStack Query hooks, one file per backend module
+    auth/          <Can>, context picker, auth card
+    layout/        app shell, sidebar, context switcher, banners
+    rbac/          permission matrix, role form
+    billing/       usage bars
+    platform/      console chrome
+    ui/            shadcn primitives
   lib/
-    api/               client, generated schema, typed resources, query keys
-    auth/              session cookies, refresh, role helpers
-    validation/        Zod schemas mirroring the Pydantic models
-  middleware.ts        cheap cookie gate — real enforcement is server-side
+    api/           client, server fetchers, generated schema, typed resources
+    auth/          session (cookies, refresh, guards), permissions
+    i18n/          locale config, catalogs, server resolver
+  middleware.ts    edge routing for the three groups
 ```
 
-## Scripts
+---
 
-```bash
-npm run dev        # dev server on :3000
-npm run build      # production build
-npm run typecheck  # tsc --noEmit
-npm run gen:api    # regenerate types from ../backend/openapi.json
-```
+## Notes worth knowing
+
+**Middleware is a redirect, not a guard.** It runs on the edge with no ability to
+verify a signature — it only sees whether a cookie *exists*. Real enforcement is the
+backend's `require(...)`, and server components re-verify through `requireUser()` /
+`requirePlatformAdmin()`, which do validate the token. Forging a cookie with the right
+name gets you past middleware and precisely nowhere else.
+
+**The BFF sends bodies as text.** Next.js instruments `fetch`, and binary body types
+(`ArrayBuffer`, `Uint8Array`) do not survive that wrapper — the request arrives with
+correct headers and no body. Bodies are also buffered rather than streamed, because
+the 401-refresh-retry replays the request and a stream can only be read once. Adding
+file uploads means a streaming path and rethinking the retry alongside it.
+
+**`typedRoutes` is on.** Link targets are checked against the real `app/` tree, so a
+renamed page cannot leave a dead link. Runtime paths (a `?next=` redirect) need an
+explicit `as Route` cast — and are validated as same-origin first, since an
+unvalidated redirect target is an open redirect no type could catch.
+
+**Plan-limit failures are 402, not 403.** The user is entitled to the action; they
+have run out of what they paid for. The API returns the limit, current usage and an
+upgrade URL, and the UI renders an upgrade prompt rather than something that reads
+like a bug.

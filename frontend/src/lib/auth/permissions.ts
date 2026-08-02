@@ -1,27 +1,65 @@
-import type { UserRole } from "@/lib/api/types";
+import type { MeResponse } from "@/lib/api/types";
 
 /**
- * Client-side role checks.
+ * Permission checks for the UI.
  *
- * These drive what the UI *shows* — they are not security. Every one of these
- * maps to a `require_roles(...)` dependency in the backend, which is what
- * actually enforces access. Hiding a button the API would reject is a courtesy
- * to the user, nothing more.
+ * =============================================================================
+ * UI HIDING IS COSMETIC ONLY — spec §9
+ * =============================================================================
+ *   Every one of these maps to a `require("...")` dependency on the server, which is
+ *   what actually enforces access. Hiding a button the API would reject is a
+ *   courtesy to the user, nothing more: it keeps the interface honest about what
+ *   they can do instead of presenting controls that fail.
+ *
+ *   Treating these as security would be a mistake. The permission list arrives from
+ *   `GET /auth/me` over a channel the user controls, and every guarded action is one
+ *   `curl` away from bypassing the UI entirely. The server does not trust this file,
+ *   and neither should a reader.
+ *
+ * WHY STRING CODES RATHER THAN ROLE NAMES
+ *   This replaced a `role === "school_admin"` check. Customers create custom roles —
+ *   "Head of Year", "Registrar" — and a role-name comparison cannot express them. It
+ *   would force every school wanting a slightly different job title to hand out the
+ *   full admin role, which is how least-privilege quietly stops being practised.
  */
 
-export const can = {
-  /** Manage students, classes, sections. Backend: require_roles("school_admin"). */
-  manageSchoolData: (role: UserRole) => role === "school_admin",
+export interface PermissionSource {
+  permissions: string[];
+}
 
-  /** Onboard/approve/suspend schools. Backend: require_super_admin. */
-  manageTenants: (role: UserRole) => role === "super_admin",
+/** True when the holder has EVERY code. Mirrors the server's `AuthContext.has`. */
+export function can(source: PermissionSource | null | undefined, ...codes: string[]): boolean {
+  if (!source) return false;
+  return codes.every((code) => source.permissions.includes(code));
+}
 
-  /** Read-only visibility into rosters. Teachers get this, and admins too. */
-  viewRosters: (role: UserRole) =>
-    role === "school_admin" || role === "teacher" || role === "super_admin",
-};
+/**
+ * True when the holder has AT LEAST ONE of the codes.
+ *
+ * For nav sections several different permissions can unlock — the "People" group is
+ * worth showing to someone who can read members OR manage roles OR see invitations,
+ * and requiring all three would hide it from almost everyone.
+ */
+export function canAny(source: PermissionSource | null | undefined, ...codes: string[]): boolean {
+  if (!source) return false;
+  return codes.some((code) => source.permissions.includes(code));
+}
 
-/** Where each role lands after login. */
-export function homeRouteFor(role: UserRole): string {
-  return role === "super_admin" ? "/schools" : "/dashboard";
+/** Where to send a user after sign-in, given what they can reach. */
+export function homeRouteFor(user: MeResponse): string {
+  // A brand-new owner has no school yet: onboarding is the only meaningful next
+  // step, and the dashboard would render empty with no explanation.
+  const hasSchoolMembership = user.memberships.some((m) => !m.is_org_level);
+  if (!hasSchoolMembership) return "/onboarding";
+  return "/dashboard";
+}
+
+/**
+ * Whether the header should offer a context switcher.
+ *
+ * One membership means there is nothing to switch to, and a picker showing a single
+ * disabled option is noise.
+ */
+export function needsContextSwitcher(user: MeResponse): boolean {
+  return user.memberships.length > 1;
 }

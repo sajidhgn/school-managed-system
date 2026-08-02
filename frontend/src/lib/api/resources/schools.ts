@@ -4,7 +4,6 @@ import type {
   PageParams,
   SchoolCreate,
   SchoolRead,
-  SchoolStatus,
   SchoolUpdate,
 } from "@/lib/api/types";
 
@@ -16,7 +15,7 @@ import type {
  */
 
 export interface SchoolListParams extends PageParams {
-  status_filter?: SchoolStatus | null;
+  status_filter?: string | null;
 }
 
 export const schoolsApi = {

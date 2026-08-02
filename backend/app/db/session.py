@@ -62,7 +62,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import Settings, get_settings
-from app.core.context import get_school_id, is_super_admin
+from app.core.context import get_organization_id, get_school_id, is_platform_admin
 from app.core.exceptions import ServiceUnavailableError
 from app.core.logging import get_logger
 
@@ -74,9 +74,15 @@ logger = get_logger(__name__)
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
-# PostgreSQL custom GUC names read by the RLS policies.
-TENANT_GUC = "app.current_school_id"
-SUPER_ADMIN_GUC = "app.is_super_admin"
+# PostgreSQL custom GUC names. MUST match alembic/rls.py.
+#
+# ORG_GUC is the one the policies actually compare against -- it is the hard tenant
+# boundary. SCHOOL_GUC is published for observability and for the handful of SQL-level
+# helpers that want it; school scoping itself is enforced in the permission dependency
+# and the repository base query, NOT by a policy (spec §2.3).
+ORG_GUC = "app.current_org_id"
+SCHOOL_GUC = "app.current_school_id"
+PLATFORM_ADMIN_GUC = "app.is_platform_admin"
 
 
 def init_engine(settings: Settings | None = None) -> AsyncEngine:
@@ -133,10 +139,11 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
-async def _apply_tenant_guc(
+async def _apply_tenant_gucs(
     session: AsyncSession,
+    organization_id: UUID | None,
     school_id: UUID | None,
-    super_admin: bool,
+    platform_admin: bool,
 ) -> None:
     """Bind this transaction to a tenant so RLS policies can evaluate.
 
@@ -147,45 +154,58 @@ async def _apply_tenant_guc(
 
     is_local=true scopes the setting to the current transaction; it is discarded on
     COMMIT/ROLLBACK, so nothing leaks onto the next request that reuses this pooled
-    connection.
+    connection. That property is not a nicety: without it, Org A's id would remain
+    set on the connection and Org B's next request would read Org A's rows.
+
+    All three are written on EVERY session, including the None cases. Skipping the
+    write when a value is absent would leave whatever the previous transaction on
+    this connection set -- the exact leak `is_local` exists to prevent.
     """
     await session.execute(
         text("SELECT set_config(:key, :value, true)"),
-        {"key": TENANT_GUC, "value": str(school_id) if school_id else ""},
+        {"key": ORG_GUC, "value": str(organization_id) if organization_id else ""},
     )
     await session.execute(
         text("SELECT set_config(:key, :value, true)"),
-        {"key": SUPER_ADMIN_GUC, "value": "on" if super_admin else "off"},
+        {"key": SCHOOL_GUC, "value": str(school_id) if school_id else ""},
+    )
+    await session.execute(
+        text("SELECT set_config(:key, :value, true)"),
+        {"key": PLATFORM_ADMIN_GUC, "value": "on" if platform_admin else "off"},
     )
 
 
 async def bind_tenant(
     session: AsyncSession,
-    school_id: UUID | None,
+    organization_id: UUID | None,
     *,
-    super_admin: bool = False,
+    school_id: UUID | None = None,
+    platform_admin: bool = False,
 ) -> None:
-    """Re-bind the tenant GUC on an already-open session, mid-transaction.
+    """Re-bind the tenant GUCs on an already-open session, mid-transaction.
 
     WHY THIS EXISTS
         A handful of PRE-authentication flows discover their tenant only *after* a
         lookup, so `get_db` cannot have bound it at session start:
 
-          * self-service registration inserts a brand-new school and must set the
-            GUC to that new id so the `schools` WITH CHECK policy accepts the row;
-          * login reads the caller's own `School` row to check it is active, but the
-            tenant is known only once the user has been found by email.
+          * self-service registration inserts a brand-new organization and must set
+            the GUC to that new id so the `organizations` WITH CHECK policy accepts
+            the row (and the owner membership that follows it);
+          * invitation accept resolves the org from the token hash, with the caller
+            either unauthenticated or authenticated into a *different* org;
+          * a payment webhook resolves the org from the gateway reference, with no
+            authenticated caller at all.
 
-        Both run on a `PublicDbSession` whose GUC is empty. This helper lets the
-        service bind the tenant it just resolved, using the same transaction-scoped
-        `set_config` that `get_db` uses -- so nothing leaks past COMMIT onto the next
-        request that reuses this pooled connection.
+        All three run on a session whose GUCs are empty. This helper lets the service
+        bind the tenant it just resolved, using the same transaction-scoped
+        `set_config` that `get_db` uses.
 
-        This is a deliberately narrow, auditable escape hatch. It is NOT a way to
-        widen a normal request's tenant: RLS still governs every row, and binding a
-        tenant the caller has not proven they own would simply fail the policy.
+        This is a deliberately narrow, auditable escape hatch, and it is NOT a way to
+        widen a normal request's tenant: the caller must first have proven -- by
+        password, by token hash, or by verified webhook signature -- which org it is
+        acting for. Every call site is one of the three above.
     """
-    await _apply_tenant_guc(session, school_id, super_admin)
+    await _apply_tenant_gucs(session, organization_id, school_id, platform_admin)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
@@ -203,7 +223,9 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
     factory = get_session_factory()
 
     async with factory() as session:
-        await _apply_tenant_guc(session, get_school_id(), is_super_admin())
+        await _apply_tenant_gucs(
+            session, get_organization_id(), get_school_id(), is_platform_admin()
+        )
         try:
             yield session
             await session.commit()
@@ -214,9 +236,10 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
 
 @asynccontextmanager
 async def session_scope(
-    school_id: UUID | None = None,
+    organization_id: UUID | None = None,
     *,
-    super_admin: bool = False,
+    school_id: UUID | None = None,
+    platform_admin: bool = False,
 ) -> AsyncIterator[AsyncSession]:
     """Session context manager for code running OUTSIDE a request.
 
@@ -224,12 +247,12 @@ async def session_scope(
     HTTP request and therefore no ambient context -- they must pass the tenant
     explicitly. Same transaction semantics as `get_db`.
 
-        async with session_scope(school_id) as session:
-            await StudentRepository(session).list_all()
+        async with session_scope(org_id, school_id=school_id) as session:
+            await MembershipRepository(session).list_for_school(school_id)
     """
     factory = get_session_factory()
     async with factory() as session:
-        await _apply_tenant_guc(session, school_id, super_admin)
+        await _apply_tenant_gucs(session, organization_id, school_id, platform_admin)
         try:
             yield session
             await session.commit()

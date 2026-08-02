@@ -13,7 +13,8 @@ RESPONSIBILITY
     the constraints that keep them unique *within a tenant*.
 
 INTERACTIONS
-    * Both carry `TenantMixin`, so both get an RLS policy via `setup_tenant_table()`.
+    * Both carry `TenantMixin` (organization_id -> RLS) and `RequiredSchoolMixin`
+      (school_id -> scope filter), so both get a policy via `setup_tenant_table()`.
     * `Section.class_teacher_id` points at `users.id` -- the assignment that the
       PDF's "Teacher (limited to assigned classes)" RBAC rule will be read from.
     * `students.Student.section_id` points at `sections.id`.
@@ -34,13 +35,35 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.mixins import SoftDeleteMixin, TenantMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.db.mixins import (
+    RequiredSchoolMixin,
+    SoftDeleteMixin,
+    TenantMixin,
+    TimestampMixin,
+    UUIDPrimaryKeyMixin,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard, types only
     from app.modules.students.models import Student
 
 
-class SchoolClass(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteMixin):
+# =============================================================================
+# TWO SCOPE COLUMNS, NOT ONE -- and they do different jobs
+# =============================================================================
+#   `organization_id` (TenantMixin)      -- the RLS key. The database refuses to
+#                                           return these rows to another tenant.
+#   `school_id`       (RequiredSchoolMixin) -- the scope filter. Enforced by the
+#                                           permission dependency, not by a policy.
+#
+# A class belongs to exactly one campus, so `school_id` is NOT NULL here. The
+# unique constraints below stay keyed on `school_id` because that is the level at
+# which "Grade 10" must be unique: an organization running three campuses has three
+# legitimate "Grade 10"s, and keying them on `organization_id` would collide them.
+
+
+class SchoolClass(
+    Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin, SoftDeleteMixin
+):
     """A grade level within one school, e.g. "Grade 10"."""
 
     __tablename__ = "classes"
@@ -82,7 +105,9 @@ class SchoolClass(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDe
     )
 
 
-class Section(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteMixin):
+class Section(
+    Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin, SoftDeleteMixin
+):
     """A sub-division of a class, e.g. "A" within "Grade 10"."""
 
     __tablename__ = "sections"

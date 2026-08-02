@@ -1,12 +1,18 @@
 """Student HTTP endpoints -- the SIS directory and public admissions.
 
 AUTHORISATION SHAPE
-    Reads: any authenticated member of the school (teachers need the directory).
-    Writes: `school_admin` only -- a teacher must not be able to enroll, edit or
-    remove students.
-    Admissions: unauthenticated, and therefore the most carefully constrained
+    Every route names the permission it needs, resolved through `require()` against
+    the shared catalog: `student:read` for the directory, `student:create`,
+    `student:update` and `student:delete` for the writes.
+
+    This replaced `require_roles("school_admin")`. A role-name check cannot express
+    the custom roles customers create -- a school defining "Registrar" and expecting
+    them to enrol students would have to be handed the full admin role instead,
+    which is how least-privilege quietly stops being practised.
+
+    Admissions is unauthenticated and therefore the most carefully constrained
     endpoint in the module. See the service for why it cannot be used to probe for
-    schools or to self-enroll.
+    schools, to self-enroll, or to exhaust a school's plan seats.
 """
 
 from __future__ import annotations
@@ -15,7 +21,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, Pagination, PublicDbSession, SearchQuery, Sorting, require_roles
+from app.api.deps import (
+    DbSession,
+    Pagination,
+    PublicDbSession,
+    SearchQuery,
+    Sorting,
+    require,
+)
 from app.common.schemas import Page
 from app.modules.students.models import StudentStatus
 from app.modules.students.schemas import (
@@ -28,8 +41,6 @@ from app.modules.students.schemas import (
 from app.modules.students.service import StudentService
 
 router = APIRouter()
-
-require_admin = require_roles("school_admin")
 
 
 @router.post(
@@ -49,7 +60,12 @@ async def submit_admission(
     return await StudentService(db).admit(payload)
 
 
-@router.get("", response_model=Page[StudentRead], summary="List and search students")
+@router.get(
+    "",
+    response_model=Page[StudentRead],
+    summary="List and search students",
+    dependencies=[Depends(require("student:read"))],
+)
 async def list_students(
     db: DbSession,
     params: Pagination,
@@ -72,13 +88,18 @@ async def list_students(
     response_model=StudentRead,
     status_code=status.HTTP_201_CREATED,
     summary="Enroll a student",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require("student:create"))],
 )
 async def create_student(payload: StudentCreate, db: DbSession) -> StudentRead:
     return await StudentService(db).create(payload)
 
 
-@router.get("/{student_id}", response_model=StudentRead, summary="Get a student")
+@router.get(
+    "/{student_id}",
+    response_model=StudentRead,
+    summary="Get a student",
+    dependencies=[Depends(require("student:read"))],
+)
 async def get_student(student_id: UUID, db: DbSession) -> StudentRead:
     return await StudentService(db).get(student_id)
 
@@ -87,7 +108,7 @@ async def get_student(student_id: UUID, db: DbSession) -> StudentRead:
     "/{student_id}",
     response_model=StudentRead,
     summary="Update a student",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require("student:update"))],
 )
 async def update_student(student_id: UUID, payload: StudentUpdate, db: DbSession) -> StudentRead:
     return await StudentService(db).update(student_id, payload)
@@ -97,7 +118,7 @@ async def update_student(student_id: UUID, payload: StudentUpdate, db: DbSession
     "/{student_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove a student from the directory",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require("student:delete"))],
 )
 async def delete_student(student_id: UUID, db: DbSession) -> None:
     """Soft delete -- fee, attendance and certificate history is preserved."""

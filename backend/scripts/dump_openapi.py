@@ -19,7 +19,7 @@ os.environ.setdefault("DB_ENABLED", "false")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.main import app  # noqa: E402
+from app.main import app
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "openapi.json"
 

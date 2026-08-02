@@ -27,6 +27,7 @@ WHY EACH EMAIL SHIPS BOTH .html AND .txt
 
 from __future__ import annotations
 
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
@@ -122,5 +123,110 @@ def render_otp_email(
         # notification banner without opening the mail
         html_body=env.get_template("otp.html").render(**context),
         text_body=env.get_template("otp.txt").render(**context),
+        tags={"purpose": purpose.value},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Link-action emails (spec §4.3, §7)
+# ---------------------------------------------------------------------------
+
+
+class ActionPurpose(StrEnum):
+    """The link-based flows. Distinct from `OtpPurpose`: these carry a URL, not a code.
+
+    WHY LINKS AND NOT CODES FOR THESE THREE
+        A 6-digit code is right when the user is already sitting in the flow and just
+        needs to prove inbox access -- they type it into a form they can see.
+
+        These three arrive cold. An invitation reaches someone who has never used the
+        product and has no page open to type a code into; email verification and
+        password reset land the same way. A link takes them to the right screen with
+        the right context already loaded, which is the difference between a completed
+        signup and an abandoned one.
+    """
+
+    VERIFY_EMAIL = "verify_email"
+    RESET_PASSWORD = "reset_password"
+    INVITATION = "invitation"
+
+
+# Subject, greeting sentence, button label, and the closing security note per flow.
+#
+# The security notes differ on purpose. Verification is benign -- a stray one means
+# someone mistyped their address. Reset and invitation are the two an attacker
+# triggers AT a victim, so each says plainly what to do if it was unexpected.
+_ACTION_COPY: dict[ActionPurpose, tuple[str, str, str, str]] = {
+    ActionPurpose.VERIFY_EMAIL: (
+        "Verify your email address",
+        "Confirm this address to finish setting up your account.",
+        "Verify email address",
+        "If you did not create an account, you can safely ignore this message.",
+    ),
+    ActionPurpose.RESET_PASSWORD: (
+        "Reset your password",
+        "We received a request to reset the password on your account.",
+        "Reset password",
+        "If you did not request this, ignore this email — your password is unchanged. "
+        "If you receive these repeatedly, someone may be trying to access your account.",
+    ),
+    ActionPurpose.INVITATION: (
+        "You have been invited",
+        "You have been invited to join a school on {app_name}.",
+        "Accept invitation",
+        "If you were not expecting this invitation, you can safely ignore it. "
+        "Nothing is shared with you until you accept.",
+    ),
+}
+
+
+def render_action_email(
+    *,
+    to: str,
+    action_url: str,
+    purpose: ActionPurpose,
+    recipient_name: str | None = None,
+    details: list[tuple[str, str]] | None = None,
+    expiry_text: str = "24 hours",
+    settings: Settings | None = None,
+) -> EmailMessage:
+    """Render a link-action email.
+
+    Args:
+        to: recipient address.
+        action_url: the full URL including the RAW token. This is the ONLY place the
+            raw token legitimately appears outside memory -- the database holds only
+            its SHA-256 digest, and it is never logged.
+        purpose: selects subject, copy and button label.
+        recipient_name: personalisation; falls back to a neutral greeting.
+        details: label/value rows shown in a summary box. Used by invitations to show
+            the school and role, so the recipient can tell a legitimate invite from a
+            phishing attempt WITHOUT having to click the link to find out.
+        expiry_text: human phrasing of the validity window, e.g. "7 days".
+    """
+    settings = settings or get_settings()
+    subject, action_text, button_label, security_note = _ACTION_COPY[purpose]
+    action_text = action_text.format(app_name=settings.APP_NAME)
+
+    context = {
+        "subject": subject,
+        "action_text": action_text,
+        "button_label": button_label,
+        "security_note": security_note,
+        "action_url": action_url,
+        "details": details or [],
+        "expiry_text": expiry_text,
+        "greeting_name": recipient_name or "there",
+        "app_name": settings.APP_NAME,
+        "logo_url": settings.EMAIL_LOGO_URL or None,
+        "preheader": f"{action_text} This link expires in {expiry_text}.",
+    }
+
+    env = _environment()
+    return EmailMessage(
+        to=to,
+        subject=subject,
+        html_body=env.get_template("action.html").render(**context),
+        text_body=env.get_template("action.txt").render(**context),
         tags={"purpose": purpose.value},
     )

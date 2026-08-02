@@ -7,7 +7,7 @@
 # same thing.
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean
+.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo reconcile openapi db-reset
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -50,6 +50,34 @@ downgrade:  ## Roll back the most recent migration
 
 history:  ## Show migration history
 	uv run alembic history --verbose
+
+db-reset:  ## DESTRUCTIVE: drop the schema, re-migrate, re-seed. Local only.
+	@echo "This DROPS every table in $${POSTGRES_DB:-school_manage_db}. Ctrl-C within 3s to abort."
+	@sleep 3
+	psql -h $${POSTGRES_HOST:-localhost} -U postgres -d $${POSTGRES_DB:-school_manage_db} \
+		-c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+	psql -h $${POSTGRES_HOST:-localhost} -U postgres -d $${POSTGRES_DB:-school_manage_db} \
+		-f scripts/init-db.sql
+	$(MAKE) migrate
+	$(MAKE) seed
+
+# --- Seeding ----------------------------------------------------------------
+#
+# `seed` is idempotent and safe to re-run: the permission catalog is upserted (so a
+# new permission ships with a seed run) while plans are insert-if-absent (so a
+# re-run never resets a price the super admin negotiated).
+
+seed:  ## Seed permissions, plans and the super admin (idempotent)
+	uv run python -m app.cli seed
+
+seed-demo:  ## Seed + create a demo org with two schools, staff and invitations
+	uv run python -m app.cli seed --demo
+
+reconcile:  ## Recompute organization usage counters from source tables
+	uv run python -m app.cli reconcile-usage
+
+openapi:  ## Regenerate openapi.json (the frontend generates its types from this)
+	uv run python scripts/dump_openapi.py
 
 # --- Docker -----------------------------------------------------------------
 

@@ -11,7 +11,9 @@ RESPONSIBILITY
     contact fields the PDF calls for.
 
 INTERACTIONS
-    * `TenantMixin` -> RLS policy installed by `setup_tenant_table("students")`.
+    * `TenantMixin` (organization_id) -> RLS policy installed by
+      `setup_tenant_table("students")`; `RequiredSchoolMixin` (school_id) is the
+      campus scope filter, applied by the permission dependency rather than a policy.
     * `section_id` -> `sections.id` (academics module).
     * Future: attendance, fees and certificate modules all reference `students.id`.
 
@@ -37,7 +39,13 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, str_enum
-from app.db.mixins import SoftDeleteMixin, TenantMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.db.mixins import (
+    RequiredSchoolMixin,
+    SoftDeleteMixin,
+    TenantMixin,
+    TimestampMixin,
+    UUIDPrimaryKeyMixin,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard, types only
     from app.modules.academics.models import Section
@@ -64,7 +72,9 @@ class Gender(StrEnum):
     OTHER = "other"
 
 
-class Student(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteMixin):
+class Student(
+    Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin, SoftDeleteMixin
+):
     """One enrolled (or applying) student at one school."""
 
     __tablename__ = "students"

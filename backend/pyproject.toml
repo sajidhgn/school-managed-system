@@ -19,8 +19,16 @@ dependencies = [
     "asyncpg>=0.31.0",                # async PostgreSQL driver
     "alembic>=1.17.0",
     # --- Security ---
-    "pyjwt>=2.11.0",                  # NOT python-jose (unmaintained, CVE-prone)
+    "pyjwt[crypto]>=2.11.0",          # NOT python-jose (unmaintained, CVE-prone).
+                                      # [crypto] pulls in `cryptography`, required for
+                                      # the RS256 signing the spec mandates in production.
     "pwdlib[argon2]>=0.3.0",          # NOT passlib (unmaintained, breaks on bcrypt>=4.1)
+    "zxcvbn>=4.5.0",                  # password strength scoring; spec §4.4 requires score >= 3
+    # --- Caching ---
+    # Redis backs the permission cache keyed `perm:{role_id}:{pv}` (spec §4.2).
+    # Permissions are deliberately NOT embedded in the JWT, so this lookup is on the
+    # hot path of every authorised request -- it must not be a database round-trip.
+    "redis>=5.2.0",
     # --- Observability ---
     "structlog>=25.5.0",
     "aiosmtplib>=3.0.0",
@@ -89,6 +97,13 @@ warn_unreachable = true
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+# zxcvbn ships no type stubs and has no `types-zxcvbn` on PyPI. The call site in
+# `core/passwords.py` wraps it in one typed function, so the untyped surface is a
+# single line rather than something that spreads.
+[[tool.mypy.overrides]]
+module = ["zxcvbn.*"]
+ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
 # pytest

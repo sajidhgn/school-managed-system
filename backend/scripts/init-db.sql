@@ -30,6 +30,16 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- Accent-insensitive search ("Zoë" matches "Zoe").
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
+-- Case-insensitive text, used for every email column in the schema.
+--
+-- WHY A COLUMN TYPE RATHER THAN LOWERCASING IN THE APPLICATION: normalising in the
+-- service only holds for the code paths that remember to call it. The type holds for
+-- raw SQL, seed scripts, data imports and every endpoint written next year. It also
+-- makes the UNIQUE indexes case-insensitive, so `Ayesha@school.pk` and
+-- `ayesha@school.pk` cannot both be created -- which matters because the invitation
+-- flow requires the accepting account's address to match the invited one exactly.
+CREATE EXTENSION IF NOT EXISTS citext;
+
 -- --------------------------------------------------------------------------
 -- Application role
 -- --------------------------------------------------------------------------

@@ -48,6 +48,343 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Public Plans
+         * @description The pricing page's data source (spec §8 "Public"). No authentication.
+         *
+         *     Returns only `is_public AND is_active` plans, so the hidden `enterprise` tier
+         *     stays invisible to anyone who has not negotiated it.
+         *
+         *     Cached for 5 minutes at the edge: the catalog changes a few times a year and this
+         *     endpoint is hit by every visitor to the marketing site.
+         */
+        get: operations["list_public_plans_api_v1_public_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Invitation
+         * @description Preview an invitation before accepting (spec §7.2). No authentication.
+         *
+         *     Returns only what the recipient's own email already told them. See the service's
+         *     docstring for what is deliberately withheld.
+         */
+        get: operations["verify_invitation_api_v1_invitations_verify_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Invitation
+         * @description Accept an invitation, creating an account if needed (spec §7.2).
+         *
+         *     =====================================================================
+         *     AUTHENTICATION IS OPTIONAL HERE, AND THAT IS THE DESIGN
+         *     =====================================================================
+         *         An invited person may arrive already signed in (they work at another school
+         *         on the platform) or with no account at all. The endpoint must serve both, so
+         *         it cannot sit behind the auth dependency.
+         *
+         *         Instead it attempts to resolve a token and tolerates failure. If a session
+         *         IS present, the service enforces that its email matches the invited address
+         *         exactly -- which is the guard that stops someone accepting an invitation
+         *         forwarded to them.
+         */
+        post: operations["accept_invitation_api_v1_invitations_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/payments/{gateway_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive Webhook
+         * @description Receive a gateway webhook (spec §8, §6.4).
+         *
+         *     UNAUTHENTICATED BUT NOT UNVERIFIED. There is no session here -- the caller is a
+         *     payment provider, not a user -- so authenticity comes entirely from the HMAC
+         *     signature over the raw body. `verify_and_parse` fuses verification with parsing
+         *     precisely so this handler cannot obtain an event it failed to verify.
+         *
+         *     Reads `await request.body()` rather than a parsed model: the signature covers the
+         *     EXACT bytes sent, and letting Pydantic parse and re-serialise would change them.
+         */
+        post: operations["receive_webhook_api_v1_webhooks_payments__gateway_name__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Platform Login
+         * @description Sign in as a platform operator (spec §4.3A).
+         *
+         *     THERE IS NO REGISTRATION ROUTE, and there never will be. Accounts are minted by
+         *     `python -m app.cli seed`, and credentials rotate through the CLI. An emailed
+         *     password reset for this role would reduce the platform's security to the security
+         *     of one inbox -- and this role can read every school's records.
+         */
+        post: operations["platform_login_api_v1_platform_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Platform Me */
+        get: operations["platform_me_api_v1_platform_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Organizations
+         * @description Every organization on the platform (spec §8).
+         */
+        get: operations["list_organizations_api_v1_platform_organizations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/organizations/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Organization */
+        get: operations["get_organization_api_v1_platform_organizations__organization_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/organizations/{organization_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set Organization Status
+         * @description Suspend or reactivate (spec §8).
+         *
+         *     Suspension is READ-ONLY, not a lockout: the customer keeps read and export access
+         *     to their own records. See the service for why that is not negotiable.
+         */
+        patch: operations["set_organization_status_api_v1_platform_organizations__organization_id__status_patch"];
+        trace?: never;
+    };
+    "/api/v1/platform/organizations/{organization_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Override Plan
+         * @description Assign any plan manually, including hidden ones (spec §8).
+         */
+        post: operations["override_plan_api_v1_platform_organizations__organization_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/organizations/{organization_id}/impersonate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Impersonate
+         * @description Open an audited, time-boxed, READ-ONLY window into one organization (spec §8).
+         *
+         *     Read-only is enforced by the database, not by this endpoint: the `WITH CHECK`
+         *     half of every RLS policy has no platform-admin escape, so writes through a
+         *     platform context fail at the policy regardless of what the application intends.
+         */
+        post: operations["impersonate_api_v1_platform_organizations__organization_id__impersonate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Plans
+         * @description Every plan, including hidden and retired ones.
+         */
+        get: operations["list_plans_api_v1_platform_plans_get"];
+        put?: never;
+        /** Create Plan */
+        post: operations["create_plan_api_v1_platform_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Retire Plan
+         * @description Retire a plan. NEVER a hard delete -- existing subscribers keep their terms.
+         */
+        delete: operations["retire_plan_api_v1_platform_plans__plan_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Plan */
+        patch: operations["update_plan_api_v1_platform_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/platform/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description MRR, organization counts, seats and churn (spec §8).
+         */
+        get: operations["metrics_api_v1_platform_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Platform Audit Logs
+         * @description What operators have done, newest first (spec §8).
+         */
+        get: operations["platform_audit_logs_api_v1_platform_audit_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -57,7 +394,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Register a school and its first admin */
+        /**
+         * Register
+         * @description Create an account and its organization (spec §4.3B).
+         *
+         *     Returns 201 with NO tokens: login is blocked until the emailed link is followed.
+         */
         post: operations["register_api_v1_auth_register_post"];
         delete?: never;
         options?: never;
@@ -74,7 +416,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Verify an email address */
+        /**
+         * Verify Email
+         * @description Consume a verification link and activate the account.
+         */
         post: operations["verify_email_api_v1_auth_verify_email_post"];
         delete?: never;
         options?: never;
@@ -91,7 +436,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Resend a verification code */
+        /**
+         * Resend Verification
+         * @description Re-send the verification link.
+         *
+         *     Always the same response, whether or not the address exists or is already
+         *     verified -- otherwise this becomes a cheap way to test which addresses are
+         *     registered.
+         */
         post: operations["resend_verification_api_v1_auth_resend_verification_post"];
         delete?: never;
         options?: never;
@@ -108,7 +460,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign in */
+        /**
+         * Login
+         * @description Authenticate and, if the context is unambiguous, issue tokens (spec §4.3D).
+         *
+         *     A user with several memberships gets `select_required: true` and NO access
+         *     cookie; they must call `POST /auth/context` to choose. See `LoginResponse`.
+         */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
         options?: never;
@@ -116,7 +474,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/login/verify-2fa": {
+    "/api/v1/auth/context": {
         parameters: {
             query?: never;
             header?: never;
@@ -125,8 +483,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Complete 2FA sign-in */
-        post: operations["verify_2fa_api_v1_auth_login_verify_2fa_post"];
+        /**
+         * Switch Context
+         * @description Switch the active membership and re-issue tokens (spec §4.3E).
+         *
+         *     Deliberately reachable with a token that has NO active membership -- that is the
+         *     state a multi-membership user is in immediately after login, and it is the only
+         *     endpoint that can move them out of it.
+         */
+        post: operations["switch_context_api_v1_auth_context_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -142,7 +507,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotate the token pair */
+        /**
+         * Refresh
+         * @description Rotate the refresh token, detecting reuse (spec §4.1).
+         *
+         *     Reads the token from the cookie, or from `X-Refresh-Token` for non-browser
+         *     clients that have no cookie jar.
+         */
         post: operations["refresh_api_v1_auth_refresh_post"];
         delete?: never;
         options?: never;
@@ -159,8 +530,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke a refresh token */
+        /**
+         * Logout
+         * @description Revoke this session and clear the cookies.
+         */
         post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout All
+         * @description Revoke every session for this user, on every device (spec §4.3F).
+         */
+        post: operations["logout_all_api_v1_auth_logout_all_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -176,7 +570,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request a reset code */
+        /**
+         * Forgot Password
+         * @description Send a reset link. Identical response for known and unknown addresses.
+         */
         post: operations["forgot_password_api_v1_auth_forgot_password_post"];
         delete?: never;
         options?: never;
@@ -193,7 +590,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reset a password */
+        /**
+         * Reset Password
+         * @description Set a new password and revoke every existing session.
+         */
         post: operations["reset_password_api_v1_auth_reset_password_post"];
         delete?: never;
         options?: never;
@@ -208,8 +608,191 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current user profile */
+        /**
+         * Me
+         * @description The caller's identity, contexts and resolved permissions (spec §8).
+         *
+         *     One call, because the app shell needs all of it before it can render anything:
+         *     the nav depends on permissions, the header on the active school, the switcher on
+         *     the membership list.
+         */
         get: operations["me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/org": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Organization */
+        get: operations["get_organization_api_v1_org_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Organization
+         * @description Partial update.
+         *
+         *     `exclude_unset=True` preserves PATCH semantics: a field the client omitted stays
+         *     unchanged, while one explicitly sent as null is cleared. Collapsing those two
+         *     into "falsy means clear" is how a PATCH silently wipes an organization's tax id.
+         */
+        patch: operations["update_organization_api_v1_org_patch"];
+        trace?: never;
+    };
+    "/api/v1/org/transfer-ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transfer Ownership
+         * @description Hand the organization to another member. Atomic: promote, then demote.
+         */
+        post: operations["transfer_ownership_api_v1_org_transfer_ownership_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/org/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description Live counters against plan limits (spec §8).
+         *
+         *     Readable by ANY authenticated member, deliberately NOT gated behind
+         *     `billing:read`. A teacher who hits a student limit needs to understand why the
+         *     create failed; answering only "forbidden" sends them to ask the principal a
+         *     question the UI could have answered itself.
+         */
+        get: operations["get_usage_api_v1_org_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Subscription */
+        get: operations["get_subscription_api_v1_billing_subscription_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subscribe
+         * @description Move onto a paid plan.
+         *
+         *     Shares an implementation with `change-plan`: from the system's point of view
+         *     "subscribe" and "change plan" are the same transition, since every organization
+         *     already holds a free-plan subscription row. Kept as two endpoints because they
+         *     are two different intentions in the UI, and the audit trail reads better for it.
+         */
+        post: operations["subscribe_api_v1_billing_subscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/change-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Plan
+         * @description Upgrade or downgrade. A downgrade below current usage never deletes data.
+         */
+        post: operations["change_plan_api_v1_billing_change_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Subscription
+         * @description Cancel at period end. Immediate cancellation is a super-admin action.
+         */
+        post: operations["cancel_subscription_api_v1_billing_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invoices
+         * @description This organization's invoices.
+         *
+         *     No explicit `WHERE organization_id` filter: RLS applies it at the database, and
+         *     adding a redundant one here would suggest the filter is what provides the
+         *     isolation. It is not -- the policy is.
+         */
+        get: operations["list_invoices_api_v1_billing_invoices_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -226,36 +809,24 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List schools
-         * @description Paginated directory of tenants for the Super Admin dashboard.
+         * List Schools
+         * @description Schools the caller can see.
+         *
+         *     An org-level owner (`ctx.school_id is None`) sees every school; a school-scoped
+         *     member sees only their own. That is spec §2.3's soft boundary, applied here
+         *     rather than by a policy.
          */
         get: operations["list_schools_api_v1_schools_get"];
         put?: never;
         /**
-         * Onboard a school
-         * @description Super-admin onboarding: provisions an already-active tenant.
+         * Create School
+         * @description Create a school. Entitlement-checked; 402 when the plan's limit is reached.
+         *
+         *     `school:create` is an ORG-scoped permission, so this route is reachable only by
+         *     an org-level role. A principal cannot manufacture campuses the organization has
+         *     not paid for.
          */
         post: operations["create_school_api_v1_schools_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/schools/current": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get the caller's own school
-         * @description Return the school the authenticated caller belongs to. RLS-scoped.
-         */
-        get: operations["get_current_school_api_v1_schools_current_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -269,18 +840,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a school */
+        /** Get School */
         get: operations["get_school_api_v1_schools__school_id__get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update a school */
+        /** Update School */
         patch: operations["update_school_api_v1_schools__school_id__patch"];
         trace?: never;
     };
-    "/api/v1/schools/{school_id}/approve": {
+    "/api/v1/schools/{school_id}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -289,15 +860,109 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a pending school */
-        post: operations["approve_school_api_v1_schools__school_id__approve_post"];
+        /**
+         * Archive School
+         * @description Archive a school. Records are retained; the plan seat is released.
+         */
+        post: operations["archive_school_api_v1_schools__school_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/schools/{school_id}/suspend": {
+    "/api/v1/schools/{school_id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Roles */
+        get: operations["list_roles_api_v1_schools__school_id__roles_get"];
+        put?: never;
+        /**
+         * Create Role
+         * @description Create a custom role.
+         *
+         *     Requires BOTH `role:create` and `role:assign_permissions`, because the request
+         *     carries a permission set. Requiring only the first would let someone who may
+         *     create empty roles create a fully-privileged one in the same call.
+         */
+        post: operations["create_role_api_v1_schools__school_id__roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Role */
+        get: operations["get_role_api_v1_schools__school_id__roles__role_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Role
+         * @description Delete a custom role. 409 while any member still holds it.
+         */
+        delete: operations["delete_role_api_v1_schools__school_id__roles__role_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Role
+         * @description Rename or re-describe. Permissions change through the PUT below.
+         */
+        patch: operations["update_role_api_v1_schools__school_id__roles__role_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/roles/{role_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Role Permissions
+         * @description Replace a role's permission set (spec §8 `PUT .../permissions`).
+         *
+         *     PUT, not PATCH, because the body is the COMPLETE new set. Enforces all three
+         *     escalation guards and bumps `permissions_version`, so affected members pick up
+         *     the change on their next request rather than when their token expires.
+         */
+        put: operations["set_role_permissions_api_v1_schools__school_id__roles__role_id__permissions_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Members */
+        get: operations["list_members_api_v1_schools__school_id__members_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/members/{membership_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -306,8 +971,144 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Suspend a school */
-        post: operations["suspend_school_api_v1_schools__school_id__suspend_post"];
+        post?: never;
+        /**
+         * Remove Member
+         * @description Remove a member. Refuses on the organization's last owner, and on yourself.
+         */
+        delete: operations["remove_member_api_v1_schools__school_id__members__membership_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Member
+         * @description Change a member's role, suspend, or reactivate (spec §8).
+         *
+         *     Two operations behind one PATCH because the members table exposes both as inline
+         *     edits on the same row. Each is permission-checked separately: suspending needs
+         *     `member:suspend` on top of `member:update`, since removing someone's access is a
+         *     materially different act from correcting their job title.
+         */
+        patch: operations["update_member_api_v1_schools__school_id__members__membership_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invitations */
+        get: operations["list_invitations_api_v1_schools__school_id__invitations_get"];
+        put?: never;
+        /**
+         * Send Invitation
+         * @description Invite someone to a school (spec §7.1).
+         *
+         *     The escalation guard applies here as much as to role editing: the inviter must
+         *     already hold every permission the invited role grants. Without that, inviting is
+         *     simply a slower way to create authority you do not have.
+         */
+        post: operations["send_invitation_api_v1_schools__school_id__invitations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/invitations/{invitation_id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Invitation
+         * @description Resend with a FRESH token. The previous link dies immediately.
+         *
+         *     It cannot re-send the original: only the digest was stored, so the raw token is
+         *     unrecoverable by design. Rotating is also the safer behaviour -- if the first
+         *     email went to a mistyped or compromised address, this kills that link.
+         */
+        post: operations["resend_invitation_api_v1_schools__school_id__invitations__invitation_id__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/invitations/{invitation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Invitation
+         * @description Revoke a pending invitation. The token dies immediately; the seat is returned.
+         */
+        delete: operations["revoke_invitation_api_v1_schools__school_id__invitations__invitation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Logs
+         * @description This school's audit trail, newest first.
+         *
+         *     KEYSET PAGINATION, not offset. The audit log is the one table in this system that
+         *     grows without bound, and `OFFSET 50000` makes PostgreSQL walk and discard fifty
+         *     thousand rows on every page. `before=<timestamp>` seeks straight into the index
+         *     instead, so page 1000 costs what page 1 costs.
+         *
+         *     It is also stable under concurrent writes: new entries arrive constantly, and
+         *     offset paging would shift rows between pages and show duplicates.
+         *
+         *     RLS has already confined this to the caller's organization; `_assert_school_scope`
+         *     narrows it to their campus inside that.
+         */
+        get: operations["list_audit_logs_api_v1_schools__school_id__audit_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Permissions
+         * @description The permission catalog, grouped by category (spec §8 `GET /permissions`).
+         *
+         *     Available to any authenticated member: it is a description of what the software
+         *     can do, identical for every customer, and the role editor cannot render without
+         *     it. It discloses nothing about who holds what.
+         */
+        get: operations["list_permissions_api_v1_permissions_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -492,7 +1293,62 @@ export interface components {
              * Detail
              * @default Application received. The school will contact you.
              */
-            detail: string;
+            detail?: string;
+        };
+        /**
+         * AuditLogRead
+         * @description One audit entry.
+         *
+         *     `before`/`after` carry only the fields that changed, never whole rows -- see the
+         *     model. A full snapshot would turn this endpoint into a second, less-protected
+         *     copy of the student database with a longer retention period.
+         */
+        AuditLogRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** School Id */
+            school_id: string | null;
+            /** Actor User Id */
+            actor_user_id: string | null;
+            /** Actor Membership Id */
+            actor_membership_id: string | null;
+            /** Action */
+            action: string;
+            /** Entity Type */
+            entity_type: string | null;
+            /** Entity Id */
+            entity_id: string | null;
+            /** Before */
+            before: {
+                [key: string]: unknown;
+            } | null;
+            /** After */
+            after: {
+                [key: string]: unknown;
+            } | null;
+            /** Ip */
+            ip: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * BillingCycle
+         * @enum {string}
+         */
+        BillingCycle: "monthly" | "yearly";
+        /** CancelRequest */
+        CancelRequest: {
+            /**
+             * At Period End
+             * @default true
+             */
+            at_period_end?: boolean;
         };
         /** ClassCreate */
         ClassCreate: {
@@ -568,6 +1424,14 @@ export interface components {
             /** Level */
             level?: number | null;
         };
+        /** ContextSwitchRequest */
+        ContextSwitchRequest: {
+            /**
+             * Membership Id
+             * Format: uuid
+             */
+            membership_id: string;
+        };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /**
@@ -595,6 +1459,197 @@ export interface components {
             /** Database */
             database: string;
         };
+        /** ImpersonateRequest */
+        ImpersonateRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /** ImpersonationGrant */
+        ImpersonationGrant: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Read Only */
+            read_only: boolean;
+        };
+        /**
+         * InvitationAccept
+         * @description Accept an invitation. Two shapes, one endpoint (spec §7.2).
+         *
+         *     NEW USER      -> `{ token, full_name, password }`
+         *     EXISTING USER -> `{ token }`, with an authenticated session for the same address
+         *
+         *     The validator below rejects the halfway case -- a name without a password -- at
+         *     the schema boundary, so the service never has to reason about a partially
+         *     specified signup.
+         */
+        InvitationAccept: {
+            /** Token */
+            token: string;
+            /** Full Name */
+            full_name?: string | null;
+            /** Password */
+            password?: string | null;
+        };
+        /**
+         * InvitationAcceptResponse
+         * @description Result of acceptance, with enough context to route the user onward.
+         */
+        InvitationAcceptResponse: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Membership Id
+             * Format: uuid
+             */
+            membership_id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** School Id */
+            school_id: string | null;
+            /** Role Code */
+            role_code: string;
+            /** Created Account */
+            created_account: boolean;
+            /** Message */
+            message: string;
+        };
+        /** InvitationCreate */
+        InvitationCreate: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Full Name */
+            full_name?: string | null;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+        };
+        /**
+         * InvitationPreview
+         * @description What an UNAUTHENTICATED token holder is allowed to see (spec §7.2).
+         *
+         *     Deliberately minimal. Whoever holds this token has proven only that they received
+         *     an email -- possibly by interception or forwarding. Everything here is already in
+         *     the invitation email they were sent; nothing else is added.
+         *
+         *     `requires_signup` tells the frontend which form to render: full signup for a new
+         *     person, or a sign-in prompt for someone who already has an account.
+         */
+        InvitationPreview: {
+            /** School Name */
+            school_name: string | null;
+            /** Role Name */
+            role_name: string | null;
+            /** Email */
+            email: string;
+            /** Inviter Name */
+            inviter_name: string | null;
+            /** Requires Signup */
+            requires_signup: boolean;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /**
+         * InvitationRead
+         * @description A pending or historical invitation, for the principal's invitations screen.
+         *
+         *     Carries no token and no digest. The digest is a credential-equivalent: anyone
+         *     holding it can confirm a guessed token offline, so it never leaves the database.
+         */
+        InvitationRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string | null;
+            /** School Id */
+            school_id: string | null;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+            /** Role Name */
+            role_name: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Resent Count */
+            resent_count: number;
+            /** Last Sent At */
+            last_sent_at: string | null;
+            /** Accepted At */
+            accepted_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** InvoiceRead */
+        InvoiceRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Number */
+            number: string;
+            /** Amount Subtotal */
+            amount_subtotal: string;
+            /** Amount Tax */
+            amount_tax: string;
+            /** Amount Total */
+            amount_total: string;
+            /** Currency */
+            currency: string;
+            /** Status */
+            status: string;
+            /** Issued At */
+            issued_at: string | null;
+            /** Due At */
+            due_at: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /** Pdf Url */
+            pdf_url: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -606,31 +1661,364 @@ export interface components {
             password: string;
         };
         /**
-         * LoginResult
-         * @description Login is two-shaped: either tokens, or a 2FA challenge.
+         * LoginResponse
+         * @description Login result.
          *
-         *     A single response model keeps the OpenAPI surface simple and lets the frontend
-         *     branch on `requires_2fa` rather than on HTTP status.
+         *     TWO SHAPES IN ONE RESPONSE, driven by `select_required` (spec §4.3D):
+         *
+         *       * exactly one membership -> auto-selected, cookies are set, the caller is
+         *         logged in and can proceed.
+         *       * several memberships    -> `select_required = true`, NO access cookie is set,
+         *         and the caller must call `POST /auth/context` to pick one.
+         *
+         *     The second case is not an error, so it is still a 200. A user who teaches at two
+         *     schools has not done anything wrong; they simply have not said which hat they
+         *     are wearing, and the system must not guess. Guessing would drop a teacher into
+         *     the wrong school's data.
          */
-        LoginResult: {
+        LoginResponse: {
             /**
-             * Requires 2Fa
-             * @default false
+             * User Id
+             * Format: uuid
              */
-            requires_2fa: boolean;
-            /** Detail */
-            detail: string;
-            tokens?: components["schemas"]["TokenPair"] | null;
+            user_id: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Memberships */
+            memberships: components["schemas"]["MembershipSummary"][];
+            /** Select Required */
+            select_required: boolean;
+            /** Active Membership Id */
+            active_membership_id?: string | null;
         };
-        /** LogoutRequest */
-        LogoutRequest: {
-            /** Refresh Token */
-            refresh_token: string;
+        /**
+         * MeResponse
+         * @description `GET /auth/me` -- everything the app shell needs on boot.
+         *
+         *     Returns the resolved permission set so the frontend can hide actions the user
+         *     cannot perform. That hiding is COSMETIC ONLY (spec §9): every action is
+         *     re-checked server-side by `require()`. A frontend treating this list as the
+         *     security boundary is one `curl` away from being bypassed.
+         */
+        MeResponse: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Locale */
+            locale: string;
+            /** Memberships */
+            memberships: components["schemas"]["MembershipSummary"][];
+            /** Active Membership Id */
+            active_membership_id: string | null;
+            /** Organization Id */
+            organization_id: string | null;
+            /** Organization Name */
+            organization_name: string | null;
+            /** Organization Status */
+            organization_status: string | null;
+            /** School Id */
+            school_id: string | null;
+            /** School Name */
+            school_name: string | null;
+            /** Role Code */
+            role_code: string | null;
+            /** Permissions */
+            permissions: string[];
         };
-        /** MessageResponse */
+        /** MemberRead */
+        MemberRead: {
+            /**
+             * Membership Id
+             * Format: uuid
+             */
+            membership_id: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** School Id */
+            school_id: string | null;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+            /** Role Code */
+            role_code: string;
+            /** Role Name */
+            role_name: string;
+            /** Status */
+            status: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Joined At */
+            joined_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * MemberUpdate
+         * @description Change a member's role, their status, or both.
+         */
+        MemberUpdate: {
+            /** Role Id */
+            role_id?: string | null;
+            /** Suspended */
+            suspended?: boolean | null;
+        };
+        /**
+         * MembershipSummary
+         * @description One context the user may act in. Rendered by the context switcher.
+         */
+        MembershipSummary: {
+            /**
+             * Membership Id
+             * Format: uuid
+             */
+            membership_id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /** School Id */
+            school_id: string | null;
+            /** School Name */
+            school_name: string | null;
+            /** Role Code */
+            role_code: string;
+            /** Role Name */
+            role_name: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Is Org Level */
+            is_org_level: boolean;
+        };
+        /**
+         * MessageResponse
+         * @description Generic acknowledgement.
+         *
+         *     Used by the endpoints that must NOT reveal whether an account exists --
+         *     forgot-password and resend-verification return this identical body whether or not
+         *     the address is registered. A response that differs turns the endpoint into a
+         *     user-enumeration oracle, which for a school platform means learning which schools
+         *     are customers.
+         */
         MessageResponse: {
-            /** Detail */
-            detail: string;
+            /** Message */
+            message: string;
+        };
+        /** MetricsResponse */
+        MetricsResponse: {
+            /** Organizations Total */
+            organizations_total: number;
+            /** Organizations By Status */
+            organizations_by_status: {
+                [key: string]: number;
+            };
+            /** Schools Total */
+            schools_total: number;
+            /** Staff Seats Total */
+            staff_seats_total: number;
+            /** Mrr */
+            mrr: string;
+            /** Failed Payments 30D */
+            failed_payments_30d: number;
+            /** Churn Rate */
+            churn_rate: number;
+        };
+        /** OrganizationDetail */
+        OrganizationDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            /** Country */
+            country: string | null;
+            /** Billing Email */
+            billing_email: string | null;
+            /** Plan Code */
+            plan_code: string | null;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Subscription Status */
+            subscription_status: string | null;
+            /** Schools Count */
+            schools_count: number;
+            /** Staff Count */
+            staff_count: number;
+            /** Students Count */
+            students_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Owner User Id
+             * Format: uuid
+             */
+            owner_user_id: string;
+            /** Currency */
+            currency: string;
+            /** Timezone */
+            timezone: string;
+            /** Trial Ends At */
+            trial_ends_at: string | null;
+            /** Current Period End */
+            current_period_end: string | null;
+            /** Limits */
+            limits: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** OrganizationRead */
+        OrganizationRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Owner User Id
+             * Format: uuid
+             */
+            owner_user_id: string;
+            /** Country */
+            country: string | null;
+            /** Timezone */
+            timezone: string;
+            /** Currency */
+            currency: string;
+            /** Locale */
+            locale: string;
+            /** Status */
+            status: string;
+            /** Billing Email */
+            billing_email: string | null;
+            /** Tax Id */
+            tax_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * OrganizationStatusUpdate
+         * @description Suspend or reactivate.
+         *
+         *     `reason` is optional but strongly encouraged -- it lands in the platform audit
+         *     log, and "why was this customer suspended in March" is a question that gets
+         *     asked months later, by someone who was not there.
+         */
+        OrganizationStatusUpdate: {
+            /** Suspend */
+            suspend: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * OrganizationSummary
+         * @description One organization as the platform console lists it.
+         *
+         *     Carries plan and usage inline so the list renders without a request per row --
+         *     the operator's first question about any organization is always "what are they on
+         *     and how much are they using".
+         */
+        OrganizationSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            /** Country */
+            country: string | null;
+            /** Billing Email */
+            billing_email: string | null;
+            /** Plan Code */
+            plan_code: string | null;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Subscription Status */
+            subscription_status: string | null;
+            /** Schools Count */
+            schools_count: number;
+            /** Staff Count */
+            staff_count: number;
+            /** Students Count */
+            students_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * OrganizationUpdate
+         * @description PATCH body. Every field optional -- omitted means "leave unchanged".
+         *
+         *     `slug` is absent on purpose: it appears in URLs and in links already sent by
+         *     email, so changing it silently breaks bookmarks. It is set once at signup.
+         */
+        OrganizationUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Locale */
+            locale?: string | null;
+            /** Billing Email */
+            billing_email?: string | null;
+            /** Tax Id */
+            tax_id?: string | null;
         };
         /**
          * PageMeta
@@ -656,169 +2044,83 @@ export interface components {
             items: components["schemas"]["ClassRead"][];
             meta: components["schemas"]["PageMeta"];
         };
-        /** Page[SchoolRead] */
-        Page_SchoolRead_: {
-            /** Items */
-            items: components["schemas"]["SchoolRead"][];
-            meta: components["schemas"]["PageMeta"];
-        };
         /** Page[StudentRead] */
         Page_StudentRead_: {
             /** Items */
             items: components["schemas"]["StudentRead"][];
             meta: components["schemas"]["PageMeta"];
         };
-        /** RefreshRequest */
-        RefreshRequest: {
-            /** Refresh Token */
-            refresh_token: string;
-        };
         /**
-         * RegisterRequest
-         * @description Self-service signup: creates a pending school AND its first admin at once.
+         * PermissionCategory
+         * @description Permissions grouped for the role-matrix editor (spec §8 `GET /permissions`).
+         *
+         *     Grouped server-side rather than by the client so every surface -- the web role
+         *     editor, a future mobile app, the API docs -- presents the same categories in the
+         *     same order.
          */
-        RegisterRequest: {
-            /** School Name */
-            school_name: string;
-            /**
-             * School Email
-             * Format: email
-             * @description The school's contact address.
-             */
-            school_email: string;
-            /** School Phone */
-            school_phone?: string | null;
-            /**
-             * Full Name
-             * @description The admin's name.
-             */
-            full_name: string;
-            /**
-             * Email
-             * Format: email
-             * @description The admin's login email.
-             */
-            email: string;
-            /** Password */
-            password: string;
+        PermissionCategory: {
+            /** Category */
+            category: string;
+            /** Permissions */
+            permissions: components["schemas"]["PermissionRead"][];
         };
-        /** RegisterResponse */
-        RegisterResponse: {
-            /**
-             * School Id
-             * Format: uuid
-             */
-            school_id: string;
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
-            /**
-             * Email
-             * Format: email
-             */
-            email: string;
-            /**
-             * Detail
-             * @default Registration received. Check your email for a verification code.
-             */
-            detail: string;
-        };
-        /** ResendVerificationRequest */
-        ResendVerificationRequest: {
-            /**
-             * Email
-             * Format: email
-             */
-            email: string;
-        };
-        /** ResetPasswordRequest */
-        ResetPasswordRequest: {
-            /**
-             * Email
-             * Format: email
-             */
-            email: string;
+        /** PermissionRead */
+        PermissionRead: {
             /** Code */
             code: string;
-            /** New Password */
-            new_password: string;
+            /** Resource */
+            resource: string;
+            /** Action */
+            action: string;
+            /** Category */
+            category: string;
+            /** Description */
+            description: string;
+            /** Min Scope */
+            min_scope: string;
+            /** Is Dangerous */
+            is_dangerous: boolean;
         };
         /**
-         * SchoolCreate
-         * @description Super-admin onboarding of a school (goes live immediately).
-         *
-         *     Distinct from self-service registration (`auth.RegisterRequest`), which creates a
-         *     PENDING_APPROVAL school plus its first admin in one step and requires no existing
-         *     privileged caller.
+         * PlanAdminRead
+         * @description A plan as the operator sees it -- including the fields the public view hides.
          */
-        SchoolCreate: {
-            /**
-             * Email
-             * Format: email
-             * @description Official school contact address (not a login).
-             */
-            email: string;
-            /** Phone */
-            phone?: string | null;
-            /** Address */
-            address?: string | null;
-            /** City */
-            city?: string | null;
-            /** Country */
-            country?: string | null;
-            /**
-             * Logo Url
-             * @description Used on ID cards, certificates and vouchers.
-             */
-            logo_url?: string | null;
-            /** Name */
-            name: string;
-            /** @default trial */
-            plan: components["schemas"]["SubscriptionPlan"];
-            /**
-             * Max Students
-             * @default 100
-             */
-            max_students: number;
-        };
-        /**
-         * SchoolRead
-         * @description The full school representation returned to super admins and the school itself.
-         */
-        SchoolRead: {
+        PlanAdminRead: {
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Code */
+            code: string;
             /** Name */
             name: string;
-            /** Slug */
-            slug: string;
-            /** Email */
-            email: string;
-            /** Phone */
-            phone: string | null;
-            /** Address */
-            address: string | null;
-            /** City */
-            city: string | null;
-            /** Country */
-            country: string | null;
-            /** Logo Url */
-            logo_url: string | null;
-            status: components["schemas"]["SchoolStatus"];
-            /** Approved At */
-            approved_at: string | null;
-            plan: components["schemas"]["SubscriptionPlan"];
-            /** Trial Ends At */
-            trial_ends_at: string | null;
-            /** Subscription Expires At */
-            subscription_expires_at: string | null;
-            /** Max Students */
-            max_students: number;
+            /** Description */
+            description: string | null;
+            /** Marketing Tagline */
+            marketing_tagline: string | null;
+            /** Price Monthly */
+            price_monthly: string | null;
+            /** Price Yearly */
+            price_yearly: string | null;
+            /** Currency */
+            currency: string;
+            /** Trial Days */
+            trial_days: number;
+            /** Limits */
+            limits: {
+                [key: string]: unknown;
+            };
+            /** Features */
+            features: {
+                [key: string]: unknown;
+            };
+            /** Is Public */
+            is_public: boolean;
+            /** Is Active */
+            is_active: boolean;
+            /** Sort Order */
+            sort_order: number;
             /**
              * Created At
              * Format: date-time
@@ -830,25 +2132,465 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PlanOverrideRequest */
+        PlanOverrideRequest: {
+            /** Plan Code */
+            plan_code: string;
+        };
         /**
-         * SchoolStatus
-         * @description Lifecycle of a tenant.
-         *
-         *     PENDING_APPROVAL is the landing state for self-service registration. The PDF
-         *     assigns school onboarding to the Super Admin, so a self-registered school is
-         *     NOT live until a platform administrator approves it. This is what stops anyone
-         *     with an email address from provisioning a tenant on your infrastructure.
-         * @enum {string}
+         * PlanPatch
+         * @description Partial plan update. `limits` and `features` merge; everything else replaces.
          */
-        SchoolStatus: "pending_approval" | "active" | "suspended" | "cancelled";
+        PlanPatch: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Marketing Tagline */
+            marketing_tagline?: string | null;
+            /** Price Monthly */
+            price_monthly?: number | string | null;
+            /** Price Yearly */
+            price_yearly?: number | string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Trial Days */
+            trial_days?: number | null;
+            /** Limits */
+            limits?: {
+                [key: string]: unknown;
+            } | null;
+            /** Features */
+            features?: {
+                [key: string]: unknown;
+            } | null;
+            /** Is Public */
+            is_public?: boolean | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
         /**
-         * SchoolUpdate
-         * @description Partial update. Every field optional so PATCH semantics are preserved.
+         * PlanPublic
+         * @description A plan as the marketing site sees it (spec §6.1).
          *
-         *     `status` is intentionally absent: lifecycle transitions go through the explicit
-         *     `approve` / `suspend` endpoints so each one is a distinct, auditable action
-         *     rather than a silent field write.
+         *     Served by an UNAUTHENTICATED endpoint, so it carries only what a pricing page
+         *     needs. Internal fields -- `is_active`, timestamps, the row id's role in
+         *     subscriptions -- are omitted rather than filtered client-side.
+         *
+         *     NEVER HARDCODE THESE IN THE FRONTEND. A price duplicated into the marketing site
+         *     is a price that will one day disagree with the one actually charged, and the
+         *     customer will have a screenshot of the cheaper one.
          */
+        PlanPublic: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Marketing Tagline */
+            marketing_tagline: string | null;
+            /** Price Monthly */
+            price_monthly: string | null;
+            /** Price Yearly */
+            price_yearly: string | null;
+            /** Currency */
+            currency: string;
+            /** Trial Days */
+            trial_days: number;
+            /** Limits */
+            limits: {
+                [key: string]: unknown;
+            };
+            /** Features */
+            features: {
+                [key: string]: unknown;
+            };
+            /** Sort Order */
+            sort_order: number;
+        };
+        /**
+         * PlanWrite
+         * @description Create or replace a plan.
+         *
+         *     `limits` and `features` are free-form dicts here and validated in the service
+         *     against the required key sets. A Pydantic model per key would be stricter, but it
+         *     would also mean a code change and a deploy every time the product adds a limit --
+         *     which is precisely the flexibility the JSONB column was chosen for.
+         */
+        PlanWrite: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Marketing Tagline */
+            marketing_tagline?: string | null;
+            /** Price Monthly */
+            price_monthly?: number | string | null;
+            /** Price Yearly */
+            price_yearly?: number | string | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency?: string;
+            /**
+             * Trial Days
+             * @default 0
+             */
+            trial_days?: number;
+            /** Limits */
+            limits: {
+                [key: string]: unknown;
+            };
+            /** Features */
+            features: {
+                [key: string]: unknown;
+            };
+            /**
+             * Is Public
+             * @default true
+             */
+            is_public?: boolean;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active?: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order?: number;
+        };
+        /** PlatformAdminRead */
+        PlatformAdminRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Mfa Enabled */
+            mfa_enabled: boolean;
+            /** Last Login At */
+            last_login_at: string | null;
+        };
+        /** PlatformAuditRead */
+        PlatformAuditRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Actor Admin Id */
+            actor_admin_id: string | null;
+            /** Action */
+            action: string;
+            /** Entity Type */
+            entity_type: string | null;
+            /** Entity Id */
+            entity_id: string | null;
+            /** Target Organization Id */
+            target_organization_id: string | null;
+            /** Audit Metadata */
+            audit_metadata: {
+                [key: string]: unknown;
+            };
+            /** Ip */
+            ip: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PlatformLoginRequest */
+        PlatformLoginRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * RegisterRequest
+         * @description Self-service signup: creates the person AND their organization (spec §4.3B).
+         */
+        RegisterRequest: {
+            /** Full Name */
+            full_name: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Country */
+            country?: string | null;
+        };
+        /**
+         * RegisterResponse
+         * @description Signup result. Carries no token: login is blocked until email is verified.
+         */
+        RegisterResponse: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /**
+             * Verification Required
+             * @default true
+             */
+            verification_required?: boolean;
+            /** Message */
+            message: string;
+        };
+        /** ResendVerificationRequest */
+        ResendVerificationRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
+        /** ResetPasswordRequest */
+        ResetPasswordRequest: {
+            /** Token */
+            token: string;
+            /** Password */
+            password: string;
+        };
+        /** RoleCreate */
+        RoleCreate: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Permissions */
+            permissions?: string[];
+        };
+        /**
+         * RoleDetail
+         * @description A role plus its permission codes and how many people hold it.
+         *
+         *     `member_count` is included because deleting a role fails with 409 while anyone
+         *     holds it. Showing the number up front turns that into a visible precondition
+         *     rather than a surprise after clicking delete.
+         */
+        RoleDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** School Id */
+            school_id: string | null;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Is System */
+            is_system: boolean;
+            /** Is Editable */
+            is_editable: boolean;
+            /** Permissions Version */
+            permissions_version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Permissions */
+            permissions: string[];
+            /** Member Count */
+            member_count: number;
+        };
+        /**
+         * RolePermissionsUpdate
+         * @description The complete new permission set. REPLACES, never merges.
+         *
+         *     A replace makes the request self-describing: what you send is what the role ends
+         *     up with. A merge-style API needs separate add and remove lists, and a client that
+         *     forgets the remove list silently leaves revoked permissions in place -- failing
+         *     open, which is the wrong direction for an authorization API.
+         */
+        RolePermissionsUpdate: {
+            /** Codes */
+            codes?: string[];
+        };
+        /** RoleRead */
+        RoleRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** School Id */
+            school_id: string | null;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Is System */
+            is_system: boolean;
+            /** Is Editable */
+            is_editable: boolean;
+            /** Permissions Version */
+            permissions_version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * RoleUpdate
+         * @description Rename only. Permissions change through the dedicated endpoint.
+         *
+         *     Separate on purpose: a rename is cosmetic, a permission change alters authority.
+         *     Merging them would blur the audit trail and churn `permissions_version` -- which
+         *     invalidates every token for the role -- each time someone fixes a typo.
+         */
+        RoleUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /** SchoolCreate */
+        SchoolCreate: {
+            /** Name */
+            name: string;
+            /** Code */
+            code: string;
+            /** Email */
+            email?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Address */
+            address?: string | null;
+            /** City */
+            city?: string | null;
+            /**
+             * Academic Year Start Month
+             * @default 4
+             */
+            academic_year_start_month?: number;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone?: string;
+            /**
+             * Locale
+             * @default en
+             */
+            locale?: string;
+        };
+        /**
+         * SchoolCreateResponse
+         * @description A created school, plus whether the caller was granted principal on it.
+         *
+         *     `principal_granted` tells the frontend where to send the user next: into the new
+         *     school's admin panel if they now hold principal there (their first school), or
+         *     back to the school list if they do not (subsequent schools, which need a
+         *     principal appointed).
+         */
+        SchoolCreateResponse: {
+            school: components["schemas"]["SchoolRead"];
+            /** Principal Granted */
+            principal_granted: boolean;
+        };
+        /** SchoolRead */
+        SchoolRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Name */
+            name: string;
+            /** Code */
+            code: string;
+            /** Slug */
+            slug: string;
+            /** Email */
+            email: string | null;
+            /** Phone */
+            phone: string | null;
+            /** Address */
+            address: string | null;
+            /** City */
+            city: string | null;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Academic Year Start Month */
+            academic_year_start_month: number;
+            /** Timezone */
+            timezone: string;
+            /** Locale */
+            locale: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** SchoolUpdate */
         SchoolUpdate: {
             /** Name */
             name?: string | null;
@@ -860,13 +2602,14 @@ export interface components {
             address?: string | null;
             /** City */
             city?: string | null;
-            /** Country */
-            country?: string | null;
             /** Logo Url */
             logo_url?: string | null;
-            plan?: components["schemas"]["SubscriptionPlan"] | null;
-            /** Max Students */
-            max_students?: number | null;
+            /** Academic Year Start Month */
+            academic_year_start_month?: number | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Locale */
+            locale?: string | null;
         };
         /** SectionCreate */
         SectionCreate: {
@@ -1013,7 +2756,7 @@ export interface components {
             /** Section Id */
             section_id?: string | null;
             /** @default active */
-            status: components["schemas"]["StudentStatus"];
+            status?: components["schemas"]["StudentStatus"];
             /** Enrolled On */
             enrolled_on?: string | null;
         };
@@ -1107,97 +2850,89 @@ export interface components {
             /** Enrolled On */
             enrolled_on?: string | null;
         };
-        /**
-         * SubscriptionPlan
-         * @description SaaS tier. Drives the seat/student limits enforced by the tenancy service.
-         * @enum {string}
-         */
-        SubscriptionPlan: "trial" | "basic" | "standard" | "premium";
-        /** TokenPair */
-        TokenPair: {
-            /** Access Token */
-            access_token: string;
-            /** Refresh Token */
-            refresh_token: string;
-            /**
-             * Token Type
-             * @default bearer
-             */
-            token_type: string;
-            /**
-             * Expires In
-             * @description Access-token lifetime in seconds.
-             */
-            expires_in: number;
+        /** SubscribeRequest */
+        SubscribeRequest: {
+            /** Plan Code */
+            plan_code: string;
+            /** @default monthly */
+            billing_cycle?: components["schemas"]["BillingCycle"];
         };
-        /**
-         * UserRead
-         * @description The authenticated user's own profile. Never exposes the password hash.
-         */
-        UserRead: {
+        /** SubscriptionRead */
+        SubscriptionRead: {
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** School Id */
-            school_id: string | null;
-            /** Email */
-            email: string;
-            /** Full Name */
-            full_name: string;
-            role: components["schemas"]["UserRole"];
-            status: components["schemas"]["UserStatus"];
-            /** Email Verified */
-            email_verified: boolean;
-            /** Two Factor Enabled */
-            two_factor_enabled: boolean;
-            /** Last Login At */
-            last_login_at: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
+            /** Plan Code */
+            plan_code: string;
+            /** Plan Name */
+            plan_name: string;
+            /** Status */
+            status: string;
+            /** Billing Cycle */
+            billing_cycle: string;
+            /** Trial Ends At */
+            trial_ends_at: string | null;
+            /** Current Period Start */
+            current_period_start: string | null;
+            /** Current Period End */
+            current_period_end: string | null;
+            /** Cancel At Period End */
+            cancel_at_period_end: boolean;
+            /** Cancelled At */
+            cancelled_at: string | null;
         };
         /**
-         * UserRole
-         * @description RBAC roles.
+         * TransferOwnershipRequest
+         * @description Hand the organization to another member.
          *
-         *     The PDF specifies School Admin (full access) and Teacher (limited to assigned
-         *     classes); SUPER_ADMIN is the platform operator who onboards schools.
-         *
-         *     Kept deliberately flat. A full permission matrix (roles -> permissions tables)
-         *     is the right model once there are twelve roles, but at three it is indirection
-         *     with no payoff -- and premature abstraction here would slow every module that
-         *     follows.
-         * @enum {string}
+         *     Identified by membership, not by user id or email: the new owner must ALREADY be
+         *     a member of this organization. Accepting an arbitrary email would let an owner
+         *     transfer to someone outside the org, who would then hold billing rights over data
+         *     they were never granted access to.
          */
-        UserRole: "super_admin" | "school_admin" | "teacher";
-        /**
-         * UserStatus
-         * @enum {string}
-         */
-        UserStatus: "pending_verification" | "active" | "suspended";
-        /** Verify2FARequest */
-        Verify2FARequest: {
+        TransferOwnershipRequest: {
             /**
-             * Email
-             * Format: email
+             * New Owner Membership Id
+             * Format: uuid
              */
-            email: string;
-            /** Code */
-            code: string;
+            new_owner_membership_id: string;
+        };
+        /**
+         * UsageItem
+         * @description One metered limit and its consumption. `allowed = -1` means unlimited.
+         */
+        UsageItem: {
+            /** Key */
+            key: string;
+            /** Current */
+            current: number;
+            /** Allowed */
+            allowed: number;
+            /** Remaining */
+            remaining: number | null;
+            /** Is Unlimited */
+            is_unlimited: boolean;
+            /** Is Exhausted */
+            is_exhausted: boolean;
+        };
+        /**
+         * UsageResponse
+         * @description `GET /org/usage` -- live counters against plan limits.
+         */
+        UsageResponse: {
+            /** Plan Code */
+            plan_code: string;
+            /** Organization Status */
+            organization_status: string;
+            /** Items */
+            items: components["schemas"]["UsageItem"][];
         };
         /** VerifyEmailRequest */
         VerifyEmailRequest: {
-            /**
-             * Email
-             * Format: email
-             */
-            email: string;
-            /** Code */
-            code: string;
+            /** Token */
+            token: string;
         };
     };
     responses: never;
@@ -1304,6 +3039,881 @@ export interface operations {
             };
             /** @description A dependency is unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_public_plans_api_v1_public_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanPublic"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    verify_invitation_api_v1_invitations_verify_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationPreview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    accept_invitation_api_v1_invitations_accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-token-transport"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationAccept"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationAcceptResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    receive_webhook_api_v1_webhooks_payments__gateway_name__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gateway_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_login_api_v1_platform_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-token-transport"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_me_api_v1_platform_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_organizations_api_v1_platform_organizations_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                plan?: string | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummary"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_organization_api_v1_platform_organizations__organization_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_organization_status_api_v1_platform_organizations__organization_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummary"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    override_plan_api_v1_platform_organizations__organization_id__plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummary"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    impersonate_api_v1_platform_organizations__organization_id__impersonate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImpersonateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpersonationGrant"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_plans_api_v1_platform_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanAdminRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_plan_api_v1_platform_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanAdminRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    retire_plan_api_v1_platform_plans__plan_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanAdminRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_plan_api_v1_platform_plans__plan_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanAdminRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    metrics_api_v1_platform_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_audit_logs_api_v1_platform_audit_logs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAuditRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1470,7 +4080,9 @@ export interface operations {
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-token-transport"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1486,7 +4098,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoginResult"];
+                    "application/json": components["schemas"]["LoginResponse"];
                 };
             };
             /** @description Bad Request */
@@ -1519,16 +4131,18 @@ export interface operations {
             };
         };
     };
-    verify_2fa_api_v1_auth_login_verify_2fa_post: {
+    switch_context_api_v1_auth_context_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-token-transport"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Verify2FARequest"];
+                "application/json": components["schemas"]["ContextSwitchRequest"];
             };
         };
         responses: {
@@ -1538,7 +4152,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenPair"];
+                    "application/json": components["schemas"]["MembershipSummary"];
                 };
             };
             /** @description Bad Request */
@@ -1574,15 +4188,13 @@ export interface operations {
     refresh_api_v1_auth_refresh_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-token-transport"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RefreshRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1590,7 +4202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenPair"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Bad Request */
@@ -1630,11 +4242,55 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LogoutRequest"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
+    };
+    logout_all_api_v1_auth_logout_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1794,7 +4450,459 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserRead"];
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_organization_api_v1_org_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_organization_api_v1_org_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    transfer_ownership_api_v1_org_transfer_ownership_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferOwnershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_usage_api_v1_org_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_subscription_api_v1_billing_subscription_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    subscribe_api_v1_billing_subscribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    change_plan_api_v1_billing_change_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancel_subscription_api_v1_billing_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_invoices_api_v1_billing_invoices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceRead"][];
                 };
             };
             /** @description Bad Request */
@@ -1829,14 +4937,7 @@ export interface operations {
     };
     list_schools_api_v1_schools_get: {
         parameters: {
-            query?: {
-                /** @description Filter schools by lifecycle status (e.g. pending_approval). */
-                status_filter?: components["schemas"]["SchoolStatus"] | null;
-                page?: number;
-                size?: number;
-                sort_by?: string | null;
-                sort_dir?: components["schemas"]["SortDirection"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -1849,7 +4950,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_SchoolRead_"];
+                    "application/json": components["schemas"]["SchoolRead"][];
                 };
             };
             /** @description Bad Request */
@@ -1901,55 +5002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SchoolRead"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_current_school_api_v1_schools_current_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SchoolRead"];
+                    "application/json": components["schemas"]["SchoolCreateResponse"];
                 };
             };
             /** @description Bad Request */
@@ -2086,7 +5139,7 @@ export interface operations {
             };
         };
     };
-    approve_school_api_v1_schools__school_id__approve_post: {
+    archive_school_api_v1_schools__school_id__archive_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2136,7 +5189,7 @@ export interface operations {
             };
         };
     };
-    suspend_school_api_v1_schools__school_id__suspend_post: {
+    list_roles_api_v1_schools__school_id__roles_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2153,7 +5206,734 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SchoolRead"];
+                    "application/json": components["schemas"]["RoleRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_role_api_v1_schools__school_id__roles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_role_api_v1_schools__school_id__roles__role_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_role_api_v1_schools__school_id__roles__role_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_role_api_v1_schools__school_id__roles__role_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_role_permissions_api_v1_schools__school_id__roles__role_id__permissions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolePermissionsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_members_api_v1_schools__school_id__members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_member_api_v1_schools__school_id__members__membership_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_member_api_v1_schools__school_id__members__membership_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_invitations_api_v1_schools__school_id__invitations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    send_invitation_api_v1_schools__school_id__invitations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resend_invitation_api_v1_schools__school_id__invitations__invitation_id__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revoke_invitation_api_v1_schools__school_id__invitations__invitation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_audit_logs_api_v1_schools__school_id__audit_logs_get: {
+        parameters: {
+            query?: {
+                action?: string | null;
+                entity_type?: string | null;
+                limit?: number;
+                before?: string | null;
+            };
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_permissions_api_v1_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionCategory"][];
                 };
             };
             /** @description Bad Request */

@@ -1,58 +1,57 @@
-"""Authentication models: User, OtpCode, RefreshToken.
+"""Identity models: User, Session, PasswordResetToken, EmailVerificationToken.
 
 WHY THIS FILE EXISTS
-    Identity is its own module, separate from tenancy. A `User` belongs to a school,
-    but the rules governing credentials, OTP challenges and session revocation are
-    authentication concerns, not tenancy concerns.
+    Identity is global; membership is scoped (spec decision D4). One `users` row per
+    human, with a globally unique email. That human may hold several memberships --
+    teacher at School A, accountant at School B, owner of a different organization
+    entirely -- and each membership is a separate row in a different table.
 
 RESPONSIBILITY
-    Define the identity, challenge and session tables.
+    Define the person, their sessions, and the short-lived tokens that let them
+    prove control of an email address.
 
 INTERACTIONS
-    * `User.school_id` -> `schools.id`.
-    * `modules/auth/service.py` orchestrates these via repositories.
-    * `core/security.py` supplies hashing; `core/otp.py` supplies code digests.
+    * `organizations.owner_user_id` -> `users.id`
+    * `memberships.user_id` -> `users.id`
+    * `sessions.membership_id` -> `memberships.id` (the active context of a session)
+    * `core/security.py` supplies hashing and token digests.
 
 =============================================================================
-THESE THREE TABLES ARE DELIBERATELY *OUTSIDE* TENANT RLS. HERE IS WHY.
+THESE TABLES CARRY NO `organization_id` AND ARE OUTSIDE TENANT RLS. HERE IS WHY.
 =============================================================================
-    Every other table in this system is protected by a policy comparing `school_id`
-    against `app.current_school_id`. These three cannot be, because of a
-    chicken-and-egg problem:
+    Every tenant table is protected by a policy comparing `organization_id` against
+    `app.current_org_id`. These four cannot be, for two independent reasons:
 
-        To set `app.current_school_id`, we need the tenant from the user's JWT.
-        To issue a JWT, we must first look the user up by email.
-        At that moment there is no JWT, so no tenant, so the GUC is unset --
-        and an RLS policy comparing against an unset GUC matches ZERO rows.
+    1. A CHICKEN-AND-EGG PROBLEM AT LOGIN.
+           To set `app.current_org_id` we need the org from the user's token.
+           To issue a token we must first find the user by email.
+           At that moment there is no token, so no org, so the GUC is empty --
+           and a policy comparing against an empty GUC matches ZERO rows.
+       With RLS on `users`, login would be structurally impossible: the query that
+       finds the user would always return nothing. The same applies to
+       `password_reset_tokens` (looked up pre-authentication) and `sessions`
+       (refresh runs with an expired access token).
 
-    With RLS enabled on `users`, login would be structurally impossible: the query
-    that finds the user would always return nothing. The same applies to
-    `otp_codes` (forgot-password looks up by email, pre-authentication) and
-    `refresh_tokens` (refresh runs with an expired access token).
+    2. A USER GENUINELY BELONGS TO NO SINGLE ORGANIZATION.
+       This is the deeper reason, and it is why the design does not merely work
+       around (1). A teacher employed by two client school groups is ONE person with
+       ONE password. Stamping an `organization_id` on their `users` row would force
+       either a duplicate account per employer -- two passwords, two reset flows, two
+       places to revoke on termination -- or an arbitrary choice of which employer
+       "owns" them. Spec decision D4 exists precisely to avoid that, and the target
+       market (Pakistan/Gulf private-school groups) hits the case routinely.
 
     WHAT PROTECTS THEM INSTEAD:
-
-      1. Every tenant-scoped read of `users` -- listing staff, fetching a teacher --
-         goes through `UserRepository`, which applies an explicit `school_id`
-         filter. This is the weaker application-layer guarantee that RLS exists to
-         replace, so it is confined to exactly these three tables and nowhere else.
-
-      2. The auth service never returns a `User` across a tenant boundary: every
-         lookup that could is keyed by email + password, and issues a token scoped
-         to that user's own school.
-
-      3. `otp_codes` and `refresh_tokens` are only ever queried by their own
-         primary key, by `user_id`, or by email + purpose -- never enumerated.
-
-    THE UPGRADE PATH, if this trade stops being acceptable: give the login lookup
-    its own database role (`sms_auth`) with SELECT on a narrow view exposing only
-    (id, email, hashed_password, status, role, school_id), and keep full RLS on the
-    base table. That costs a second connection pool, which is why it is not the
-    starting design -- but it is the correct end state if the app ever handles
-    genuinely adversarial multi-tenant load.
+      * `users` rows are never enumerated by a tenant-facing endpoint. Listing staff
+        goes through `memberships`, which IS tenant-scoped and RLS-protected, and
+        joins out to `users` for display fields only.
+      * `sessions` and the token tables are queried only by primary key, by
+        `user_id`, or by token HASH -- never listed.
+      * Every lookup that could cross a boundary is keyed by a secret the caller
+        already proved they hold: a password, a token digest, or a session id.
 
     THIS IS THE ONLY EXCEPTION IN THE SCHEMA. Every other table gets
-    `setup_tenant_table()` in its migration, no exceptions.
+    `setup_tenant_table()` in the migration, no exceptions.
 """
 
 from __future__ import annotations
@@ -63,124 +62,108 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
-    UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.otp import OtpPurpose
 from app.db.base import Base, str_enum
-from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
-
-
-class UserRole(StrEnum):
-    """RBAC roles.
-
-    The PDF specifies School Admin (full access) and Teacher (limited to assigned
-    classes); SUPER_ADMIN is the platform operator who onboards schools.
-
-    Kept deliberately flat. A full permission matrix (roles -> permissions tables)
-    is the right model once there are twelve roles, but at three it is indirection
-    with no payoff -- and premature abstraction here would slow every module that
-    follows.
-    """
-
-    SUPER_ADMIN = "super_admin"
-    SCHOOL_ADMIN = "school_admin"
-    TEACHER = "teacher"
+from app.db.mixins import CreatedAtMixin, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class UserStatus(StrEnum):
-    PENDING_VERIFICATION = "pending_verification"  # signed up, email not yet verified
+    PENDING = "pending"  # registered, email not yet verified -- login blocked
     ACTIVE = "active"
     SUSPENDED = "suspended"
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
-    """A person who can authenticate."""
+    """A person who can authenticate. Global -- no tenant column. See module docstring."""
 
     __tablename__ = "users"
 
-    # --- Tenancy -----------------------------------------------------------
-    # NOT `TenantMixin`: that mixin declares school_id NOT NULL, and platform
-    # super-admins genuinely belong to no school. Declared by hand so the column
-    # can be nullable while keeping the same FK and index.
-    # No `index=True`: the composite ix_users_school_id_role below already covers
-    # school_id-only lookups via its leftmost prefix. A second index would be dead
-    # weight -- never chosen by the planner, but still maintained on every write.
-    school_id: Mapped[UUID | None] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("schools.id", ondelete="CASCADE"),
-        nullable=True,
-    )
+    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    """CITEXT: `Ayesha@school.pk` and `ayesha@school.pk` are the same human.
 
-    # --- Credentials -------------------------------------------------------
-    # No `index=True`: the partial unique index uq_users_email_active serves every
-    # lookup we actually perform, since we always query live rows
-    # (`WHERE email = ? AND deleted_at IS NULL`).
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
-    """320 chars = RFC 5321 maximum (64 local + @ + 255 domain).
+    Case-insensitivity lives in the COLUMN TYPE, not in a service-layer `.lower()`.
+    A normalisation step only holds for the code paths that remember it; the type
+    holds for raw SQL, seed scripts and every endpoint written later. It also makes
+    the unique index case-insensitive, so the duplicate cannot be created at all.
 
-    UNIQUENESS IS GLOBAL, NOT PER-SCHOOL -- see `__table_args__`. Login takes an
-    email and a password with no school selector, so the email must identify
-    exactly one account. The cost: one person cannot hold accounts at two schools
-    under the same address. For a teacher working at two campuses that is a real
-    limitation; the fix, if it ever bites, is a `user_school_memberships` join
-    table rather than relaxing this constraint.
+    This matters more than usual here: spec §7.2 requires an invitation's email to
+    match the accepting account's email EXACTLY. "Exactly" has to mean
+    case-insensitively, or an invite to `Ayesha@` is unacceptable by `ayesha@`.
 
-    Stored lowercase, normalised by the service on write.
+    UNIQUENESS IS GLOBAL, and that is the point of decision D4 -- one row per human,
+    with memberships doing the scoping.
     """
 
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    """Argon2id digest. The column is named `hashed_password`, never `password`,
-    so that a stray log of the model can never be mistaken for a plaintext leak."""
+    phone: Mapped[str | None] = mapped_column(String(32))
+
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    """NULLABLE until an invitation is accepted.
+
+    An invited teacher has a `users` row the moment the invite is sent? No -- they do
+    not. The row is created on ACCEPT. This column is nullable for the other case:
+    accounts provisioned by an administrator or an import, which exist before their
+    human has ever chosen a password. `can_authenticate` refuses login while it is
+    NULL, so a password-less row is inert rather than an open door.
+    """
 
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+    locale: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
+    timezone: Mapped[str | None] = mapped_column(String(64))
 
-    # --- Authorisation -----------------------------------------------------
-    role: Mapped[UserRole] = mapped_column(
-        str_enum(UserRole, name="role"), nullable=False, index=True
-    )
     status: Mapped[UserStatus] = mapped_column(
         str_enum(UserStatus, name="status"),
         nullable=False,
-        default=UserStatus.PENDING_VERIFICATION,
+        default=UserStatus.PENDING,
         index=True,
     )
 
-    # --- Verification & 2FA ------------------------------------------------
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    two_factor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    """Per-user override on top of the role default.
-
-    Policy (your decision): admins always 2FA, teachers never. `requires_two_factor`
-    below combines the role default with this flag, so a security-conscious teacher
-    can opt in without a schema change.
-    """
-
-    # --- Login protection --------------------------------------------------
-    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    """Lockout after repeated password failures.
-
-    Distinct from the OTP attempt counter: this throttles password guessing,
-    that one throttles code guessing. Both are needed -- an attacker who can
-    brute-force the password never reaches the OTP step, and vice versa.
-    """
-
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # --- Login protection (spec §4.4) --------------------------------------
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    """A SERVER default, not only a Python one -- so a row created by raw SQL (a seed
+    script, an import, a support fix) does not fail on a not-null violation."""
+
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    lockout_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    """How many times this account has been locked, ever.
+
+    Drives the EXPONENTIAL backoff the spec asks for: 15 min, then 30, then 60...
+    A flat 15-minute lock is only a speed bump -- an attacker with a candidate list
+    simply paces themselves at 5 guesses per quarter hour and grinds indefinitely.
+    Doubling makes sustained guessing cost more than it can possibly return, while a
+    genuine user who fumbles their password twice in a year never notices.
+
+    Reset to zero on a successful login, so a legitimate user who once got locked
+    out is not punished for it months later.
+    """
+
+    # --- MFA ---------------------------------------------------------------
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+
     __table_args__ = (
-        # Global uniqueness, but only across LIVE rows: the partial index means a
-        # soft-deleted user's address is released for reuse. Without the WHERE
-        # clause, deleting a teacher would permanently burn their email address.
+        # Global uniqueness across LIVE rows only: a soft-deleted user's address is
+        # released for reuse. Without the WHERE clause, removing a teacher would
+        # permanently burn their email address -- and they may be re-hired.
         #
         # `text()` rather than the mapped attribute because __table_args__ is
         # evaluated during class construction, before `User.deleted_at` exists as a
@@ -191,10 +174,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
         ),
-        Index("ix_users_school_id_role", "school_id", "role"),
     )
-
-    # --- Derived state -----------------------------------------------------
 
     @property
     def is_email_verified(self) -> bool:
@@ -208,126 +188,174 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
 
     @property
     def can_authenticate(self) -> bool:
-        """Whether this account may complete a login right now."""
-        return self.status is UserStatus.ACTIVE and self.deleted_at is None and not self.is_locked
+        """Whether this account may complete a login right now.
 
-    @property
-    def requires_two_factor(self) -> bool:
-        """Role-based 2FA policy.
-
-        Admins hold every student record, fee ledger and parent contact for their
-        school, so they always get an email challenge. Teachers do not, because the
-        PDF requires attendance in under 10 seconds and an inbox round-trip several
-        times a day would make that target unreachable.
+        Checks every gate at once so no call site can verify the password and then
+        forget one of them. `password_hash is not None` is part of it: an
+        invitation-provisioned account with no password must not be loginable.
         """
-        if self.role in (UserRole.SUPER_ADMIN, UserRole.SCHOOL_ADMIN):
-            return True
-        return self.two_factor_enabled
+        return (
+            self.status is UserStatus.ACTIVE
+            and self.deleted_at is None
+            and not self.is_locked
+            and self.password_hash is not None
+        )
 
 
-class OtpCode(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """A one-time code challenge.
+class Session(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
+    """A refresh-token family: one login, one device, one active context.
 
-    Holds the STATE that `core/otp.py` deliberately does not: expiry, attempt count,
-    and single-use consumption. Those three are what make a 6-digit code safe --
-    the cryptography alone is not enough against 10^6 brute force.
+    WHY THIS TABLE EXISTS
+        JWTs are self-validating -- the server needs no state to accept one, which is
+        exactly why a stolen access token cannot be revoked before it expires. The
+        refresh token is the long-lived credential and therefore the one that must be
+        revocable, so it is stored (hashed) rather than signed.
 
-    No soft delete: consumed and expired codes are purged by a scheduled job. They
-    are transient security artefacts, not business records, and keeping them
-    forever grows an index that is on the login hot path.
+    =========================================================================
+    ROTATION WITH REUSE DETECTION -- the reason `family_id` exists
+    =========================================================================
+        Every refresh mints a new token and revokes the presented one. A token is
+        therefore valid exactly once.
+
+        Now suppose an attacker steals a refresh token. Either they use it before the
+        legitimate user does, or after:
+
+          * They use it first. Rotation succeeds for them; the real user's next
+            refresh presents an ALREADY-ROTATED token.
+          * The user uses it first. The attacker's later attempt presents an
+            ALREADY-ROTATED token.
+
+        Either way, one already-rotated token is presented -- which cannot happen in
+        honest operation. That presentation is proof of compromise, and the response
+        is to revoke the entire `family_id`, forcing both parties to re-authenticate.
+        The attacker has a password they do not know; the user does not.
+
+        Without the family, the best available response would be revoking the single
+        replayed token -- leaving the attacker's freshly rotated one alive. The whole
+        mechanism turns on being able to name the lineage, which is what `family_id`
+        is for.
+
+    NO SOFT DELETE: revocation is `revoked_at`, and expired rows are purged by a
+    scheduled job. Sessions are transient security artefacts, not business records,
+    and an unbounded table on the refresh hot path is a performance problem.
     """
 
-    __tablename__ = "otp_codes"
+    __tablename__ = "sessions"
 
     user_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
         index=True,
     )
-    """Nullable so a code can be issued before any user row exists -- and so
-    forgot-password for an unknown address can follow an identical code path to a
-    known one. Identical timing and identical writes are what prevent the endpoint
-    from becoming a user-enumeration oracle."""
+    """The tenant user this session belongs to. NULL for a platform-admin session."""
 
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
-    """Denormalised from `users`.
-
-    Forgot-password and signup-verify both arrive with only an email address, so
-    the lookup must not require a join to a user that may not exist yet.
-    """
-
-    purpose: Mapped[OtpPurpose] = mapped_column(
-        str_enum(OtpPurpose, name="purpose"), nullable=False
+    platform_admin_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("platform_admins.id", ondelete="CASCADE"),
+        index=True,
     )
-    """Bound into `code_hash` cryptographically AND stored here.
+    """The platform operator this session belongs to. NULL for a tenant session.
 
-    The digest binding makes cross-flow replay impossible; storing it as well lets
-    the service reject a mismatch before doing any comparison, and makes the
-    audit trail readable.
+    =========================================================================
+    WHY BOTH PRINCIPAL TYPES SHARE ONE TABLE
+    =========================================================================
+        Platform admins live in their own table -- they belong to no organization and
+        must never be confused with tenant users. But their SESSIONS need exactly the
+        same machinery: opaque refresh tokens, rotation, family-based reuse detection,
+        revocation.
+
+        Duplicating that into a `platform_sessions` table would mean maintaining two
+        copies of the most security-sensitive logic in the system, and the copy used
+        by the most privileged accounts would be the one exercised least in testing.
+        One table, one implementation, one CHECK constraint keeping the two
+        identities from ever mixing.
     """
 
-    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    """HMAC-SHA256 hex digest -- exactly 64 chars. The plaintext code is NEVER
-    persisted and never logged; it exists only in memory and in the sent email."""
+    membership_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("memberships.id", ondelete="CASCADE"),
+        index=True,
+    )
+    """The membership this session is currently acting as (spec §4.2 `mid`).
+
+    NULLABLE for the window between `POST /auth/login` and `POST /auth/context` when
+    a user holds several memberships and has not yet chosen one -- and for platform
+    admin sessions, which have no membership at all.
+
+    A context switch UPDATES this column rather than creating a new session, so
+    "log out everywhere" stays meaningful: one login is one session regardless of how
+    many times the user switched schools inside it.
+    """
+
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    """SHA-256 hex digest -- exactly 64 chars. The raw token is never persisted and
+    never logged; it exists only in the response cookie."""
+
+    family_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False, index=True)
+    """Shared by every token descended from one login. See the class docstring."""
 
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_reason: Mapped[str | None] = mapped_column(String(64))
+    """Why this row died: `rotated`, `logout`, `logout_all`, `reuse_detected`,
+    `password_reset`, `membership_revoked`. Read during incident response -- a burst
+    of `reuse_detected` across many users is a very different signal from one."""
 
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    """Incremented on every wrong guess. At OTP_MAX_ATTEMPTS the code is burned.
-
-    THIS COUNTER IS THE PRIMARY DEFENCE. Without it, 10^6 requests break any
-    6-digit code with certainty.
-    """
-
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    """Set on successful use. Enforces single-use: a code observed in an inbox
-    cannot be replayed after the legitimate user has already redeemed it."""
+    ip: Mapped[str | None] = mapped_column(String(45))  # 45 = max IPv6 length
+    user_agent: Mapped[str | None] = mapped_column(String(400))
 
     __table_args__ = (
-        # The exact lookup the service performs: "newest live code for this address
-        # and flow". Covers verify, and the resend-cooldown check.
-        Index("ix_otp_codes_email_purpose_created", "email", "purpose", "created_at"),
-        Index("ix_otp_codes_expires_at", "expires_at"),  # for the purge job
+        # EXACTLY ONE principal per session. Without this, a row with both ids set
+        # would be a session that is simultaneously a tenant user and a platform
+        # operator -- and whichever branch of the refresh logic ran first would
+        # decide which. A row with neither would be an orphan nobody can revoke.
+        CheckConstraint(
+            "(user_id IS NOT NULL) <> (platform_admin_id IS NOT NULL)",
+            name="exactly_one_principal",
+        ),
+        # The refresh hot path: look the presented token up by digest. Unique because
+        # two live sessions sharing a digest would make rotation ambiguous.
+        Index("uq_sessions_refresh_token_hash", "refresh_token_hash", unique=True),
+        # Revoking a whole family on reuse detection -- one indexed UPDATE.
+        Index("ix_sessions_family_id_revoked_at", "family_id", "revoked_at"),
+        # "Show me this user's active sessions" and `logout-all`.
+        Index("ix_sessions_user_id_revoked_at", "user_id", "revoked_at"),
+        Index("ix_sessions_expires_at", "expires_at"),  # purge job
     )
 
     @property
-    def is_expired(self) -> bool:
-        return self.expires_at <= datetime.now(UTC)
-
-    @property
-    def is_consumed(self) -> bool:
-        return self.consumed_at is not None
-
-    def is_usable(self, max_attempts: int) -> bool:
-        """Whether this code may still be presented.
-
-        The service must check this BEFORE comparing digests. A cryptographic match
-        on an expired, consumed or exhausted code is still a failed authentication.
-        """
-        return not self.is_expired and not self.is_consumed and self.attempts < max_attempts
+    def is_active(self) -> bool:
+        return self.revoked_at is None and self.expires_at > datetime.now(UTC)
 
 
-class RefreshToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """A persisted refresh-token handle, enabling revocation.
+class _SingleUseToken(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
+    """Shared shape for emailed, single-use, expiring tokens.
 
-    WHY THIS TABLE EXISTS AT ALL
-        JWTs are self-validating: the server needs no state to accept one, which is
-        exactly why a stolen token cannot normally be revoked before it expires.
-        Storing the `jti` lets us invalidate sessions on demand.
-
-        Concretely, the flow you asked for requires it: password reset MUST kill
-        every existing session. Otherwise an attacker who obtained a refresh token
-        keeps their access even after the victim resets their password -- which
-        defeats the entire point of the reset.
-
-    Only REFRESH tokens are tracked, never access tokens. Access tokens live 30
-    minutes and checking them against the database on every request would discard
-    the performance benefit of stateless JWTs. The 30-minute window is the accepted
-    trade; shortening ACCESS_TOKEN_EXPIRE_MINUTES narrows it.
+    Abstract: the two concrete subclasses below get their own tables. They are kept
+    separate rather than unified behind a `purpose` column so that a bug in the
+    password-reset flow cannot consume an email-verification token, and so each can
+    be purged on its own retention schedule.
     """
 
-    __tablename__ = "refresh_tokens"
+    __abstract__ = True
+
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def is_usable(self) -> bool:
+        """Single-use AND time-limited. Both must be checked before any comparison.
+
+        A cryptographic match on an expired or already-consumed token is still a
+        failed authentication -- and a reset link sitting in an old inbox is exactly
+        the token an attacker with mailbox access would replay.
+        """
+        return self.used_at is None and self.expires_at > datetime.now(UTC)
+
+
+class PasswordResetToken(_SingleUseToken):
+    __tablename__ = "password_reset_tokens"
 
     user_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
@@ -336,23 +364,23 @@ class RefreshToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
 
-    jti: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
-    """The token's unique id claim. We store the identifier, not the token itself --
-    possessing this table must not let anyone mint or replay a session."""
-
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    # Captured for the "active sessions" screen and for security alerting on an
-    # unfamiliar sign-in. Kept short: this is personal data under GDPR-style rules.
-    user_agent: Mapped[str | None] = mapped_column(String(400))
-    ip_address: Mapped[str | None] = mapped_column(String(45))  # 45 = max IPv6 length
-
     __table_args__ = (
-        UniqueConstraint("jti", name="uq_refresh_tokens_jti"),
-        Index("ix_refresh_tokens_user_id_revoked_at", "user_id", "revoked_at"),
+        Index("uq_password_reset_tokens_token_hash", "token_hash", unique=True),
+        Index("ix_password_reset_tokens_expires_at", "expires_at"),
     )
 
-    @property
-    def is_active(self) -> bool:
-        return self.revoked_at is None and self.expires_at > datetime.now(UTC)
+
+class EmailVerificationToken(_SingleUseToken):
+    __tablename__ = "email_verification_tokens"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        Index("uq_email_verification_tokens_token_hash", "token_hash", unique=True),
+        Index("ix_email_verification_tokens_expires_at", "expires_at"),
+    )
