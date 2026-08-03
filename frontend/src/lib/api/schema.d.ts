@@ -345,6 +345,35 @@ export interface paths {
         patch: operations["update_plan_api_v1_platform_plans__plan_id__patch"];
         trace?: never;
     };
+    "/api/v1/platform/plans/{plan_id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan Impact
+         * @description Dry-run a limit change: who is on this plan, and who would be pushed over.
+         *
+         *     POST rather than GET despite being read-only, because the proposed limits are a
+         *     structured body. Encoding six integers into a query string would work and would
+         *     read badly at every call site.
+         *
+         *     NOTHING IS WRITTEN. The console calls this before a save so the operator sees the
+         *     consequence -- named organizations, not a count -- while they can still change
+         *     their mind. See `PlatformService.plan_impact` for why that matters more here than
+         *     anywhere else in the console.
+         */
+        post: operations["plan_impact_api_v1_platform_plans__plan_id__impact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/metrics": {
         parameters: {
             query?: never;
@@ -1296,6 +1325,27 @@ export interface components {
             detail?: string;
         };
         /**
+         * AffectedOrganization
+         * @description One organization the proposed limits would push into `over_limit`.
+         *
+         *     The field is named `organization_id` rather than aliased to `id`: an alias would
+         *     make the Python attribute and the JSON property disagree, and every reader of the
+         *     generated TypeScript would then have to know about the mapping.
+         */
+        AffectedOrganization: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Breaches */
+            breaches: components["schemas"]["PlanLimitBreach"][];
+        };
+        /**
          * AuditLogRead
          * @description One audit entry.
          *
@@ -2131,6 +2181,59 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * PlanImpactRequest
+         * @description Proposed limits, for a dry run before saving (spec-adjacent, §6.2's spirit).
+         *
+         *     Merged over the plan's CURRENT limits, matching what PATCH does — so an operator
+         *     adjusting one field gets an impact report for exactly the change they are about
+         *     to make, not for a plan with five limits blanked out.
+         *
+         *     Optional: omitting it reports the plan's current state, which is what the retire
+         *     flow needs.
+         */
+        PlanImpactRequest: {
+            /** Limits */
+            limits?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * PlanImpactResponse
+         * @description The blast radius of a plan change.
+         *
+         *     `subscriber_count` is everyone on the plan; `would_exceed` is the subset the
+         *     proposed limits would push into `over_limit` — where their existing records stay
+         *     readable but new ones are refused with a 402.
+         *
+         *     Shown BEFORE the save, because that transition is invisible at the moment it is
+         *     caused and surfaces days later as support tickets from schools that cannot enrol.
+         */
+        PlanImpactResponse: {
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Plan Code */
+            plan_code: string;
+            /** Subscriber Count */
+            subscriber_count: number;
+            /** Would Exceed */
+            would_exceed: components["schemas"]["AffectedOrganization"][];
+        };
+        /**
+         * PlanLimitBreach
+         * @description One organization exceeding one proposed limit.
+         */
+        PlanLimitBreach: {
+            /** Key */
+            key: string;
+            /** Current */
+            current: number;
+            /** Allowed */
+            allowed: number;
         };
         /** PlanOverrideRequest */
         PlanOverrideRequest: {
@@ -3790,6 +3893,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanAdminRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    plan_impact_api_v1_platform_plans__plan_id__impact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanImpactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanImpactResponse"];
                 };
             };
             /** @description Bad Request */

@@ -6,6 +6,10 @@ import type {
   InvoiceRead,
   MemberRead,
   MemberUpdate,
+  PlanAdminRead,
+  PlanImpactResponse,
+  PlanPatch,
+  PlanWrite,
   OrganizationRead,
   OrganizationUpdate,
   PermissionCategory,
@@ -98,6 +102,23 @@ export const billing = {
     api.post<SubscriptionRead>("/billing/change-plan", body),
   cancel: () => api.post<SubscriptionRead>("/billing/cancel", { at_period_end: true }),
   invoices: () => api.get<InvoiceRead[]>("/billing/invoices"),
+};
+
+// --- Platform console ------------------------------------------------------
+//
+// Only the plan-management calls live here; the console's read endpoints are
+// fetched by Server Components through `serverGet`. These are the mutations, which
+// necessarily run in the browser.
+export const platformPlans = {
+  list: () => api.get<PlanAdminRead[]>("/platform/plans"),
+  create: (body: PlanWrite) => api.post<PlanAdminRead>("/platform/plans", body),
+  update: (id: string, body: PlanPatch) =>
+    api.patch<PlanAdminRead>(`/platform/plans/${id}`, body),
+  /** Dry run. Nothing is written; see `PlanImpactDialog` for why this exists. */
+  impact: (id: string, limits: Record<string, number> | null) =>
+    api.post<PlanImpactResponse>(`/platform/plans/${id}/impact`, { limits }),
+  /** Retire — never a hard delete. Existing subscribers keep their terms. */
+  retire: (id: string) => api.delete<PlanAdminRead>(`/platform/plans/${id}`),
 };
 
 // --- Audit -----------------------------------------------------------------

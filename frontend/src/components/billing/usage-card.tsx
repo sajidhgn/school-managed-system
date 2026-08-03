@@ -12,17 +12,25 @@ import { cn } from "@/lib/utils";
  * word, never as a bar: a progress bar for an unbounded quantity has no meaningful
  * fill, and showing one at 0% suggests the opposite of what is true.
  */
-export function UsageCard({ usage }: { usage: UsageResponse }) {
+export function UsageCard({
+  usage,
+  exhaustedLabel = "Limit reached — new records are paused until you upgrade.",
+}: {
+  usage: UsageResponse;
+  /** Passed in rather than hooked: this renders inside Server Components, which
+   *  read the catalog with `getTranslations()` rather than a client context. */
+  exhaustedLabel?: string;
+}) {
   return (
     <div className="grid gap-4 rounded-xl border border-border bg-card p-5 sm:grid-cols-2">
       {usage.items.map((item) => (
-        <UsageBar key={item.key} item={item} />
+        <UsageBar key={item.key} item={item} exhaustedLabel={exhaustedLabel} />
       ))}
     </div>
   );
 }
 
-function UsageBar({ item }: { item: UsageItem }) {
+function UsageBar({ item, exhaustedLabel }: { item: UsageItem; exhaustedLabel: string }) {
   const label = USAGE_LABELS[item.key] ?? item.key;
 
   if (item.is_unlimited) {
@@ -75,7 +83,7 @@ function UsageBar({ item }: { item: UsageItem }) {
       </div>
       {item.is_exhausted ? (
         <p className="mt-1.5 text-xs text-destructive">
-          Limit reached — new records are paused until you upgrade.
+          {exhaustedLabel}
         </p>
       ) : null}
     </div>

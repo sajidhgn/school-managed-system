@@ -68,7 +68,9 @@ from app.modules.billing.models import (
 from app.modules.platform_admin.models import (
     REQUIRED_FEATURE_KEYS,
     REQUIRED_LIMIT_KEYS,
+    UNLIMITED,
     Plan,
+    PlanCode,
     PlatformAdmin,
 )
 from app.modules.tenancy.models import Organization, OrganizationStatus, School
@@ -270,12 +272,19 @@ class PlatformService:
         leverage no software vendor should hold, and in several jurisdictions the
         records are ones the school is legally required to be able to produce.
         """
+        # Read across tenants to find it, then bind THAT organization for the write --
+        # spec §2.2's rule, and the only shape the `WITH CHECK` policy accepts. See
+        # `override_plan` for the full reasoning.
         await bind_tenant(self.session, None, platform_admin=True)
         try:
             organization = await self.session.get(Organization, organization_id)
             if organization is None:
                 raise NotFoundError("Organization not found.")
+        finally:
+            await bind_tenant(self.session, None)
 
+        await bind_tenant(self.session, organization_id)
+        try:
             previous = organization.status
             organization.status = (
                 OrganizationStatus.SUSPENDED if suspend else OrganizationStatus.ACTIVE
@@ -299,6 +308,8 @@ class PlatformService:
                 },
                 ip=ip,
             )
+            # Flushed before the GUC is cleared -- see `override_plan`.
+            await self.session.flush()
             return organization
         finally:
             await bind_tenant(self.session, None)
@@ -317,7 +328,27 @@ class PlatformService:
         therefore unreachable through self-service. Bypasses the gateway entirely:
         an enterprise contract is invoiced offline, so there is no recurring charge
         to set up.
+
+        =====================================================================
+        THE WRITE IS BOUND TO THE TARGET ORGANIZATION, NOT TO THE ADMIN GUC
+        =====================================================================
+            Spec §2.2 spells this out: "a platform admin may read across tenants, not
+            write into them, except through dedicated admin endpoints that set
+            `app.current_org_id` to the target org first."
+
+            This is one of those endpoints, and the reason is enforced by the
+            database rather than by convention: the `WITH CHECK` half of every RLS
+            policy has NO platform-admin branch, so an UPDATE attempted with only
+            `is_platform_admin = on` matches zero rows and SQLAlchemy raises
+            `StaleDataError`. There is no way to write into a tenant without naming
+            it.
+
+            The practical effect is that the change lands inside the customer's own
+            tenant scope and appears in their audit trail, rather than materialising
+            from nowhere.
         """
+        # Reads first, with the cross-tenant escape armed: the plan is global and the
+        # subscription belongs to an organization this admin is not a member of.
         await bind_tenant(self.session, None, platform_admin=True)
         try:
             plan = (
@@ -333,7 +364,13 @@ class PlatformService:
             ).scalar_one_or_none()
             if subscription is None:
                 raise NotFoundError("That organization has no subscription.")
+        finally:
+            await bind_tenant(self.session, None)
 
+        # Now bind the TARGET organization for the writes. Everything below is an
+        # ordinary tenant write that the policy accepts on its own terms.
+        await bind_tenant(self.session, organization_id)
+        try:
             previous_plan_id = subscription.plan_id
             subscription.plan_id = plan.id
             subscription.status = SubscriptionStatus.ACTIVE
@@ -366,6 +403,14 @@ class PlatformService:
                 metadata={"plan_code": plan_code},
                 ip=ip,
             )
+
+            # FLUSHED BEFORE THE GUC IS CLEARED, and that ordering is load-bearing.
+            #
+            # SQLAlchemy defers the UPDATE until flush time. Without this, the flush
+            # happens at commit -- after `finally` has unbound the organization -- so
+            # the statement runs with no tenant, the RLS policy matches zero rows, and
+            # it surfaces as a baffling `StaleDataError` far from its cause.
+            await self.session.flush()
             return subscription
         finally:
             await bind_tenant(self.session, None)
@@ -442,9 +487,139 @@ class PlatformService:
                 details={"invalid": sorted(non_integer)},
             )
 
+    @staticmethod
+    def _assert_not_the_free_plan(plan: Plan, action: str) -> None:
+        """The `free` plan cannot be retired or deactivated.
+
+        =====================================================================
+        THIS ONE BREAKS SIGNUP ENTIRELY, AND SILENTLY
+        =====================================================================
+            `ensure_free_subscription` -- which runs when a new user verifies their
+            email -- looks up `code = 'free' AND is_active = true`. Deactivate that
+            row and the lookup finds nothing, so every verification from that moment
+            raises, and every new organization is stranded between "account created"
+            and "can sign in".
+
+            Nothing about the operator's action would suggest that. They retired an
+            unused-looking plan; the damage lands on people who have not signed up
+            yet, so there is no existing customer to complain and no error in any
+            dashboard. It surfaces days later as "nobody can register".
+
+            Refusing outright is right rather than warning: there is no legitimate
+            reason to retire the plan that every organization starts on. Renaming or
+            re-pricing it is still allowed.
+        """
+        if plan.code == PlanCode.FREE.value:
+            raise ConflictError(
+                f"The free plan cannot be {action}. Every new organization is placed "
+                "on it at signup, so disabling it would stop registrations from "
+                "completing. You can still rename or re-price it.",
+                code="FREE_PLAN_PROTECTED",
+            )
+
     async def list_plans(self) -> list[Plan]:
         rows = await self.session.execute(select(Plan).order_by(Plan.sort_order, Plan.code))
         return list(rows.scalars().all())
+
+    async def plan_impact(
+        self, *, plan_id: UUID, proposed_limits: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Who would be affected by changing this plan's limits, and how.
+
+        =====================================================================
+        WHY THIS EXISTS AT ALL
+        =====================================================================
+            Editing a plan limit is the single most dangerous thing in the operator
+            console, and it is dangerous in a way that is INVISIBLE at the moment of
+            the mistake.
+
+            Lowering `max_students` from 2500 to 250 succeeds instantly, changes one
+            JSONB value, and produces no error. What it actually does is push every
+            organization above the new figure into `over_limit`, where their next
+            enrolment is refused with a 402. Nobody finds out until a school tries to
+            admit a student and support tickets start arriving — by which point the
+            operator has forgotten they touched it.
+
+            So the console asks this endpoint first and shows the answer before the
+            save. It is the difference between "are you sure?" — which everyone
+            clicks through — and "this will block new records for 3 organizations,
+            named", which people actually read.
+
+        =====================================================================
+        COMPUTED SERVER-SIDE, BECAUSE ONLY THE SERVER HAS THE NUMBERS
+        =====================================================================
+            The console could compare a couple of counters it already lists per
+            organization, but that covers three of the six metered limits and would
+            silently miss `max_custom_roles` and `storage_mb`. Doing it here means the
+            answer is complete and the console cannot drift from it.
+
+        `proposed_limits` is merged over the plan's current limits, matching what
+        `update_plan` does — so an operator adjusting one field gets an impact report
+        for exactly the change they are about to make. Passing None reports the
+        current state, which is what the retire flow wants.
+        """
+        plan = await self.session.get(Plan, plan_id)
+        if plan is None:
+            raise NotFoundError("Plan not found.")
+
+        limits = {**plan.limits, **(proposed_limits or {})}
+
+        await bind_tenant(self.session, None, platform_admin=True)
+        try:
+            rows = (
+                await self.session.execute(
+                    select(Organization, OrganizationUsage)
+                    .join(Subscription, Subscription.organization_id == Organization.id)
+                    .outerjoin(
+                        OrganizationUsage,
+                        OrganizationUsage.organization_id == Organization.id,
+                    )
+                    .where(
+                        Subscription.plan_id == plan_id,
+                        Organization.deleted_at.is_(None),
+                    )
+                    .order_by(Organization.name)
+                )
+            ).all()
+
+            affected: list[dict[str, Any]] = []
+            for organization, usage in rows:
+                if usage is None:
+                    continue
+
+                breaches = [
+                    {
+                        "key": key,
+                        "current": getattr(usage, counter),
+                        "allowed": int(limits[key]),
+                    }
+                    for key, counter in OrganizationUsage.LIMIT_TO_COUNTER.items()
+                    # `-1` is unlimited and can never be breached. A missing key is a
+                    # malformed plan, which `_validate_plan_payload` rejects before a
+                    # save -- so it is skipped here rather than crashing the preview.
+                    if key in limits
+                    and int(limits[key]) != UNLIMITED
+                    and getattr(usage, counter) > int(limits[key])
+                ]
+
+                if breaches:
+                    affected.append(
+                        {
+                            "organization_id": organization.id,
+                            "name": organization.name,
+                            "slug": organization.slug,
+                            "breaches": breaches,
+                        }
+                    )
+
+            return {
+                "plan_id": plan_id,
+                "plan_code": plan.code,
+                "subscriber_count": len(rows),
+                "would_exceed": affected,
+            }
+        finally:
+            await bind_tenant(self.session, None)
 
     async def create_plan(self, *, admin_id: UUID, data: dict[str, Any]) -> Plan:
         self._validate_plan_payload(data["limits"], data["features"])
@@ -483,6 +658,12 @@ class PlatformService:
         merged_features = {**plan.features, **changes.get("features", {})}
         self._validate_plan_payload(merged_limits, merged_features)
 
+        # Deactivating the free plan through a PATCH is the same catastrophe as
+        # retiring it, reached by a different route. Guarded in both places rather
+        # than only on the obvious one.
+        if changes.get("is_active") is False:
+            self._assert_not_the_free_plan(plan, "deactivated")
+
         scalar_changes = {k: v for k, v in changes.items() if k not in ("limits", "features")}
         for field, value in scalar_changes.items():
             setattr(plan, field, value)
@@ -510,6 +691,8 @@ class PlatformService:
         plan = await self.session.get(Plan, plan_id)
         if plan is None:
             raise NotFoundError("Plan not found.")
+
+        self._assert_not_the_free_plan(plan, "retired")
 
         subscribers = (
             await self.session.execute(

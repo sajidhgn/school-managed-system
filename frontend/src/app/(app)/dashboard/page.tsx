@@ -14,6 +14,7 @@ import {
   type UsageResponse,
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
+import { getTranslations } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -30,7 +31,7 @@ export const metadata: Metadata = { title: "Dashboard" };
  * system look broken.
  */
 export default async function DashboardPage() {
-  const user = await requireUser();
+  const [user, t] = await Promise.all([requireUser(), getTranslations()]);
   const schoolId = user.school_id;
 
   const [schools, usage, members, invitations] = await Promise.all([
@@ -52,28 +53,28 @@ export default async function DashboardPage() {
     <div className="mx-auto w-full max-w-5xl">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Welcome back, {user.full_name.split(" ")[0]}
+          {t.dashboard.welcome}, {user.full_name.split(" ")[0]}
         </h1>
         <p className="mt-1 text-muted-foreground">
           {user.school_name
             ? `${user.school_name} · ${user.role_code}`
-            : `${user.organization_name} · organization view`}
+            : `${user.organization_name} · ${t.dashboard.organizationView}`}
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Can permission={PERMISSIONS.schoolRead}>
-          <StatCard icon={Building2} label="Schools" value={schools.length} href="/schools" />
+          <StatCard icon={Building2} label={t.nav.schools} value={schools.length} href="/schools" />
         </Can>
         {schoolId ? (
           <>
             <Can permission={PERMISSIONS.memberRead}>
-              <StatCard icon={Users} label="Staff" value={members.length} href="/members" />
+              <StatCard icon={Users} label={t.nav.members} value={members.length} href="/members" />
             </Can>
             <Can permission={PERMISSIONS.invitationRead}>
               <StatCard
                 icon={Mail}
-                label="Pending invitations"
+                label={t.nav.invitations}
                 value={pendingInvites.length}
                 href="/invitations"
               />
@@ -85,7 +86,7 @@ export default async function DashboardPage() {
       {usage ? (
         <section className="mt-8">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            Plan usage · {usage.plan_code}
+            {t.dashboard.planUsage} · {usage.plan_code}
           </h2>
           <UsageCard usage={usage} />
         </section>
@@ -96,12 +97,12 @@ export default async function DashboardPage() {
           a grid of zeroes. */}
       {schools.length === 0 && hasPermission(user, PERMISSIONS.schoolCreate) ? (
         <section className="mt-8 rounded-xl border border-dashed border-border p-8 text-center">
-          <h2 className="font-medium">Create your first school</h2>
+          <h2 className="font-medium">{t.dashboard.firstSchoolTitle}</h2>
           <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground text-pretty">
-            You&apos;ll be set up as its principal, and can invite staff straight away.
+            {t.dashboard.firstSchoolBody}
           </p>
           <Button asChild className="mt-5">
-            <Link href="/onboarding">Get started</Link>
+            <Link href="/onboarding">{t.dashboard.getStarted}</Link>
           </Button>
         </section>
       ) : null}

@@ -12,6 +12,7 @@ import { RoleFormDialog } from "@/components/rbac/role-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { roles as rolesApi } from "@/lib/api/resources";
 import { PERMISSIONS, type PermissionCategory, type RoleRead } from "@/lib/api/types";
@@ -47,6 +48,7 @@ export function RolesView({
   actorPermissions: string[];
 }) {
   const router = useRouter();
+  const { t } = useTranslations();
   const [selectedId, setSelectedId] = useState<string | null>(
     roles.find((r) => r.school_id === schoolId)?.id ?? roles[0]?.id ?? null,
   );
@@ -84,13 +86,13 @@ export function RolesView({
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
-        title="Roles"
-        description="What each kind of staff member can do in this school."
+        title={t.roles.title}
+        description={t.roles.subtitle}
         actions={
           <Can permission={[PERMISSIONS.roleCreate, PERMISSIONS.roleAssignPermissions]}>
             <Button onClick={() => setCreating(true)}>
               <Plus className="size-4" aria-hidden />
-              New role
+              {t.roles.newRole}
             </Button>
           </Can>
         }
@@ -126,8 +128,8 @@ export function RolesView({
               <div className="min-w-0 flex-1">
                 <h2 className="flex items-center gap-2 text-lg font-medium">
                   {selected.name}
-                  {selected.is_system ? <Badge variant="neutral">System</Badge> : null}
-                  {isOrgLevel ? <Badge variant="outline">Organization</Badge> : null}
+                  {selected.is_system ? <Badge variant="neutral">{t.roles.systemBadge}</Badge> : null}
+                  {isOrgLevel ? <Badge variant="outline">{t.roles.organizationBadge}</Badge> : null}
                 </h2>
                 {selected.description ? (
                   <p className="mt-1 text-sm text-muted-foreground">{selected.description}</p>
@@ -143,7 +145,7 @@ export function RolesView({
                     onClick={() => setDeleting(selected)}
                   >
                     <Trash2 className="size-4" aria-hidden />
-                    Delete
+                    {t.common.delete}
                   </Button>
                 </Can>
               ) : null}
@@ -154,15 +156,12 @@ export function RolesView({
                 <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
                 <span className="text-pretty">
                   {/* Spec §5.3 rule 2, explained rather than merely enforced. */}
-                  This role is managed by the platform and cannot be edited — including by
-                  someone who holds it. That is what stops a principal from widening their own
-                  access or the owner&apos;s.
+                  {t.roles.lockedExplain}
                 </span>
               </p>
             ) : isOrgLevel ? (
               <p className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground text-pretty">
-                This is an organization-level role. Edit it from the organization settings, not
-                from a single school.
+                {t.roles.orgLevelExplain}
               </p>
             ) : (
               <PermissionMatrix
@@ -175,7 +174,7 @@ export function RolesView({
           </section>
         ) : (
           <section className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-            Select a role to see what it grants.
+            {t.roles.selectPrompt}
           </section>
         )}
       </div>
@@ -191,8 +190,8 @@ export function RolesView({
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title={`Delete ${deleting?.name}?`}
-        description="Anyone still holding this role must be reassigned first — the server will tell you how many if so."
+        title={deleting ? `${t.common.delete} ${deleting.name}?` : t.roles.deleteTitle}
+        description={t.roles.deleteBody}
         confirmLabel="Delete role"
         variant="destructive"
         loading={busy}

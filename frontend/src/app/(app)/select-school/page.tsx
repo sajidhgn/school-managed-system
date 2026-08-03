@@ -28,10 +28,9 @@ export default async function SelectSchoolPage() {
 
   return (
     <div className="mx-auto w-full max-w-md py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Choose a school</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t.selectSchool.title}</h1>
       <p className="mt-2 text-muted-foreground text-pretty">
-        That page is scoped to a single campus. Pick the one you want to work in — you can
-        switch again from the header at any time.
+        {t.selectSchool.body}
       </p>
       <div className="mt-8 rounded-xl border border-border bg-card p-6">
         <ContextPicker memberships={schoolMemberships} redirectTo="/dashboard" />

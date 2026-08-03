@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { schools as schoolsApi } from "@/lib/api/resources";
 import {
@@ -53,6 +54,7 @@ export function SchoolsView({
   schoolSeats: UsageItem | null;
 }) {
   const router = useRouter();
+  const { t } = useTranslations();
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -74,8 +76,8 @@ export function SchoolsView({
       toast({
         title: `${result.school.name} created.`,
         description: result.principal_granted
-          ? "You are its principal."
-          : "Invite someone to run it, or assign a principal from the members page.",
+          ? t.schools.createdPrincipal
+          : t.schools.createdNoPrincipal,
       });
       form.reset();
       setCreating(false);
@@ -100,13 +102,13 @@ export function SchoolsView({
   return (
     <div className="mx-auto w-full max-w-4xl">
       <PageHeader
-        title="Schools"
-        description="The campuses in your organization."
+        title={t.schools.title}
+        description={t.schools.subtitle}
         actions={
           <Can permission={PERMISSIONS.schoolCreate}>
             <Button onClick={() => setCreating(true)} disabled={exhausted}>
               <Plus className="size-4" aria-hidden />
-              New school
+              {t.schools.newSchool}
             </Button>
           </Can>
         }
@@ -121,11 +123,11 @@ export function SchoolsView({
       {schools.length === 0 ? (
         <EmptyState
           icon={Building2}
-          title="No schools yet"
-          description="Create your first campus to start adding staff and students."
+          title={t.schools.emptyTitle}
+          description={t.schools.emptyBody}
           action={
             <Can permission={PERMISSIONS.schoolCreate}>
-              <Button onClick={() => setCreating(true)}>Create school</Button>
+              <Button onClick={() => setCreating(true)}>{t.onboarding.create}</Button>
             </Can>
           }
         />
@@ -156,26 +158,26 @@ export function SchoolsView({
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New school</DialogTitle>
+            <DialogTitle>{t.schools.newSchool}</DialogTitle>
             <DialogDescription>
-              Its roles are created automatically. You can invite staff straight after.
+              {t.schools.rolesCreated}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={form.handleSubmit(create)} className="grid gap-4" noValidate>
-            <Field label="School name" htmlFor="name" error={form.formState.errors.name} required>
+            <Field label={t.onboarding.schoolName} htmlFor="name" error={form.formState.errors.name} required>
               <Input autoFocus {...form.register("name")} />
             </Field>
             <Field
-              label="Short code"
+              label={t.onboarding.schoolCode}
               htmlFor="code"
               error={form.formState.errors.code}
-              hint="Appears on ID cards and reports, e.g. NORTH"
+              hint={t.onboarding.schoolCodeHint}
               required
             >
               <Input className="uppercase" {...form.register("code")} />
             </Field>
-            <Field label="City" htmlFor="city" error={form.formState.errors.city}>
+            <Field label={t.onboarding.city} htmlFor="city" error={form.formState.errors.city}>
               <Input {...form.register("city")} />
             </Field>
 
@@ -187,10 +189,10 @@ export function SchoolsView({
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreating(false)}>
-                Cancel
+                {t.common.cancel}
               </Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>
-                Create school
+                {t.onboarding.create}
               </Button>
             </DialogFooter>
           </form>

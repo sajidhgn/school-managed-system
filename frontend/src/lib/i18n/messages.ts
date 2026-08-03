@@ -3,21 +3,44 @@ import type { Locale } from "./config";
 /**
  * Translation catalogs.
  *
- * A plain nested object rather than a library, deliberately. At this size, `next-intl`
- * or `react-i18next` would add a provider, a build step, an async loader and a set of
- * hooks to solve a problem that is currently one object lookup. The seam is what
- * matters — every user-facing string goes through `t()` — and swapping the
- * implementation later touches this file and nothing else.
+ * A plain nested object rather than a library, deliberately. At this size,
+ * `next-intl` or `react-i18next` would add a provider, a build step, an async loader
+ * and a set of hooks to solve a problem that is currently one object lookup. The
+ * seam is what matters — every user-facing string goes through `t` — and swapping
+ * the implementation later touches this file and nothing else.
  *
  * The English catalog is the source of truth; `Messages` is derived from it, so a key
  * missing from `ur` is a TYPE ERROR rather than a string that silently renders in the
  * wrong language.
+ *
+ * =============================================================================
+ * ON THE URDU TRANSLATIONS
+ * =============================================================================
+ *   Short, high-frequency strings — buttons, labels, nav, statuses — are translated
+ *   with reasonable confidence and are safe to ship.
+ *
+ *   The longer explanatory sentences (billing consequences, permission warnings) are
+ *   translated too, but they carry nuance that deserves a native reviewer before a
+ *   production launch into an Urdu-speaking market. They are marked with
+ *   `REVIEW:` comments below.
+ *
+ *   They are NOT left in English: a half-translated interface is more confusing than
+ *   a fully translated one with imperfect phrasing, and the type system would not let
+ *   them be omitted anyway. The comments are there so a reviewer knows where to look
+ *   rather than re-reading everything.
+ *
+ * WHAT IS DELIBERATELY NOT IN HERE
+ *   Data from the API — role names, plan names, school names, permission
+ *   descriptions — is customer- or catalog-authored and is rendered as-is. A school
+ *   that names a role "Head of Year" wants to see that string, not a translation of
+ *   it. Only the application's own chrome lives here.
  */
 
 const en = {
   common: {
     appName: "EduCloud",
     save: "Save",
+    saving: "Saving…",
     cancel: "Cancel",
     delete: "Delete",
     edit: "Edit",
@@ -35,13 +58,23 @@ const en = {
     unlimited: "Unlimited",
     perMonth: "/mo",
     perYear: "/yr",
+    actions: "Actions",
+    status: "Status",
+    name: "Name",
+    email: "Email",
+    role: "Role",
+    you: "You",
+    tryAgain: "Please try again.",
+    somethingWrong: "That didn't work",
   },
   nav: {
     dashboard: "Dashboard",
     schools: "Schools",
     students: "Students",
     classes: "Classes",
+    academics: "Academics",
     people: "People & access",
+    organization: "Organization",
     members: "Members",
     roles: "Roles",
     invitations: "Invitations",
@@ -58,6 +91,8 @@ const en = {
       "Run every campus from one place. Students, staff, roles and billing — with the data separation a school actually needs.",
     heroCta: "Start free",
     heroSecondary: "See pricing",
+    heroNote: "Free for one school and 50 students. No card required.",
+    builtFor: "Built for school groups",
     pricingTitle: "Simple, predictable pricing",
     pricingSubtitle: "Start free. Upgrade when you add your second campus.",
     monthly: "Monthly",
@@ -66,6 +101,10 @@ const en = {
     choosePlan: "Choose plan",
     currentPlan: "Current plan",
     contactSales: "Contact sales",
+    mostPopular: "Most popular",
+    readyTitle: "Ready when you are",
+    readyBody:
+      "Create your organization, add your first school, and invite your staff. It takes a few minutes.",
   },
   auth: {
     loginTitle: "Sign in",
@@ -74,18 +113,29 @@ const en = {
     signupSubtitle: "Free to start. No card required.",
     email: "Email address",
     password: "Password",
+    confirmPassword: "Confirm password",
+    passwordHint: "At least 10 characters. A phrase of unrelated words works best.",
     fullName: "Full name",
     organizationName: "Organization name",
+    organizationHint: "The trust, group or school company that owns your campuses.",
     country: "Country",
     forgotPassword: "Forgot your password?",
     noAccount: "Don't have an account?",
     haveAccount: "Already have an account?",
     selectContext: "Choose where to sign in",
     selectContextHint: "You belong to more than one school. Pick one to continue.",
+    switchContext: "Switch context",
     checkEmail: "Check your email",
     verifyEmailSent:
       "We sent you a verification link. Follow it to finish setting up your account.",
     resetSent: "If an account exists for that address, we have sent a reset link.",
+    resetTitle: "Reset your password",
+    resetSubtitle: "We'll email you a link to choose a new one.",
+    sendResetLink: "Send reset link",
+    newPassword: "New password",
+    updatePassword: "Update password",
+    signedOutEverywhere: "Your password is updated, and you have been signed out everywhere else.",
+    signOutAllDevices: "Sign out on all devices",
   },
   invite: {
     title: "You have been invited",
@@ -95,31 +145,163 @@ const en = {
     signInToAccept: "Sign in to accept",
     expired: "This invitation is no longer valid.",
     expiredHint: "Ask whoever invited you to send a new one.",
+    school: "School",
   },
   onboarding: {
     title: "Create your first school",
-    subtitle:
-      "You can add more campuses later. You'll be set up as principal of this one.",
+    subtitle: "You can add more campuses later. You'll be set up as principal of this one.",
     schoolName: "School name",
     schoolCode: "Short code",
     schoolCodeHint: "Appears on ID cards and reports, e.g. MAIN",
     city: "City",
     create: "Create school",
   },
+  dashboard: {
+    welcome: "Welcome back",
+    organizationView: "organization view",
+    planUsage: "Plan usage",
+    firstSchoolTitle: "Create your first school",
+    firstSchoolBody: "You'll be set up as its principal, and can invite staff straight away.",
+    getStarted: "Get started",
+  },
+  schools: {
+    title: "Schools",
+    subtitle: "The campuses in your organization.",
+    newSchool: "New school",
+    emptyTitle: "No schools yet",
+    emptyBody: "Create your first campus to start adding staff and students.",
+    seatsExhausted: "You are using all the schools on your plan. Upgrade to add another.",
+    createdPrincipal: "You are its principal.",
+    createdNoPrincipal:
+      "Invite someone to run it, or assign a principal from the members page.",
+    rolesCreated: "Its roles are created automatically. You can invite staff straight after.",
+  },
+  members: {
+    title: "Members",
+    subtitle: "Staff with access to this school.",
+    inviteStaff: "Invite staff",
+    emptyTitle: "No members yet",
+    emptyBody: "Invite your first teacher or accountant to get started.",
+    changeRoleTo: "Change to",
+    suspendAccess: "Suspend access",
+    reactivate: "Reactivate",
+    removeFromSchool: "Remove from school",
+    removeTitle: "Remove this member?",
+    removeBody:
+      "They lose access to this school immediately. Their history in the audit log is kept, and you can invite them again later.",
+  },
+  roles: {
+    title: "Roles",
+    subtitle: "What each kind of staff member can do in this school.",
+    newRole: "New role",
+    displayName: "Display name",
+    code: "Code",
+    codeHint: "Lowercase, no spaces — e.g. head_of_year",
+    description: "Description",
+    descriptionPlaceholder: "What this role is for",
+    permissions: "Permissions",
+    savePermissions: "Save permissions",
+    selectPrompt: "Select a role to see what it grants.",
+    systemBadge: "System",
+    organizationBadge: "Organization",
+    // REVIEW: nuanced — explains why a role is locked, not merely that it is.
+    lockedExplain:
+      "This role is managed by the platform and cannot be edited — including by someone who holds it. That is what stops a principal from widening their own access or the owner's.",
+    orgLevelExplain:
+      "This is an organization-level role. Edit it from the organization settings, not from a single school.",
+    cannotGrant: "You cannot grant a permission you do not hold yourself.",
+    onlyOwnPermissions:
+      "Roles are specific to this school. You can only grant permissions you hold yourself.",
+    changeAppliesNext: "Anyone with this role sees the change on their next request.",
+    deleteTitle: "Delete this role?",
+    deleteBody:
+      "Anyone still holding this role must be reassigned first — the server will tell you how many if so.",
+    permissionsSelected: "permissions selected",
+  },
+  invitations: {
+    title: "Invitations",
+    subtitle:
+      "Invite staff to this school. They choose their own password when they accept.",
+    sendInvitation: "Send invitation",
+    pending: "Pending",
+    past: "Past",
+    expires: "Expires",
+    emptyTitle: "No invitations yet",
+    emptyBody: "Invited staff appear here until they accept.",
+    readOnlyNotice: "You can see pending invitations but cannot send new ones.",
+    seatsRemaining: "staff seats remaining",
+    seatsExhausted:
+      "You have used all the staff seats on your plan. Upgrade, or remove a member, before inviting anyone else.",
+    noSeatsTitle: "No staff seats left",
+    resendHint: "Send a new link (the old one stops working)",
+    revokeHint: "Revoke — the link dies immediately and the seat is returned",
+    namePlaceholder: "Optional",
+  },
   billing: {
+    title: "Billing",
+    subtitle: "Your plan, usage and invoices.",
     plan: "Plan",
+    currentPlan: "Current plan",
     usage: "Usage",
     invoices: "Invoices",
     changePlan: "Change plan",
+    switchPlan: "Switch",
+    current: "Current",
     cancelPlan: "Cancel subscription",
     cancelAtPeriodEnd: "Your subscription ends at the close of the current period.",
+    keepAccessUntilThen: "You keep full access until then.",
+    cancelTitle: "Cancel your subscription?",
+    cancelBody:
+      "You keep full access until the end of the period you have already paid for. Your records remain available for export afterwards.",
+    // REVIEW: this is the sentence that answers "will I lose my students?" — the
+    // most consequential copy in the product. Worth a careful native read.
+    downgradeBody:
+      "Nothing is deleted. If you are above the smaller plan's limits, your existing records stay readable and exportable — only new ones are paused until you are back under the cap.",
+    upgradeBody: "Your new limits apply immediately.",
+    limitReached: "Limit reached — new records are paused until you upgrade.",
     overLimitTitle: "You are over your plan's limits",
     overLimitBody:
       "Your existing records stay available. New ones are paused until you are back under the cap or upgrade.",
     pastDueTitle: "We could not process your last payment",
     pastDueBody: "Update your payment details to avoid interruption.",
     suspendedTitle: "This organization is read-only",
-    suspendedBody: "You can still view and export everything. Contact support to restore access.",
+    suspendedBody:
+      "You can still view and export everything. Contact support to restore access.",
+    cancelledTitle: "This subscription has been cancelled",
+    cancelledBody:
+      "Your records remain available for export. Resubscribe to restore full access.",
+  },
+  settings: {
+    title: "Settings",
+    yourAccount: "Your account",
+    activeContext: "Active context",
+    accountReadOnly:
+      "Changing your name or email is not available yet. Ask an administrator if something here is wrong.",
+    organization: "Organization",
+    billingEmail: "Billing email",
+    billingEmailHint:
+      "Invoices go here — usually accounts payable rather than the person who signed up.",
+    identifier: "Identifier",
+    currency: "Currency",
+    timezone: "Timezone",
+    ownerOnly: "Only an organization owner can change these.",
+    saveChanges: "Save changes",
+    organizationUpdated: "Organization updated.",
+  },
+  audit: {
+    title: "Audit log",
+    subtitle: "Every change made in this school, newest first.",
+    when: "When",
+    action: "Action",
+    entity: "Entity",
+    change: "Change",
+    emptyTitle: "Nothing recorded yet",
+    emptyBody: "Actions like inviting staff or editing roles appear here.",
+    more: "more",
+  },
+  selectSchool: {
+    title: "Choose a school",
+    body: "That page is scoped to a single campus. Pick the one you want to work in — you can switch again from the header at any time.",
   },
   errors: {
     generic: "Something went wrong. Please try again.",
@@ -138,19 +320,11 @@ export type Messages = {
   [K in keyof typeof en]: Record<keyof (typeof en)[K], string>;
 };
 
-/**
- * Urdu.
- *
- * INCOMPLETE ON PURPOSE, and structurally so: the type above forces every key to
- * exist, and the ones not yet professionally translated hold their English text. A
- * partially translated app that renders is far more useful than one blocked on a
- * complete translation pass — and the type system means adding a key to `en` fails
- * the build here until someone decides what it says.
- */
 const ur: Messages = {
   common: {
     appName: "ایجوکلاؤڈ",
     save: "محفوظ کریں",
+    saving: "محفوظ ہو رہا ہے…",
     cancel: "منسوخ کریں",
     delete: "حذف کریں",
     edit: "ترمیم کریں",
@@ -168,13 +342,23 @@ const ur: Messages = {
     unlimited: "لامحدود",
     perMonth: "/ماہ",
     perYear: "/سال",
+    actions: "اقدامات",
+    status: "حیثیت",
+    name: "نام",
+    email: "ای میل",
+    role: "کردار",
+    you: "آپ",
+    tryAgain: "براہِ کرم دوبارہ کوشش کریں۔",
+    somethingWrong: "یہ کام نہیں ہو سکا",
   },
   nav: {
     dashboard: "ڈیش بورڈ",
     schools: "اسکول",
     students: "طلبہ",
     classes: "جماعتیں",
+    academics: "تعلیمی امور",
     people: "عملہ اور رسائی",
+    organization: "ادارہ",
     members: "اراکین",
     roles: "کردار",
     invitations: "دعوت نامے",
@@ -186,11 +370,13 @@ const ur: Messages = {
     metrics: "اعداد و شمار",
   },
   marketing: {
-    heroTitle: "School management that scales with your group",
+    heroTitle: "اسکول مینجمنٹ جو آپ کے ادارے کے ساتھ بڑھے",
     heroSubtitle:
-      "Run every campus from one place. Students, staff, roles and billing — with the data separation a school actually needs.",
+      "ہر کیمپس کو ایک ہی جگہ سے چلائیں۔ طلبہ، عملہ، کردار اور بلنگ — اُس ڈیٹا علیحدگی کے ساتھ جو اسکول کو واقعی درکار ہے۔",
     heroCta: "مفت شروع کریں",
     heroSecondary: "قیمتیں دیکھیں",
+    heroNote: "ایک اسکول اور 50 طلبہ کے لیے مفت۔ کارڈ کی ضرورت نہیں۔",
+    builtFor: "اسکول گروپس کے لیے بنایا گیا",
     pricingTitle: "سادہ، قابلِ پیش گوئی قیمتیں",
     pricingSubtitle: "مفت شروع کریں۔ دوسرا کیمپس شامل کرتے وقت اپ گریڈ کریں۔",
     monthly: "ماہانہ",
@@ -199,6 +385,10 @@ const ur: Messages = {
     choosePlan: "منصوبہ منتخب کریں",
     currentPlan: "موجودہ منصوبہ",
     contactSales: "رابطہ کریں",
+    mostPopular: "سب سے مقبول",
+    readyTitle: "جب آپ تیار ہوں",
+    readyBody:
+      "اپنا ادارہ بنائیں، پہلا اسکول شامل کریں، اور اپنے عملے کو مدعو کریں۔ اس میں چند منٹ لگتے ہیں۔",
   },
   auth: {
     loginTitle: "سائن ان",
@@ -207,17 +397,29 @@ const ur: Messages = {
     signupSubtitle: "مفت شروع کریں۔ کارڈ کی ضرورت نہیں۔",
     email: "ای میل ایڈریس",
     password: "پاس ورڈ",
+    confirmPassword: "پاس ورڈ کی تصدیق کریں",
+    passwordHint: "کم از کم 10 حروف۔ غیر متعلق الفاظ کا جملہ بہترین رہتا ہے۔",
     fullName: "پورا نام",
     organizationName: "ادارے کا نام",
+    organizationHint: "وہ ٹرسٹ، گروپ یا کمپنی جو آپ کے کیمپسز کی مالک ہے۔",
     country: "ملک",
     forgotPassword: "پاس ورڈ بھول گئے؟",
     noAccount: "اکاؤنٹ نہیں ہے؟",
     haveAccount: "پہلے سے اکاؤنٹ ہے؟",
     selectContext: "سائن ان کرنے کی جگہ منتخب کریں",
     selectContextHint: "آپ ایک سے زیادہ اسکول سے وابستہ ہیں۔ جاری رکھنے کے لیے ایک منتخب کریں۔",
+    switchContext: "سیاق تبدیل کریں",
     checkEmail: "اپنی ای میل دیکھیں",
     verifyEmailSent: "ہم نے آپ کو تصدیقی لنک بھیجا ہے۔ اکاؤنٹ مکمل کرنے کے لیے اس پر جائیں۔",
     resetSent: "اگر اس پتے کا اکاؤنٹ موجود ہے تو ہم نے ری سیٹ لنک بھیج دیا ہے۔",
+    resetTitle: "اپنا پاس ورڈ ری سیٹ کریں",
+    resetSubtitle: "ہم آپ کو نیا پاس ورڈ منتخب کرنے کا لنک ای میل کریں گے۔",
+    sendResetLink: "ری سیٹ لنک بھیجیں",
+    newPassword: "نیا پاس ورڈ",
+    updatePassword: "پاس ورڈ اپ ڈیٹ کریں",
+    signedOutEverywhere:
+      "آپ کا پاس ورڈ اپ ڈیٹ ہو گیا ہے، اور آپ کو ہر دوسری جگہ سے سائن آؤٹ کر دیا گیا ہے۔",
+    signOutAllDevices: "تمام ڈیوائسز سے سائن آؤٹ کریں",
   },
   invite: {
     title: "آپ کو مدعو کیا گیا ہے",
@@ -227,6 +429,7 @@ const ur: Messages = {
     signInToAccept: "قبول کرنے کے لیے سائن ان کریں",
     expired: "یہ دعوت اب کارآمد نہیں رہی۔",
     expiredHint: "جس نے آپ کو مدعو کیا تھا، ان سے نیا لنک طلب کریں۔",
+    school: "اسکول",
   },
   onboarding: {
     title: "اپنا پہلا اسکول بنائیں",
@@ -237,20 +440,152 @@ const ur: Messages = {
     city: "شہر",
     create: "اسکول بنائیں",
   },
+  dashboard: {
+    welcome: "خوش آمدید",
+    organizationView: "ادارہ جاتی منظر",
+    planUsage: "منصوبے کا استعمال",
+    firstSchoolTitle: "اپنا پہلا اسکول بنائیں",
+    firstSchoolBody: "آپ اس کے پرنسپل ہوں گے، اور فوراً عملے کو مدعو کر سکیں گے۔",
+    getStarted: "شروع کریں",
+  },
+  schools: {
+    title: "اسکول",
+    subtitle: "آپ کے ادارے کے کیمپس۔",
+    newSchool: "نیا اسکول",
+    emptyTitle: "ابھی کوئی اسکول نہیں",
+    emptyBody: "عملہ اور طلبہ شامل کرنے کے لیے اپنا پہلا کیمپس بنائیں۔",
+    seatsExhausted:
+      "آپ اپنے منصوبے کے تمام اسکول استعمال کر چکے ہیں۔ ایک اور شامل کرنے کے لیے اپ گریڈ کریں۔",
+    createdPrincipal: "آپ اس کے پرنسپل ہیں۔",
+    createdNoPrincipal:
+      "اسے چلانے کے لیے کسی کو مدعو کریں، یا اراکین کے صفحے سے پرنسپل مقرر کریں۔",
+    rolesCreated: "اس کے کردار خودکار طور پر بن جاتے ہیں۔ آپ فوراً عملے کو مدعو کر سکتے ہیں۔",
+  },
+  members: {
+    title: "اراکین",
+    subtitle: "اس اسکول تک رسائی رکھنے والا عملہ۔",
+    inviteStaff: "عملے کو مدعو کریں",
+    emptyTitle: "ابھی کوئی رکن نہیں",
+    emptyBody: "شروع کرنے کے لیے اپنے پہلے استاد یا اکاؤنٹنٹ کو مدعو کریں۔",
+    changeRoleTo: "تبدیل کریں",
+    suspendAccess: "رسائی معطل کریں",
+    reactivate: "دوبارہ فعال کریں",
+    removeFromSchool: "اسکول سے ہٹا دیں",
+    removeTitle: "اس رکن کو ہٹا دیں؟",
+    removeBody:
+      "ان کی رسائی فوراً ختم ہو جائے گی۔ آڈٹ لاگ میں ان کی تاریخ محفوظ رہے گی، اور آپ انہیں بعد میں دوبارہ مدعو کر سکتے ہیں۔",
+  },
+  roles: {
+    title: "کردار",
+    subtitle: "اس اسکول میں ہر قسم کا عملہ کیا کر سکتا ہے۔",
+    newRole: "نیا کردار",
+    displayName: "ظاہری نام",
+    code: "کوڈ",
+    codeHint: "چھوٹے حروف، بغیر خالی جگہ — مثلاً head_of_year",
+    description: "تفصیل",
+    descriptionPlaceholder: "یہ کردار کس لیے ہے",
+    permissions: "اجازتیں",
+    savePermissions: "اجازتیں محفوظ کریں",
+    selectPrompt: "یہ دیکھنے کے لیے کہ کیا اجازت ملتی ہے، ایک کردار منتخب کریں۔",
+    systemBadge: "سسٹم",
+    organizationBadge: "ادارہ",
+    // REVIEW: nuanced — explains why a role is locked, not merely that it is.
+    lockedExplain:
+      "یہ کردار پلیٹ فارم کے زیرِ انتظام ہے اور اس میں ترمیم نہیں کی جا سکتی — اُس شخص کے ذریعے بھی نہیں جو یہ کردار رکھتا ہو۔ یہی چیز کسی پرنسپل کو اپنی یا مالک کی رسائی بڑھانے سے روکتی ہے۔",
+    orgLevelExplain:
+      "یہ ادارہ سطح کا کردار ہے۔ اسے کسی ایک اسکول سے نہیں بلکہ ادارے کی ترتیبات سے تبدیل کریں۔",
+    cannotGrant: "آپ ایسی اجازت نہیں دے سکتے جو خود آپ کے پاس نہ ہو۔",
+    onlyOwnPermissions:
+      "کردار اسی اسکول کے لیے مخصوص ہیں۔ آپ صرف وہی اجازتیں دے سکتے ہیں جو خود آپ کے پاس ہیں۔",
+    changeAppliesNext: "یہ کردار رکھنے والے ہر شخص کو اگلی درخواست پر تبدیلی نظر آئے گی۔",
+    deleteTitle: "یہ کردار حذف کریں؟",
+    deleteBody:
+      "یہ کردار رکھنے والوں کو پہلے کسی اور کردار میں منتقل کرنا ہوگا — اگر ایسا ہے تو سرور آپ کو تعداد بتا دے گا۔",
+    permissionsSelected: "اجازتیں منتخب",
+  },
+  invitations: {
+    title: "دعوت نامے",
+    subtitle: "اس اسکول میں عملے کو مدعو کریں۔ قبول کرتے وقت وہ اپنا پاس ورڈ خود منتخب کریں گے۔",
+    sendInvitation: "دعوت بھیجیں",
+    pending: "زیرِ التوا",
+    past: "سابقہ",
+    expires: "میعاد ختم",
+    emptyTitle: "ابھی کوئی دعوت نہیں",
+    emptyBody: "مدعو کیا گیا عملہ قبول کرنے تک یہاں نظر آئے گا۔",
+    readOnlyNotice: "آپ زیرِ التوا دعوتیں دیکھ سکتے ہیں لیکن نئی نہیں بھیج سکتے۔",
+    seatsRemaining: "عملے کی نشستیں باقی",
+    seatsExhausted:
+      "آپ اپنے منصوبے کی تمام نشستیں استعمال کر چکے ہیں۔ کسی اور کو مدعو کرنے سے پہلے اپ گریڈ کریں یا کسی رکن کو ہٹائیں۔",
+    noSeatsTitle: "عملے کی کوئی نشست باقی نہیں",
+    resendHint: "نیا لنک بھیجیں (پرانا کام کرنا بند کر دے گا)",
+    revokeHint: "منسوخ کریں — لنک فوراً ختم ہو جائے گا اور نشست واپس مل جائے گی",
+    namePlaceholder: "اختیاری",
+  },
   billing: {
+    title: "بلنگ",
+    subtitle: "آپ کا منصوبہ، استعمال اور رسیدیں۔",
     plan: "منصوبہ",
+    currentPlan: "موجودہ منصوبہ",
     usage: "استعمال",
     invoices: "رسیدیں",
     changePlan: "منصوبہ تبدیل کریں",
+    switchPlan: "تبدیل کریں",
+    current: "موجودہ",
     cancelPlan: "سبسکرپشن منسوخ کریں",
     cancelAtPeriodEnd: "آپ کی سبسکرپشن موجودہ مدت کے اختتام پر ختم ہو جائے گی۔",
+    keepAccessUntilThen: "تب تک آپ کی مکمل رسائی برقرار رہے گی۔",
+    cancelTitle: "اپنی سبسکرپشن منسوخ کریں؟",
+    cancelBody:
+      "جس مدت کی آپ ادائیگی کر چکے ہیں، اس کے اختتام تک آپ کی مکمل رسائی برقرار رہے گی۔ اس کے بعد بھی آپ کا ریکارڈ برآمد کرنے کے لیے دستیاب رہے گا۔",
+    // REVIEW: answers "will I lose my students?" — the most consequential copy in
+    // the product. Worth a careful native read before launch.
+    downgradeBody:
+      "کچھ بھی حذف نہیں ہوگا۔ اگر آپ چھوٹے منصوبے کی حد سے اوپر ہیں تو آپ کا موجودہ ریکارڈ پڑھنے اور برآمد کرنے کے لیے دستیاب رہے گا — صرف نئے اندراجات اُس وقت تک رکے رہیں گے جب تک آپ حد کے اندر واپس نہ آ جائیں۔",
+    upgradeBody: "آپ کی نئی حدیں فوراً لاگو ہو جائیں گی۔",
+    limitReached: "حد مکمل — اپ گریڈ تک نئے اندراجات روک دیے گئے ہیں۔",
     overLimitTitle: "آپ اپنے منصوبے کی حد سے تجاوز کر چکے ہیں",
     overLimitBody:
-      "آپ کا موجودہ ریکارڈ دستیاب رہے گا۔ نئے اندراجات اپ گریڈ تک روک دیے گئے ہیں۔",
+      "آپ کا موجودہ ریکارڈ دستیاب رہے گا۔ نئے اندراجات اُس وقت تک رکے رہیں گے جب تک آپ حد کے اندر واپس نہ آئیں یا اپ گریڈ نہ کریں۔",
     pastDueTitle: "ہم آپ کی آخری ادائیگی پر کارروائی نہیں کر سکے",
     pastDueBody: "تعطل سے بچنے کے لیے ادائیگی کی تفصیلات اپ ڈیٹ کریں۔",
     suspendedTitle: "یہ ادارہ صرف پڑھنے کے لیے ہے",
-    suspendedBody: "آپ اب بھی سب کچھ دیکھ اور برآمد کر سکتے ہیں۔ رسائی بحال کرنے کے لیے رابطہ کریں۔",
+    suspendedBody:
+      "آپ اب بھی سب کچھ دیکھ اور برآمد کر سکتے ہیں۔ رسائی بحال کرنے کے لیے سپورٹ سے رابطہ کریں۔",
+    cancelledTitle: "یہ سبسکرپشن منسوخ کر دی گئی ہے",
+    cancelledBody:
+      "آپ کا ریکارڈ برآمد کرنے کے لیے دستیاب رہے گا۔ مکمل رسائی بحال کرنے کے لیے دوبارہ سبسکرائب کریں۔",
+  },
+  settings: {
+    title: "ترتیبات",
+    yourAccount: "آپ کا اکاؤنٹ",
+    activeContext: "فعال سیاق",
+    accountReadOnly:
+      "اپنا نام یا ای میل تبدیل کرنے کی سہولت ابھی دستیاب نہیں۔ اگر یہاں کچھ غلط ہے تو منتظم سے رابطہ کریں۔",
+    organization: "ادارہ",
+    billingEmail: "بلنگ ای میل",
+    billingEmailHint:
+      "رسیدیں یہاں جاتی ہیں — عام طور پر اکاؤنٹس کے شعبے کو، نہ کہ سائن اپ کرنے والے شخص کو۔",
+    identifier: "شناخت کنندہ",
+    currency: "کرنسی",
+    timezone: "ٹائم زون",
+    ownerOnly: "صرف ادارے کا مالک ان میں تبدیلی کر سکتا ہے۔",
+    saveChanges: "تبدیلیاں محفوظ کریں",
+    organizationUpdated: "ادارہ اپ ڈیٹ ہو گیا۔",
+  },
+  audit: {
+    title: "آڈٹ لاگ",
+    subtitle: "اس اسکول میں کی گئی ہر تبدیلی، نئی سے پرانی۔",
+    when: "کب",
+    action: "عمل",
+    entity: "شے",
+    change: "تبدیلی",
+    emptyTitle: "ابھی کچھ ریکارڈ نہیں ہوا",
+    emptyBody: "عملے کو مدعو کرنے یا کردار میں ترمیم جیسے اقدامات یہاں نظر آئیں گے۔",
+    more: "مزید",
+  },
+  selectSchool: {
+    title: "اسکول منتخب کریں",
+    body: "وہ صفحہ صرف ایک کیمپس کے لیے ہے۔ جس میں کام کرنا چاہتے ہیں اسے منتخب کریں — آپ کسی بھی وقت ہیڈر سے دوبارہ تبدیل کر سکتے ہیں۔",
   },
   errors: {
     generic: "کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔",

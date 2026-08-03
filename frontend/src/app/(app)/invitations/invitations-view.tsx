@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { invitations as invitationsApi } from "@/lib/api/resources";
 import {
@@ -57,6 +58,7 @@ export function InvitationsView({
   staffSeats: UsageItem | null;
 }) {
   const router = useRouter();
+  const { t } = useTranslations();
   const [busy, setBusy] = useState<string | null>(null);
 
   const form = useForm<InvitationCreateValues>({
@@ -81,7 +83,7 @@ export function InvitationsView({
         if (error.code === "plan_limit_exceeded") {
           toast({
             variant: "destructive",
-            title: "No staff seats left",
+            title: t.invitations.noSeatsTitle,
             description: `${error.message} Upgrade your plan to invite more people.`,
           });
           return;
@@ -90,10 +92,10 @@ export function InvitationsView({
           form.setError("email", { message: error.message });
           return;
         }
-        toast({ variant: "destructive", title: "Could not send", description: error.message });
+        toast({ variant: "destructive", title: t.common.somethingWrong, description: error.message });
         return;
       }
-      toast({ variant: "destructive", title: "Could not send" });
+      toast({ variant: "destructive", title: t.common.somethingWrong });
     }
   }
 
@@ -106,7 +108,7 @@ export function InvitationsView({
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "That didn't work",
+        title: t.common.somethingWrong,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -120,15 +122,15 @@ export function InvitationsView({
   return (
     <div className="mx-auto w-full max-w-4xl">
       <PageHeader
-        title="Invitations"
-        description="Invite staff to this school. They choose their own password when they accept."
+        title={t.invitations.title}
+        description={t.invitations.subtitle}
       />
 
       <Can
         permission={PERMISSIONS.memberInvite}
         fallback={
           <p className="mb-6 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
-            You can see pending invitations but cannot send new ones.
+            {t.invitations.readOnlyNotice}
           </p>
         }
       >
@@ -138,13 +140,13 @@ export function InvitationsView({
           noValidate
         >
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Email" htmlFor="email" error={form.formState.errors.email} required>
+            <Field label={t.common.email} htmlFor="email" error={form.formState.errors.email} required>
               <Input type="email" placeholder="teacher@school.pk" {...form.register("email")} />
             </Field>
-            <Field label="Name" htmlFor="full_name" error={form.formState.errors.full_name}>
-              <Input placeholder="Optional" {...form.register("full_name")} />
+            <Field label={t.common.name} htmlFor="full_name" error={form.formState.errors.full_name}>
+              <Input placeholder={t.invitations.namePlaceholder} {...form.register("full_name")} />
             </Field>
-            <Field label="Role" htmlFor="role_id" error={form.formState.errors.role_id} required>
+            <Field label={t.common.role} htmlFor="role_id" error={form.formState.errors.role_id} required>
               <NativeSelect {...form.register("role_id")}>
                 {roles.map((role) => (
                   <option key={role.id} value={role.id}>
@@ -169,7 +171,7 @@ export function InvitationsView({
           <div>
             <Button type="submit" disabled={form.formState.isSubmitting || seatsExhausted}>
               <Mail className="size-4" aria-hidden />
-              Send invitation
+              {t.invitations.sendInvitation}
             </Button>
           </div>
         </form>
@@ -177,13 +179,13 @@ export function InvitationsView({
 
       {invitations.length === 0 ? (
         <EmptyState
-          title="No invitations yet"
-          description="Invited staff appear here until they accept."
+          title={t.invitations.emptyTitle}
+          description={t.invitations.emptyBody}
         />
       ) : (
         <div className="grid gap-6">
           <InvitationTable
-            heading="Pending"
+            heading={t.invitations.pending}
             rows={pending}
             busy={busy}
             onResend={(id, email) =>
@@ -193,7 +195,7 @@ export function InvitationsView({
               act(id, () => invitationsApi.revoke(schoolId, id), `Invitation to ${email} revoked.`)
             }
           />
-          {past.length > 0 ? <InvitationTable heading="Past" rows={past} busy={busy} /> : null}
+          {past.length > 0 ? <InvitationTable heading={t.invitations.past} rows={past} busy={busy} /> : null}
         </div>
       )}
     </div>

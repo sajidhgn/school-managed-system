@@ -49,6 +49,8 @@ from app.modules.platform_admin.schemas import (
     OrganizationStatusUpdate,
     OrganizationSummary,
     PlanAdminRead,
+    PlanImpactRequest,
+    PlanImpactResponse,
     PlanOverrideRequest,
     PlanPatch,
     PlanWrite,
@@ -328,6 +330,31 @@ async def update_plan(
         plan_id=plan_id,
         changes=payload.model_dump(exclude_unset=True, exclude_none=True),
     )
+
+
+@router.post("/plans/{plan_id}/impact", response_model=PlanImpactResponse)
+async def plan_impact(
+    plan_id: UUID,
+    payload: PlanImpactRequest,
+    session: PlatformDbSession,
+    settings: SettingsDep,
+    ctx: PlatformAuth,
+) -> PlanImpactResponse:
+    """Dry-run a limit change: who is on this plan, and who would be pushed over.
+
+    POST rather than GET despite being read-only, because the proposed limits are a
+    structured body. Encoding six integers into a query string would work and would
+    read badly at every call site.
+
+    NOTHING IS WRITTEN. The console calls this before a save so the operator sees the
+    consequence -- named organizations, not a count -- while they can still change
+    their mind. See `PlatformService.plan_impact` for why that matters more here than
+    anywhere else in the console.
+    """
+    result = await PlatformService(session, settings).plan_impact(
+        plan_id=plan_id, proposed_limits=payload.limits
+    )
+    return PlanImpactResponse.model_validate(result)
 
 
 @router.delete("/plans/{plan_id}", response_model=PlanAdminRead)

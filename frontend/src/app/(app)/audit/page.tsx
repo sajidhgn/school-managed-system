@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { serverGet } from "@/lib/api/server";
 import type { AuditLogRead } from "@/lib/api/types";
 import { requireSchoolContext } from "@/lib/auth/session";
+import { getTranslations } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Audit log" };
 
@@ -23,7 +24,7 @@ export const metadata: Metadata = { title: "Audit log" };
  * table a second, less-protected copy of the student database.
  */
 export default async function AuditPage() {
-  const user = await requireSchoolContext();
+  const [user, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
   const entries = await serverGet<AuditLogRead[]>(
     `/schools/${user.school_id}/audit-logs?limit=100`,
     [],
@@ -32,24 +33,24 @@ export default async function AuditPage() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
-        title="Audit log"
-        description="Every change made in this school, newest first."
+        title={t.audit.title}
+        description={t.audit.subtitle}
       />
 
       {entries.length === 0 ? (
         <EmptyState
-          title="Nothing recorded yet"
-          description="Actions like inviting staff or editing roles appear here."
+          title={t.audit.emptyTitle}
+          description={t.audit.emptyBody}
         />
       ) : (
         <div className="rounded-xl border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Change</TableHead>
+                <TableHead>{t.audit.when}</TableHead>
+                <TableHead>{t.audit.action}</TableHead>
+                <TableHead>{t.audit.entity}</TableHead>
+                <TableHead>{t.audit.change}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

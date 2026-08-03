@@ -59,8 +59,8 @@ export function OrganizationBanner({ status }: { status: string | null | undefin
     cancelled: {
       icon: Lock,
       tone: "bg-destructive/12 text-destructive",
-      title: "This subscription has been cancelled",
-      body: "Your records remain available for export. Resubscribe to restore full access.",
+      title: t.billing.cancelledTitle,
+      body: t.billing.cancelledBody,
       cta: t.billing.changePlan,
     },
   }[status];

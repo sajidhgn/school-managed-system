@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { organization as orgApi } from "@/lib/api/resources";
 import {
@@ -36,6 +37,7 @@ export function SettingsView({
   canEditOrg: boolean;
 }) {
   const router = useRouter();
+  const { t } = useTranslations();
   const [name, setName] = useState(organization?.name ?? "");
   const [billingEmail, setBillingEmail] = useState(organization?.billing_email ?? "");
   const [saving, setSaving] = useState(false);
@@ -44,7 +46,7 @@ export function SettingsView({
     setSaving(true);
     try {
       await orgApi.update({ name, billing_email: billingEmail || null });
-      toast({ title: "Organization updated." });
+      toast({ title: t.settings.organizationUpdated });
       router.refresh();
     } catch (error) {
       toast({
@@ -59,28 +61,27 @@ export function SettingsView({
 
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <PageHeader title="Settings" />
+      <PageHeader title={t.settings.title} />
 
       <section className="mb-8 rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-4 font-medium">Your account</h2>
+        <h2 className="mb-4 font-medium">{t.settings.yourAccount}</h2>
         <dl className="grid gap-3 text-sm">
-          <Row label="Name" value={user.full_name} />
-          <Row label="Email" value={user.email} />
-          <Row label="Active context" value={user.school_name ?? user.organization_name ?? "—"} />
-          <Row label="Role" value={user.role_code ?? "—"} />
+          <Row label={t.common.name} value={user.full_name} />
+          <Row label={t.common.email} value={user.email} />
+          <Row label={t.settings.activeContext} value={user.school_name ?? user.organization_name ?? "—"} />
+          <Row label={t.common.role} value={user.role_code ?? "—"} />
         </dl>
         <p className="mt-4 text-xs text-muted-foreground">
           {/* Honest about scope rather than showing a disabled form: these are not
               editable in this release, and a greyed-out input implies otherwise. */}
-          Changing your name or email is not available yet. Ask an administrator if
-          something here is wrong.
+          {t.settings.accountReadOnly}
         </p>
       </section>
 
       {organization ? (
         <section className="rounded-xl border border-border bg-card p-5">
           <div className="mb-4 flex items-center gap-3">
-            <h2 className="font-medium">Organization</h2>
+            <h2 className="font-medium">{t.settings.organization}</h2>
             <Badge variant={organization.status === "active" ? "success" : "warning"}>
               {label(ORG_STATUS_LABELS, organization.status)}
             </Badge>
@@ -88,7 +89,7 @@ export function SettingsView({
 
           <div className="grid gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="org-name">Name</Label>
+              <Label htmlFor="org-name">{t.common.name}</Label>
               <Input
                 id="org-name"
                 value={name}
@@ -98,7 +99,7 @@ export function SettingsView({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="billing-email">Billing email</Label>
+              <Label htmlFor="billing-email">{t.settings.billingEmail}</Label>
               <Input
                 id="billing-email"
                 type="email"
@@ -107,26 +108,25 @@ export function SettingsView({
                 onChange={(event) => setBillingEmail(event.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Invoices go here — usually accounts payable rather than the person who
-                signed up.
+                {t.settings.billingEmailHint}
               </p>
             </div>
 
             <dl className="grid gap-3 border-t border-border pt-4 text-sm">
-              <Row label="Identifier" value={organization.slug} />
-              <Row label="Currency" value={organization.currency} />
-              <Row label="Timezone" value={organization.timezone} />
+              <Row label={t.settings.identifier} value={organization.slug} />
+              <Row label={t.settings.currency} value={organization.currency} />
+              <Row label={t.settings.timezone} value={organization.timezone} />
             </dl>
 
             {canEditOrg ? (
               <div>
                 <Button onClick={save} disabled={saving}>
-                  {saving ? "Saving…" : "Save changes"}
+                  {saving ? t.common.saving : t.settings.saveChanges}
                 </Button>
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Only an organization owner can change these.
+                {t.settings.ownerOnly}
               </p>
             )}
           </div>

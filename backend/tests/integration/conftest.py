@@ -144,12 +144,25 @@ def latest_token(mailbox: list[EmailMessage]) -> str:
     return match.group(1)
 
 
+# The four plans the seeder creates. Everything else in `plans` was made by a test
+# and must not survive it — otherwise a test that creates `custom_deal` makes the
+# NEXT run of the same test fail with PLAN_CODE_TAKEN, and the suite stops being
+# repeatable. Truncating the whole table instead would break every test that needs
+# the free plan to exist.
+_SEEDED_PLAN_CODES = ("free", "starter", "growth", "enterprise")
+
+
 @pytest.fixture
 async def admin_sessionmaker() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     """A sessionmaker on a superuser engine (bypasses RLS) for setup/inspection."""
     engine = create_async_engine(_ADMIN_URL, poolclass=NullPool)
     async with engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE {', '.join(_APP_TABLES)} RESTART IDENTITY CASCADE"))
+        # After the truncate, so no subscription can still reference them.
+        await conn.execute(
+            text("DELETE FROM plans WHERE code <> ALL(:keep)"),
+            {"keep": list(_SEEDED_PLAN_CODES)},
+        )
     yield async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     await engine.dispose()
 

@@ -50,7 +50,7 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ComponentProps<"t
     <th
       ref={ref}
       className={cn(
-        "h-10 whitespace-nowrap px-3 text-left align-middle text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+        "h-10 whitespace-nowrap px-3 text-start align-middle text-xs font-semibold uppercase tracking-wide text-muted-foreground",
         className,
       )}
       {...props}

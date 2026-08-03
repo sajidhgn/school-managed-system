@@ -872,6 +872,62 @@
         }
       }
     },
+    "/api/v1/platform/plans/{plan_id}/impact": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "summary": "Plan Impact",
+        "description": "Dry-run a limit change: who is on this plan, and who would be pushed over.\n\nPOST rather than GET despite being read-only, because the proposed limits are a\nstructured body. Encoding six integers into a query string would work and would\nread badly at every call site.\n\nNOTHING IS WRITTEN. The console calls this before a save so the operator sees the\nconsequence -- named organizations, not a count -- while they can still change\ntheir mind. See `PlatformService.plan_impact` for why that matters more here than\nanywhere else in the console.",
+        "operationId": "plan_impact_api_v1_platform_plans__plan_id__impact_post",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanImpactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanImpactResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/platform/metrics": {
       "get": {
         "tags": [
@@ -3791,6 +3847,39 @@
         "title": "AdmissionResponse",
         "description": "Deliberately thin. The public form must not echo back the stored record --\nthat would turn the endpoint into a way to probe another school's data."
       },
+      "AffectedOrganization": {
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "breaches": {
+            "items": {
+              "$ref": "#/components/schemas/PlanLimitBreach"
+            },
+            "type": "array",
+            "title": "Breaches"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organization_id",
+          "name",
+          "slug",
+          "breaches"
+        ],
+        "title": "AffectedOrganization",
+        "description": "One organization the proposed limits would push into `over_limit`.\n\nThe field is named `organization_id` rather than aliased to `id`: an alias would\nmake the Python attribute and the JSON property disagree, and every reader of the\ngenerated TypeScript would then have to know about the mapping."
+      },
       "AuditLogRead": {
         "properties": {
           "id": {
@@ -5821,6 +5910,82 @@
         ],
         "title": "PlanAdminRead",
         "description": "A plan as the operator sees it -- including the fields the public view hides."
+      },
+      "PlanImpactRequest": {
+        "properties": {
+          "limits": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          }
+        },
+        "type": "object",
+        "title": "PlanImpactRequest",
+        "description": "Proposed limits, for a dry run before saving (spec-adjacent, \u00a76.2's spirit).\n\nMerged over the plan's CURRENT limits, matching what PATCH does \u2014 so an operator\nadjusting one field gets an impact report for exactly the change they are about\nto make, not for a plan with five limits blanked out.\n\nOptional: omitting it reports the plan's current state, which is what the retire\nflow needs."
+      },
+      "PlanImpactResponse": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "plan_code": {
+            "type": "string",
+            "title": "Plan Code"
+          },
+          "subscriber_count": {
+            "type": "integer",
+            "title": "Subscriber Count"
+          },
+          "would_exceed": {
+            "items": {
+              "$ref": "#/components/schemas/AffectedOrganization"
+            },
+            "type": "array",
+            "title": "Would Exceed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "plan_code",
+          "subscriber_count",
+          "would_exceed"
+        ],
+        "title": "PlanImpactResponse",
+        "description": "The blast radius of a plan change.\n\n`subscriber_count` is everyone on the plan; `would_exceed` is the subset the\nproposed limits would push into `over_limit` \u2014 where their existing records stay\nreadable but new ones are refused with a 402.\n\nShown BEFORE the save, because that transition is invisible at the moment it is\ncaused and surfaces days later as support tickets from schools that cannot enrol."
+      },
+      "PlanLimitBreach": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "current": {
+            "type": "integer",
+            "title": "Current"
+          },
+          "allowed": {
+            "type": "integer",
+            "title": "Allowed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "current",
+          "allowed"
+        ],
+        "title": "PlanLimitBreach",
+        "description": "One organization exceeding one proposed limit."
       },
       "PlanOverrideRequest": {
         "properties": {

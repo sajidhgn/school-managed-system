@@ -147,6 +147,59 @@ class PlanAdminRead(BaseSchema):
     updated_at: datetime
 
 
+class PlanImpactRequest(BaseSchema):
+    """Proposed limits, for a dry run before saving (spec-adjacent, §6.2's spirit).
+
+    Merged over the plan's CURRENT limits, matching what PATCH does — so an operator
+    adjusting one field gets an impact report for exactly the change they are about
+    to make, not for a plan with five limits blanked out.
+
+    Optional: omitting it reports the plan's current state, which is what the retire
+    flow needs.
+    """
+
+    limits: dict[str, Any] | None = None
+
+
+class PlanLimitBreach(BaseSchema):
+    """One organization exceeding one proposed limit."""
+
+    key: str
+    current: int
+    allowed: int
+
+
+class AffectedOrganization(BaseSchema):
+    """One organization the proposed limits would push into `over_limit`.
+
+    The field is named `organization_id` rather than aliased to `id`: an alias would
+    make the Python attribute and the JSON property disagree, and every reader of the
+    generated TypeScript would then have to know about the mapping.
+    """
+
+    organization_id: UUID
+    name: str
+    slug: str
+    breaches: list[PlanLimitBreach]
+
+
+class PlanImpactResponse(BaseSchema):
+    """The blast radius of a plan change.
+
+    `subscriber_count` is everyone on the plan; `would_exceed` is the subset the
+    proposed limits would push into `over_limit` — where their existing records stay
+    readable but new ones are refused with a 402.
+
+    Shown BEFORE the save, because that transition is invisible at the moment it is
+    caused and surfaces days later as support tickets from schools that cannot enrol.
+    """
+
+    plan_id: UUID
+    plan_code: str
+    subscriber_count: int
+    would_exceed: list[AffectedOrganization]
+
+
 class MetricsResponse(BaseSchema):
     organizations_total: int
     organizations_by_status: dict[str, int]

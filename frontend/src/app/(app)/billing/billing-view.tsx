@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { billing as billingApi } from "@/lib/api/resources";
 import {
@@ -54,6 +55,7 @@ export function BillingView({
   canManage: boolean;
 }) {
   const router = useRouter();
+  const { t } = useTranslations();
   const [busy, setBusy] = useState(false);
   const [changingTo, setChangingTo] = useState<PlanPublic | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -117,13 +119,13 @@ export function BillingView({
 
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <PageHeader title="Billing" description="Your plan, usage and invoices." />
+      <PageHeader title={t.billing.title} description={t.billing.subtitle} />
 
       {subscription ? (
         <section className="mb-8 rounded-xl border border-border bg-card p-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-muted-foreground">Current plan</p>
+              <p className="text-sm text-muted-foreground">{t.billing.currentPlan}</p>
               <p className="text-xl font-semibold">{subscription.plan_name}</p>
             </div>
             <Badge
@@ -145,7 +147,7 @@ export function BillingView({
               {subscription.current_period_end
                 ? ` on ${new Date(subscription.current_period_end).toLocaleDateString()}`
                 : " at the end of the current period"}
-              . You keep full access until then.
+              . {t.billing.keepAccessUntilThen}
             </p>
           ) : null}
 
@@ -156,7 +158,7 @@ export function BillingView({
               className="mt-3 text-muted-foreground"
               onClick={() => setCancelling(true)}
             >
-              Cancel subscription
+              {t.billing.cancelPlan}
             </Button>
           ) : null}
         </section>
@@ -164,14 +166,14 @@ export function BillingView({
 
       {usage ? (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Usage</h2>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t.billing.usage}</h2>
           <UsageCard usage={usage} />
         </section>
       ) : null}
 
       {canManage && plans.length > 0 ? (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Change plan</h2>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t.billing.changePlan}</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             {plans.map((plan) => {
               const isCurrent = plan.code === currentCode;
@@ -196,7 +198,7 @@ export function BillingView({
                     disabled={isCurrent || busy}
                     onClick={() => setChangingTo(plan)}
                   >
-                    {isCurrent ? "Current" : "Switch"}
+                    {isCurrent ? t.billing.current : t.billing.switchPlan}
                   </Button>
                 </div>
               );
@@ -207,7 +209,7 @@ export function BillingView({
 
       {invoices.length > 0 ? (
         <section>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Invoices</h2>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t.billing.invoices}</h2>
           <div className="rounded-xl border border-border bg-card">
             <Table>
               <TableHeader>
@@ -249,8 +251,8 @@ export function BillingView({
         title={`Switch to ${changingTo?.name}?`}
         description={
           changingTo && isDowngrade(changingTo)
-            ? "Nothing is deleted. If you are above the smaller plan's limits, your existing records stay readable and exportable — only new ones are paused until you are back under the cap."
-            : "Your new limits apply immediately."
+            ? t.billing.downgradeBody
+            : t.billing.upgradeBody
         }
         confirmLabel="Switch plan"
         variant="default"
@@ -261,9 +263,9 @@ export function BillingView({
       <ConfirmDialog
         open={cancelling}
         onOpenChange={setCancelling}
-        title="Cancel your subscription?"
-        description="You keep full access until the end of the period you have already paid for. Your records remain available for export afterwards."
-        confirmLabel="Cancel subscription"
+        title={t.billing.cancelTitle}
+        description={t.billing.cancelBody}
+        confirmLabel={t.billing.cancelPlan}
         variant="destructive"
         loading={busy}
         onConfirm={cancel}

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { members as membersApi } from "@/lib/api/resources";
 import { MEMBER_STATUS_LABELS, PERMISSIONS, label, type MemberRead, type RoleRead } from "@/lib/api/types";
@@ -50,6 +51,7 @@ export function MembersView({
   roles: RoleRead[];
   currentMembershipId: string | null;
 }) {
+  const { t } = useTranslations();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [removing, setRemoving] = useState<MemberRead | null>(null);
@@ -68,8 +70,8 @@ export function MembersView({
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "That didn't work",
-        description: error instanceof ApiError ? error.message : "Please try again.",
+        title: t.common.somethingWrong,
+        description: error instanceof ApiError ? error.message : t.common.tryAgain,
       });
     } finally {
       setBusy(null);
@@ -79,14 +81,14 @@ export function MembersView({
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
-        title="Members"
-        description="Staff with access to this school."
+        title={t.members.title}
+        description={t.members.subtitle}
         actions={
           <Can permission={PERMISSIONS.memberInvite}>
             <Button asChild>
               <Link href="/invitations">
                 <UserPlus className="size-4" aria-hidden />
-                Invite staff
+                {t.members.inviteStaff}
               </Link>
             </Button>
           </Can>
@@ -95,12 +97,12 @@ export function MembersView({
 
       {initialMembers.length === 0 ? (
         <EmptyState
-          title="No members yet"
-          description="Invite your first teacher or accountant to get started."
+          title={t.members.emptyTitle}
+          description={t.members.emptyBody}
           action={
             <Can permission={PERMISSIONS.memberInvite}>
               <Button asChild>
-                <Link href="/invitations">Invite staff</Link>
+                <Link href="/invitations">{t.members.inviteStaff}</Link>
               </Button>
             </Can>
           }
@@ -110,9 +112,9 @@ export function MembersView({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t.common.name}</TableHead>
+                <TableHead>{t.common.role}</TableHead>
+                <TableHead>{t.common.status}</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
@@ -135,7 +137,7 @@ export function MembersView({
                     </TableCell>
                     <TableCell>
                       {isSelf ? (
-                        <span className="text-xs text-muted-foreground">You</span>
+                        <span className="text-xs text-muted-foreground">{t.common.you}</span>
                       ) : (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -162,7 +164,7 @@ export function MembersView({
                                       )
                                     }
                                   >
-                                    Change to {role.name}
+                                    {t.members.changeRoleTo} {role.name}
                                   </DropdownMenuItem>
                                 ))}
                               <DropdownMenuSeparator />
@@ -183,7 +185,9 @@ export function MembersView({
                                   )
                                 }
                               >
-                                {member.status === "active" ? "Suspend access" : "Reactivate"}
+                                {member.status === "active"
+                                  ? t.members.suspendAccess
+                                  : t.members.reactivate}
                               </DropdownMenuItem>
                             </Can>
 
@@ -196,7 +200,7 @@ export function MembersView({
                                 disabled={isOwner}
                                 onSelect={() => setRemoving(member)}
                               >
-                                Remove from school
+                                {t.members.removeFromSchool}
                               </DropdownMenuItem>
                             </Can>
                           </DropdownMenuContent>
@@ -215,7 +219,7 @@ export function MembersView({
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${removing?.full_name}?`}
-        description="They lose access to this school immediately. Their history in the audit log is kept, and you can invite them again later."
+        description={t.members.removeBody}
         confirmLabel="Remove"
         variant="destructive"
         onConfirm={async () => {
