@@ -1,9 +1,8 @@
 """Academics data access. SQL only -- no business rules.
 
-Note that no method filters on `school_id`. Tenant scoping is enforced by
-PostgreSQL RLS on the connection (see db/session.py), so a query written here is
-already tenant-safe. Re-filtering in Python would make a *missing* filter
-survivable, which is precisely the complacency RLS exists to remove.
+Organization isolation comes from PostgreSQL RLS.  Campus isolation is a separate
+boundary: the shared repository injects the active school for ordinary CRUD, while
+the custom aggregate queries below apply the same scope explicitly.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 
 from app.common.repository import BaseRepository
+from app.core.context import get_school_id
 from app.modules.academics.models import SchoolClass, Section
 from app.modules.students.models import Student, StudentStatus
 
@@ -51,6 +51,8 @@ class SectionRepository(BaseRepository[Section]):
                 Student.deleted_at.is_(None),
             )
         )
+        if (school_id := get_school_id()) is not None:
+            stmt = stmt.where(Student.school_id == school_id)
         return int((await self.session.execute(stmt)).scalar_one() or 0)
 
     async def headcounts(self) -> dict[UUID, int]:
@@ -69,5 +71,7 @@ class SectionRepository(BaseRepository[Section]):
             )
             .group_by(Student.section_id)
         )
+        if (school_id := get_school_id()) is not None:
+            stmt = stmt.where(Student.school_id == school_id)
         rows = (await self.session.execute(stmt)).all()
         return {section_id: count for section_id, count in rows if section_id is not None}

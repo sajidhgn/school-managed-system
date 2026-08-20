@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 
 from app.common.repository import BaseRepository
+from app.core.context import get_school_id
 from app.modules.students.models import Student, StudentStatus
 
 
@@ -37,7 +38,7 @@ class StudentRepository(BaseRepository[Student]):
             Student.admission_number.ilike(pattern),
         )
 
-    async def next_admission_number(self, prefix: str) -> str:
+    async def next_admission_number(self, prefix: str, *, school_id: UUID | None = None) -> str:
         """Generate the next sequential number for a prefix, e.g. "2026-0007".
 
         Counts existing rows for the prefix and adds one. This races under
@@ -51,6 +52,12 @@ class StudentRepository(BaseRepository[Student]):
             .select_from(Student)
             .where(Student.admission_number.startswith(prefix))
         )
+        # Public admissions binds the database GUC directly and therefore passes
+        # its verified school explicitly. Authenticated calls take the scope from
+        # the access-token ContextVar, just like the generic repository paths.
+        active_school_id = school_id or get_school_id()
+        if active_school_id is not None:
+            stmt = stmt.where(Student.school_id == active_school_id)
         used = int((await self.session.execute(stmt)).scalar_one() or 0)
         return f"{prefix}{used + 1:04d}"
 

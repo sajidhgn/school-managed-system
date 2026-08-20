@@ -26,6 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.db.session import bind_tenant, dispose_engine, get_session_factory, init_engine
+from app.modules.academics.models import SchoolClass, Section
+from app.modules.students.models import Student, StudentStatus
 from tests.integration.conftest import API, Tenant
 
 
@@ -90,6 +92,172 @@ async def test_cross_organization_write_is_rejected(
     # And B's school is untouched.
     check = await org_b.get(f"{API}/schools/{org_b.school_id}")
     assert check.json()["name"] != "Hijacked"
+
+
+async def test_school_scoped_context_cannot_read_or_mutate_another_school_academic_data(
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The soft boundary: a School A token cannot reach School B rows.
+
+    Organization RLS cannot enforce this boundary because an organization owner is
+    intentionally allowed to read across all of its campuses.  School-scoped
+    memberships therefore rely on the repository base query injecting the active
+    ``school_id``.  This exercises every generic CRUD path plus the custom academic
+    aggregate queries, because omitting the filter from even one of them exposes
+    minors' records to staff at another campus in the same organization.
+    """
+    second_school = await tenant.post(
+        f"{API}/schools",
+        json={"name": "Test Trust North", "code": "NORTH"},
+    )
+    assert second_school.status_code == 201, second_school.text
+    second_school_id = second_school.json()["school"]["id"]
+
+    # Seed valid School B domain rows through the administrative test connection.
+    # The public fixtures intentionally create state through the API, but School B
+    # has no principal yet and the subject of this test is visibility, not staffing.
+    async with admin_sessionmaker() as session:
+        foreign_class = SchoolClass(
+            organization_id=tenant.organization_id,
+            school_id=second_school_id,
+            name="Foreign Grade",
+            level=91,
+        )
+        session.add(foreign_class)
+        await session.flush()
+
+        foreign_section = Section(
+            organization_id=tenant.organization_id,
+            school_id=second_school_id,
+            class_id=foreign_class.id,
+            name="Foreign Section",
+            capacity=20,
+        )
+        foreign_student = Student(
+            organization_id=tenant.organization_id,
+            school_id=second_school_id,
+            admission_number="NORTH-001",
+            first_name="School B",
+            last_name="Student",
+            status=StudentStatus.ACTIVE,
+        )
+        session.add_all((foreign_section, foreign_student))
+        await session.commit()
+        foreign_class_id = str(foreign_class.id)
+        foreign_section_id = str(foreign_section.id)
+        foreign_student_id = str(foreign_student.id)
+
+    # Switch from the owner's org-wide context into the first school's principal
+    # membership.  The resulting token must be narrowed to School A.
+    me = await tenant.get(f"{API}/auth/me")
+    assert me.status_code == 200, me.text
+    principal = next(
+        membership
+        for membership in me.json()["memberships"]
+        if membership["school_id"] == tenant.school_id
+    )
+    switched = await tenant.client.post(
+        f"{API}/auth/context",
+        json={"membership_id": principal["membership_id"]},
+        headers={
+            **tenant.headers(),
+            "X-Token-Transport": "body",
+        },
+    )
+    assert switched.status_code == 200, switched.text
+    school_a_headers = {"Authorization": f"Bearer {switched.headers['X-Access-Token']}"}
+
+    # CREATE is stamped from the verified token, never from request input.
+    own_class = await tenant.client.post(
+        f"{API}/classes",
+        json={"name": "School A Grade", "level": 1},
+        headers=school_a_headers,
+    )
+    assert own_class.status_code == 201, own_class.text
+    own_student = await tenant.client.post(
+        f"{API}/students",
+        json={
+            "admission_number": "MAIN-001",
+            "first_name": "School A",
+            "last_name": "Student",
+        },
+        headers=school_a_headers,
+    )
+    assert own_student.status_code == 201, own_student.text
+
+    classes = await tenant.client.get(f"{API}/classes", headers=school_a_headers)
+    students = await tenant.client.get(f"{API}/students", headers=school_a_headers)
+    summaries = await tenant.client.get(f"{API}/classes/summary", headers=school_a_headers)
+    assert classes.status_code == students.status_code == summaries.status_code == 200
+    assert {row["id"] for row in classes.json()["items"]} == {own_class.json()["id"]}
+    assert {row["id"] for row in students.json()["items"]} == {own_student.json()["id"]}
+    assert {row["id"] for row in summaries.json()} == {own_class.json()["id"]}
+
+    # READ/UPDATE/DELETE by a known School B id all fail closed as not found.  A
+    # 404 also avoids confirming to School A that the foreign record exists.
+    attempts = (
+        await tenant.client.get(f"{API}/classes/{foreign_class_id}", headers=school_a_headers),
+        await tenant.client.patch(
+            f"{API}/classes/{foreign_class_id}",
+            json={"name": "Hijacked Class"},
+            headers=school_a_headers,
+        ),
+        await tenant.client.delete(f"{API}/classes/{foreign_class_id}", headers=school_a_headers),
+        await tenant.client.patch(
+            f"{API}/classes/sections/{foreign_section_id}",
+            json={"name": "Hijacked Section"},
+            headers=school_a_headers,
+        ),
+        await tenant.client.delete(
+            f"{API}/classes/sections/{foreign_section_id}", headers=school_a_headers
+        ),
+        await tenant.client.get(f"{API}/students/{foreign_student_id}", headers=school_a_headers),
+        await tenant.client.patch(
+            f"{API}/students/{foreign_student_id}",
+            json={"first_name": "Hijacked"},
+            headers=school_a_headers,
+        ),
+        await tenant.client.delete(
+            f"{API}/students/{foreign_student_id}", headers=school_a_headers
+        ),
+    )
+    assert all(response.status_code == 404 for response in attempts), [
+        (response.status_code, response.text) for response in attempts
+    ]
+
+    # The filter is membership-sensitive, not a blanket school predicate. Switching
+    # back to the organization-owner membership intentionally restores cross-campus
+    # visibility while organization RLS still contains the query to this tenant.
+    owner = next(
+        membership for membership in me.json()["memberships"] if membership["is_org_level"]
+    )
+    switched_back = await tenant.client.post(
+        f"{API}/auth/context",
+        json={"membership_id": owner["membership_id"]},
+        headers={
+            **school_a_headers,
+            "X-Token-Transport": "body",
+        },
+    )
+    assert switched_back.status_code == 200, switched_back.text
+    owner_headers = {"Authorization": f"Bearer {switched_back.headers['X-Access-Token']}"}
+    owner_classes = await tenant.client.get(f"{API}/classes", headers=owner_headers)
+    owner_students = await tenant.client.get(f"{API}/students", headers=owner_headers)
+    assert foreign_class_id in {row["id"] for row in owner_classes.json()["items"]}
+    assert foreign_student_id in {row["id"] for row in owner_students.json()["items"]}
+
+    # Verify the failed mutations did not merely hide their response after writing.
+    async with admin_sessionmaker() as session:
+        saved_class = await session.get(SchoolClass, foreign_class.id)
+        saved_section = await session.get(Section, foreign_section.id)
+        saved_student = await session.get(Student, foreign_student.id)
+        assert saved_class is not None and saved_class.name == "Foreign Grade"
+        assert saved_class.deleted_at is None
+        assert saved_section is not None and saved_section.name == "Foreign Section"
+        assert saved_section.deleted_at is None
+        assert saved_student is not None and saved_student.first_name == "School B"
+        assert saved_student.deleted_at is None
 
 
 async def test_unbound_session_sees_zero_rows(db_settings: Settings, tenant: Tenant) -> None:

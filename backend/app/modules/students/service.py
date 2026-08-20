@@ -174,7 +174,7 @@ class StudentService:
         await bind_tenant(self.session, organization_id, school_id=school.id)
 
         prefix = f"{datetime.now(UTC).year}-"
-        admission_number = await self.repo.next_admission_number(prefix)
+        admission_number = await self.repo.next_admission_number(prefix, school_id=school.id)
 
         student = await self.repo.create(
             **payload.model_dump(exclude={"school_id"}),

@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import ColumnElement
 
 from app.common.schemas import PageParams, SortDirection, SortParams
+from app.core.context import get_school_id
 from app.core.exceptions import ValidationError
 from app.db.base import Base
 
@@ -66,15 +67,35 @@ class BaseRepository[ModelT: Base]:
 
     # -- query building -----------------------------------------------------
 
+    def _school_scope_condition(self) -> ColumnElement[bool] | None:
+        """Return the active campus predicate for a school-owned model.
+
+        Organization RLS is the hard tenant boundary, but it deliberately permits
+        every school inside that organization.  A school-scoped membership therefore
+        needs this second, softer boundary on *every* repository operation.  An
+        organization-level owner has no active ``school_id`` and intentionally skips
+        the predicate so cross-campus reads remain possible.
+
+        Checking for the mapped column keeps the base usable for organization-wide
+        models.  The scope value comes only from the verified access token's
+        ContextVar; callers cannot widen it with a request parameter.
+        """
+        school_id = get_school_id()
+        school_column = getattr(self.model, "school_id", None)
+        if school_id is None or school_column is None:
+            return None
+        return cast("ColumnElement[bool]", school_column == school_id)
+
     def _base_select(self, *, include_deleted: bool = False) -> Select[tuple[ModelT]]:
         """Start every query from here so shared filters can never be forgotten.
 
-        Note there is no `school_id` filter: tenant scoping is enforced by
-        PostgreSQL RLS at the connection level (see `db/session.py`). Adding it here
-        too would be belt-and-braces, but it would also mean a missing filter is
-        survivable -- and that is exactly the complacency RLS is meant to remove.
+        PostgreSQL RLS supplies the organization boundary.  It cannot also scope by
+        school because an organization owner legitimately spans campuses; the active
+        membership's school is therefore injected here for school-owned models.
         """
         stmt = select(self.model)
+        if (school_scope := self._school_scope_condition()) is not None:
+            stmt = stmt.where(school_scope)
         if not include_deleted and hasattr(self.model, "deleted_at"):
             stmt = stmt.where(self.model.deleted_at.is_(None))  # type: ignore[attr-defined]
         return stmt
@@ -127,6 +148,8 @@ class BaseRepository[ModelT: Base]:
         are far cheaper than fetching the object just to test for None.
         """
         stmt = select(func.count()).select_from(self.model).where(*conditions)
+        if (school_scope := self._school_scope_condition()) is not None:
+            stmt = stmt.where(school_scope)
         if hasattr(self.model, "deleted_at"):
             stmt = stmt.where(self.model.deleted_at.is_(None))  # type: ignore[attr-defined]
         result = await self.session.execute(stmt.limit(1))
@@ -136,6 +159,8 @@ class BaseRepository[ModelT: Base]:
         stmt = select(func.count()).select_from(self.model)
         if conditions:
             stmt = stmt.where(*conditions)
+        if (school_scope := self._school_scope_condition()) is not None:
+            stmt = stmt.where(school_scope)
         if hasattr(self.model, "deleted_at"):
             stmt = stmt.where(self.model.deleted_at.is_(None))  # type: ignore[attr-defined]
         result = await self.session.execute(stmt)
@@ -207,6 +232,8 @@ class BaseRepository[ModelT: Base]:
             .where(self.model.id == instance.id)  # type: ignore[attr-defined]
             .values(deleted_at=func.now())
         )
+        if (school_scope := self._school_scope_condition()) is not None:
+            stmt = stmt.where(school_scope)
         await self.session.execute(stmt)
         await self.session.refresh(instance)
         return instance
@@ -218,6 +245,8 @@ class BaseRepository[ModelT: Base]:
         and GDPR erasure requests. Business records should be soft-deleted.
         """
         stmt = delete(self.model).where(self.model.id == entity_id)  # type: ignore[attr-defined]
+        if (school_scope := self._school_scope_condition()) is not None:
+            stmt = stmt.where(school_scope)
         result = await self.session.execute(stmt)
         # `rowcount` exists on CursorResult (what a DELETE returns) but not on the
         # generic Result protocol that `execute` is typed as returning, hence the cast.

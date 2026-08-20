@@ -27,6 +27,7 @@ HOW IT WORKS
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
@@ -46,7 +47,13 @@ from app.modules.auth.router import get_email_dispatcher
 
 # Test infrastructure credentials. The app connects as the restricted role; the admin
 # engine (superuser) is used only for setup/teardown and cross-tenant assertions.
-_ADMIN_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/school_manage_db"
+# Host/port are configurable so contributors can run the release gate against an
+# isolated PostgreSQL instance without touching a local development database.
+_TEST_DB_HOST = os.getenv("TEST_POSTGRES_HOST", "localhost")
+_TEST_DB_PORT = int(os.getenv("TEST_POSTGRES_PORT", "5432"))
+_ADMIN_URL = (
+    f"postgresql+asyncpg://postgres:postgres@{_TEST_DB_HOST}:{_TEST_DB_PORT}/school_manage_db"
+)
 
 # Truncated between tests, children first for readability. `plans` and `permissions`
 # are DELIBERATELY ABSENT: they are seeded reference data, not test fixtures, and
@@ -98,8 +105,8 @@ def db_settings() -> Settings:
         DEBUG=True,
         DB_ENABLED=True,
         SECRET_KEY=TEST_SECRET,
-        POSTGRES_HOST="localhost",
-        POSTGRES_PORT=5432,
+        POSTGRES_HOST=_TEST_DB_HOST,
+        POSTGRES_PORT=_TEST_DB_PORT,
         POSTGRES_USER="sms_app",
         POSTGRES_PASSWORD="sms_app_password",
         POSTGRES_DB="school_manage_db",
