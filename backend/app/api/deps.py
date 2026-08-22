@@ -463,7 +463,7 @@ async def get_search_query(
 SearchQuery = Annotated[str | None, Depends(get_search_query)]
 
 
-async def get_client_ip(request: Request) -> str | None:
+async def get_client_ip(request: Request, settings: SettingsDep) -> str | None:
     """Best-effort client IP for audit rows.
 
     Prefers the leftmost `X-Forwarded-For` entry, since the app runs behind a proxy
@@ -472,10 +472,11 @@ async def get_client_ip(request: Request) -> str | None:
     never used for an authorization decision. Rate limiting that trusted it would be
     trivially bypassed by spoofing.
     """
+    peer = request.client.host if request.client else None
     forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
+    if forwarded and peer in settings.TRUSTED_PROXY_IPS:
         return forwarded.split(",")[0].strip()[:45]
-    return request.client.host if request.client else None
+    return peer
 
 
 ClientIp = Annotated[str | None, Depends(get_client_ip)]

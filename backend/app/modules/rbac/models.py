@@ -41,10 +41,12 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -180,6 +182,7 @@ class Role(Base, UUIDPrimaryKeyMixin, TenantMixin, SchoolScopedMixin, TimestampM
     """
 
     __table_args__ = (
+        UniqueConstraint("id", "organization_id", name="uq_roles_id_organization_id"),
         # Unique per (org, school, code). `school_id` is nullable and PostgreSQL
         # treats NULLs as distinct in a unique index, so `NULLS NOT DISTINCT` is
         # required -- without it an organization could hold unlimited org-level
@@ -200,24 +203,22 @@ class Role(Base, UUIDPrimaryKeyMixin, TenantMixin, SchoolScopedMixin, TimestampM
         return self.school_id is None
 
 
-class RolePermission(Base):
+class RolePermission(Base, TenantMixin):
     """Join table: which permissions a role grants.
 
     Composite primary key, no surrogate id and no timestamps. A grant either exists
     or it does not; there is nothing else to say about it, and a surrogate key would
     permit duplicate rows expressing the same fact.
 
-    No `organization_id` of its own: it inherits containment from `role_id`, whose
-    table is RLS-protected. A row here is unreachable without first passing the
-    policy on `roles`. Adding a redundant tenant column would create the possibility
-    of it disagreeing with the role's.
+    `organization_id` is deliberately duplicated from the parent role so PostgreSQL
+    can enforce RLS on this table directly. A composite foreign key guarantees the
+    duplicate can never disagree with the role it belongs to.
     """
 
     __tablename__ = "role_permissions"
 
     role_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("roles.id", ondelete="CASCADE"),
         primary_key=True,
     )
     permission_code: Mapped[str] = mapped_column(
@@ -229,6 +230,15 @@ class RolePermission(Base):
     must fail loudly. The alternative -- CASCADE -- would silently strip capabilities
     from live roles during a deploy, with no audit row and no way to tell what was
     lost."""
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["role_id", "organization_id"],
+            ["roles.id", "roles.organization_id"],
+            name="fk_role_permissions_role_id_organization_id_roles",
+            ondelete="CASCADE",
+        ),
+    )
 
 
 class Membership(

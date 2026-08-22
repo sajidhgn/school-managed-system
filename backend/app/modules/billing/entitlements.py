@@ -266,4 +266,7 @@ class EntitlementService:
         `over_limit`, existing records stay readable, and only new creates are
         blocked. This is the predicate that decides that transition.
         """
-        return any(snap.is_exhausted for snap in await self.snapshot(organization_id))
+        return any(
+            not snap.is_unlimited and snap.current > snap.allowed
+            for snap in await self.snapshot(organization_id)
+        )

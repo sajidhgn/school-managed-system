@@ -10,7 +10,7 @@ import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api/client";
+import { publicRequest } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { resetPasswordSchema, type ResetPasswordValues } from "@/lib/validation/auth";
 
@@ -38,7 +38,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   async function onSubmit(values: ResetPasswordValues) {
     setFormError(null);
     try {
-      await api.post("/auth/reset-password", {
+      await publicRequest("/reset-password", {
         token: values.token,
         password: values.password,
       });

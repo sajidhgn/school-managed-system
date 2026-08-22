@@ -44,12 +44,17 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.common.audit import AuditAction, record_audit
+from app.common.audit import (
+    AuditAction,
+    PlatformAuditAction,
+    record_audit,
+    record_platform_audit,
+)
 from app.common.email.sender import EmailSender
 from app.common.email.templates import ActionPurpose, render_action_email
 from app.core.config import Settings
 from app.core.context import set_organization_id, set_school_id
-from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
+from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.passwords import validate_password
 from app.core.security import (
@@ -70,7 +75,7 @@ from app.modules.auth.models import (
     UserStatus,
 )
 from app.modules.auth.schemas import MembershipSummary
-from app.modules.platform_admin.models import PlatformAdmin
+from app.modules.platform_admin.models import Plan, PlatformAdmin
 from app.modules.rbac.models import Membership, MembershipStatus, Role
 from app.modules.rbac.provisioning import provision_organization
 from app.modules.tenancy.models import Organization, OrganizationStatus, School
@@ -83,6 +88,7 @@ logger = get_logger(__name__)
 # whoever else can read that inbox.
 VERIFICATION_TTL = timedelta(hours=24)
 PASSWORD_RESET_TTL = timedelta(hours=1)
+CONTEXT_SELECTION_TTL = timedelta(minutes=5)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +97,15 @@ class IssuedTokens:
 
     access_token: str
     refresh_token: str
+    session_id: UUID
+    expires_in: int
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedContinuation:
+    """Short-lived credential that can only complete membership selection."""
+
+    access_token: str
     session_id: UUID
     expires_in: int
 
@@ -120,6 +135,8 @@ class AuthService:
         password: str,
         organization_name: str,
         country: str | None,
+        plan_code: str = "free",
+        billing_cycle: str = "monthly",
         ip: str | None = None,
         user_agent: str | None = None,
     ) -> tuple[User, Organization]:
@@ -150,6 +167,20 @@ class AuthService:
                 "An account with this email address already exists.",
                 code="EMAIL_TAKEN",
                 details={"field": "email"},
+            )
+
+        requested_plan = (
+            await self.session.execute(
+                select(Plan).where(
+                    Plan.code == plan_code,
+                    Plan.is_public.is_(True),
+                    Plan.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if requested_plan is None:
+            raise ValidationError(
+                "The selected plan is not available.", code="PLAN_NOT_SELF_SERVICE"
             )
 
         user = User(
@@ -183,6 +214,8 @@ class AuthService:
             country=country,
             status=OrganizationStatus.TRIALING,
             billing_email=email,
+            requested_plan_code=requested_plan.code,
+            requested_billing_cycle=billing_cycle,
         )
 
         # One of the three documented uses of `bind_tenant`: the caller has proven
@@ -307,7 +340,12 @@ class AuthService:
             # break at this single call site than to restructure four modules around.
             from app.modules.billing.service import ensure_free_subscription
 
-            await ensure_free_subscription(self.session, organization_id=organization.id)
+            await ensure_free_subscription(
+                self.session,
+                organization_id=organization.id,
+                plan_code=organization.requested_plan_code,
+                billing_cycle=organization.requested_billing_cycle,
+            )
 
             await record_audit(
                 self.session,
@@ -397,7 +435,8 @@ class AuthService:
         """
         user.failed_login_count += 1
 
-        if user.failed_login_count >= self.settings.LOGIN_MAX_FAILURES:
+        locked = user.failed_login_count >= self.settings.LOGIN_MAX_FAILURES
+        if locked:
             user.lockout_count += 1
             minutes = min(
                 self.settings.LOGIN_LOCKOUT_MINUTES * (2 ** (user.lockout_count - 1)),
@@ -412,6 +451,13 @@ class AuthService:
                 minutes=minutes,
                 ip=ip,
             )
+
+        await self._audit_identity_event(
+            user_id=user.id,
+            action=AuditAction.USER_LOCKED_OUT if locked else AuditAction.USER_LOGIN_FAILED,
+            ip=ip,
+            user_agent=user_agent,
+        )
 
     # -----------------------------------------------------------------------
     # Memberships & context
@@ -528,6 +574,42 @@ class AuthService:
     # Sessions
     # -----------------------------------------------------------------------
 
+    async def issue_context_selection(
+        self,
+        *,
+        user: User,
+        ip: str | None = None,
+        user_agent: str | None = None,
+    ) -> IssuedContinuation:
+        """Create a single-purpose, five-minute continuation after password login."""
+        now = datetime.now(UTC)
+        session_row = Session(
+            user_id=user.id,
+            membership_id=None,
+            # The schema requires a digest. The random value is deliberately never
+            # returned, so this pre-context session cannot be refreshed.
+            refresh_token_hash=hash_token(generate_opaque_token()),
+            family_id=uuid4(),
+            expires_at=now + CONTEXT_SELECTION_TTL,
+            ip=ip,
+            user_agent=user_agent,
+        )
+        self.session.add(session_row)
+        await self.session.flush()
+
+        expires_in = int(CONTEXT_SELECTION_TTL.total_seconds())
+        return IssuedContinuation(
+            access_token=create_access_token(
+                user_id=user.id,
+                session_id=session_row.id,
+                principal_type=PrincipalType.CONTEXT_SELECTION,
+                expires_minutes=expires_in // 60,
+                settings=self.settings,
+            ),
+            session_id=session_row.id,
+            expires_in=expires_in,
+        )
+
     async def issue_session(
         self,
         *,
@@ -632,6 +714,23 @@ class AuthService:
 
             if session_row.revoked_at is not None:
                 await self._revoke_family(session_row.family_id, reason="reuse_detected")
+                if session_row.user_id is not None:
+                    await self._audit_identity_event(
+                        user_id=session_row.user_id,
+                        action=AuditAction.SESSION_REUSE_DETECTED,
+                        ip=ip,
+                        user_agent=user_agent,
+                    )
+                elif session_row.platform_admin_id is not None:
+                    await record_platform_audit(
+                        self.session,
+                        action=PlatformAuditAction.ADMIN_REFRESH_REUSE_DETECTED,
+                        actor_admin_id=session_row.platform_admin_id,
+                        entity_type="session_family",
+                        entity_id=session_row.family_id,
+                        ip=ip,
+                        user_agent=user_agent,
+                    )
                 logger.warning(
                     "refresh_token_reuse_detected",
                     user_id=str(session_row.user_id),
@@ -781,10 +880,21 @@ class AuthService:
         session, and "log out everywhere" keeps meaning what the user expects.
         """
         current = await self.session.get(Session, current_session_id)
-        family_id = current.family_id if current else None
-        if current is not None:
-            current.revoked_at = datetime.now(UTC)
-            current.revoked_reason = "context_switch"
+        now = datetime.now(UTC)
+        if (
+            current is None
+            or current.user_id != user.id
+            or current.revoked_at is not None
+            or current.expires_at <= now
+        ):
+            raise AuthenticationError(
+                "This context selection is invalid or has expired.",
+                code="CONTEXT_SELECTION_INVALID",
+            )
+
+        family_id = current.family_id
+        current.revoked_at = now
+        current.revoked_reason = "context_switch"
 
         tokens = await self.issue_session(
             user=user,
@@ -851,6 +961,11 @@ class AuthService:
                 )
             )
 
+        await self._audit_identity_event(
+            user_id=user.id,
+            action=AuditAction.USER_PASSWORD_RESET_REQUESTED,
+        )
+
     async def reset_password(self, *, raw_token: str, new_password: str) -> User:
         """Consume a reset token, set the password, and kill every session.
 
@@ -895,7 +1010,66 @@ class AuthService:
             user.email_verified_at = user.email_verified_at or datetime.now(UTC)
 
         await self.revoke_all_sessions(user.id, reason="password_reset")
+        await self._audit_identity_event(
+            user_id=user.id,
+            action=AuditAction.USER_PASSWORD_RESET,
+        )
         return user
+
+    async def _audit_identity_event(
+        self,
+        *,
+        user_id: UUID,
+        action: str,
+        ip: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """Write an identity event to the user's primary live tenant context.
+
+        Login and password-reset requests begin without a tenant claim. The user id
+        is already proven at this point, so a narrowly scoped membership lookup can
+        select the primary context. The audit row is flushed while that tenant is
+        bound; deferring the flush until the request ends would run the RLS check
+        after the binding had been cleared.
+        """
+        await bind_tenant(self.session, None, platform_admin=True)
+        try:
+            membership = (
+                await self.session.execute(
+                    select(Membership)
+                    .where(
+                        Membership.user_id == user_id,
+                        Membership.deleted_at.is_(None),
+                    )
+                    .order_by(Membership.is_primary.desc(), Membership.created_at)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        finally:
+            await bind_tenant(self.session, None)
+
+        if membership is None:
+            return
+
+        await bind_tenant(
+            self.session,
+            membership.organization_id,
+            school_id=membership.school_id,
+        )
+        try:
+            await record_audit(
+                self.session,
+                organization_id=membership.organization_id,
+                school_id=membership.school_id,
+                action=action,
+                actor_user_id=user_id,
+                actor_membership_id=membership.id,
+                ip=ip,
+                user_agent=user_agent,
+            )
+            await self.session.flush()
+        finally:
+            await bind_tenant(self.session, None)
 
     # -----------------------------------------------------------------------
     # Helpers

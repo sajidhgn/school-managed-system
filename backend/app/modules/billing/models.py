@@ -275,6 +275,31 @@ class Payment(Base, UUIDPrimaryKeyMixin, TenantMixin, CreatedAtMixin):
     )
 
 
+class BillingIdempotencyKey(Base, UUIDPrimaryKeyMixin, TenantMixin, CreatedAtMixin):
+    """Completed response for a tenant-scoped money-changing request."""
+
+    __tablename__ = "billing_idempotency_keys"
+
+    operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_billing_idempotency_keys_org_operation_key",
+            "organization_id",
+            "operation",
+            "key",
+            unique=True,
+        ),
+        Index(
+            "ix_billing_idempotency_keys_created_at",
+            "created_at",
+        ),
+    )
+
+
 class OrganizationUsage(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin):
     """Materialised usage counters -- what `EntitlementService` actually reads.
 

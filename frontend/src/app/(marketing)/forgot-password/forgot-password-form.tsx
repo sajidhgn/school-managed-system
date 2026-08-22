@@ -2,14 +2,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MailCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api/client";
+import { publicRequest } from "@/lib/api/client";
 import { forgotPasswordSchema, type ForgotPasswordValues } from "@/lib/validation/auth";
 
 /**
@@ -28,7 +28,13 @@ import { forgotPasswordSchema, type ForgotPasswordValues } from "@/lib/validatio
  */
 export function ForgotPasswordForm() {
   const { t } = useTranslations();
+  const [hydrated, setHydrated] = useState(false);
   const [sent, setSent] = useState(false);
+
+  // Before hydration, a server-rendered form has no React submit handler. Keeping
+  // the button disabled prevents a fast click from falling back to a native GET and
+  // putting the email address in the URL instead of using the fixed public handler.
+  useEffect(() => setHydrated(true), []);
 
   const form = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -38,7 +44,7 @@ export function ForgotPasswordForm() {
   async function onSubmit(values: ForgotPasswordValues) {
     // Even a transport failure resolves to the same state: distinguishing them
     // would reintroduce the oracle by a side door.
-    await api.post("/auth/forgot-password", values).catch(() => undefined);
+    await publicRequest("/forgot-password", values).catch(() => undefined);
     setSent(true);
   }
 
@@ -56,7 +62,7 @@ export function ForgotPasswordForm() {
       <Field label={t.auth.email} htmlFor="email" error={form.formState.errors.email} required>
         <Input type="email" autoComplete="email" autoFocus {...form.register("email")} />
       </Field>
-      <Button type="submit" disabled={form.formState.isSubmitting}>
+      <Button type="submit" disabled={!hydrated || form.formState.isSubmitting}>
         {form.formState.isSubmitting ? t.common.loading : "Send reset link"}
       </Button>
     </form>

@@ -17,6 +17,7 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
   label,
   type InvoiceRead,
+  type BillingCycle,
   type PlanPublic,
   type SubscriptionRead,
   type UsageResponse,
@@ -59,6 +60,9 @@ export function BillingView({
   const [busy, setBusy] = useState(false);
   const [changingTo, setChangingTo] = useState<PlanPublic | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(
+    subscription?.billing_cycle === "yearly" ? "yearly" : "monthly",
+  );
 
   const currentCode = subscription
     ? plans.find((p) => p.name === subscription.plan_name)?.code ?? subscription.plan_code
@@ -67,7 +71,12 @@ export function BillingView({
   async function changePlan(plan: PlanPublic) {
     setBusy(true);
     try {
-      await billingApi.changePlan({ plan_code: plan.code, billing_cycle: "monthly" });
+      const request = { plan_code: plan.code, billing_cycle: billingCycle };
+      if (!subscription || subscription.plan_code === "free") {
+        await billingApi.subscribe(request);
+      } else {
+        await billingApi.changePlan(request);
+      }
       toast({ title: `You are now on ${plan.name}.` });
       router.refresh();
     } catch (error) {
@@ -173,7 +182,22 @@ export function BillingView({
 
       {canManage && plans.length > 0 ? (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t.billing.changePlan}</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-medium text-muted-foreground">{t.billing.changePlan}</h2>
+            <div className="flex rounded-md border border-border p-1" aria-label="Billing cycle">
+              {(["monthly", "yearly"] as const).map((cycle) => (
+                <Button
+                  key={cycle}
+                  type="button"
+                  size="sm"
+                  variant={billingCycle === cycle ? "secondary" : "ghost"}
+                  onClick={() => setBillingCycle(cycle)}
+                >
+                  {cycle === "monthly" ? "Monthly" : "Yearly"}
+                </Button>
+              ))}
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             {plans.map((plan) => {
               const isCurrent = plan.code === currentCode;
@@ -187,9 +211,11 @@ export function BillingView({
                 >
                   <p className="font-medium">{plan.name}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {plan.price_monthly === null
+                    {(billingCycle === "monthly" ? plan.price_monthly : plan.price_yearly) === null
                       ? "Custom"
-                      : `${plan.currency} ${plan.price_monthly}/mo`}
+                      : `${plan.currency} ${
+                          billingCycle === "monthly" ? plan.price_monthly : plan.price_yearly
+                        }/${billingCycle === "monthly" ? "mo" : "yr"}`}
                   </p>
                   <Button
                     size="sm"
@@ -218,6 +244,7 @@ export function BillingView({
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Issued</TableHead>
+                  <TableHead className="text-end">Download</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -236,6 +263,16 @@ export function BillingView({
                       {invoice.issued_at
                         ? new Date(invoice.issued_at).toLocaleDateString()
                         : "—"}
+                    </TableCell>
+                    <TableCell className="text-end">
+                      <Button asChild variant="outline" size="sm">
+                        <a
+                          href={`/api/bff/billing/invoices/${invoice.id}/pdf`}
+                          download={`invoice-${invoice.number}.pdf`}
+                        >
+                          PDF
+                        </a>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

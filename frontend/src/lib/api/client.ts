@@ -26,6 +26,7 @@ export function toSearchParams(params: Record<string, QueryValue> = {}): string 
 interface RequestOptions {
   params?: Record<string, QueryValue>;
   signal?: AbortSignal;
+  headers?: HeadersInit;
 }
 
 async function request<T>(
@@ -38,9 +39,12 @@ async function request<T>(
     options.params,
   )}`;
 
+  const headers = new Headers(options.headers);
+  if (body !== undefined) headers.set("content-type", "application/json");
+
   const response = await fetch(url, {
     method,
-    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: options.signal,
     credentials: "same-origin",
@@ -74,6 +78,23 @@ export const api = {
  */
 export async function authRequest<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`/api/auth${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    throw new ApiError(await toProblem(response));
+  }
+
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Anonymous mutations exposed through fixed-purpose Next.js route handlers. */
+export async function publicRequest<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api/public${path.startsWith("/") ? path : `/${path}`}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { MembersView } from "./members-view";
-import { serverGet } from "@/lib/api/server";
+import { serverGetRequired } from "@/lib/api/server";
 import type { MemberRead, RoleRead } from "@/lib/api/types";
 import { requireSchoolContext } from "@/lib/auth/session";
 
@@ -19,8 +19,8 @@ export default async function MembersPage() {
   const schoolId = user.school_id!;
 
   const [members, roles] = await Promise.all([
-    serverGet<MemberRead[]>(`/schools/${schoolId}/members`, []),
-    serverGet<RoleRead[]>(`/schools/${schoolId}/roles`, []),
+    serverGetRequired<MemberRead[]>(`/schools/${schoolId}/members`),
+    serverGetRequired<RoleRead[]>(`/schools/${schoolId}/roles`),
   ]);
 
   return (

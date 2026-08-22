@@ -182,6 +182,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Platform Logout
+         * @description Revoke the operator session before clearing platform cookies.
+         */
+        post: operations["platform_logout_api_v1_platform_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/auth/me": {
         parameters: {
             query?: never;
@@ -228,6 +248,26 @@ export interface paths {
         };
         /** Get Organization */
         get: operations["get_organization_api_v1_platform_organizations__organization_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/organizations/{organization_id}/schools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Organization Schools
+         * @description Every campus inside one organization (spec §8's org-detail drilldown).
+         */
+        get: operations["list_organization_schools_api_v1_platform_organizations__organization_id__schools_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -822,6 +862,26 @@ export interface paths {
          *     isolation. It is not -- the policy is.
          */
         get: operations["list_invoices_api_v1_billing_invoices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/invoices/{invoice_id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Invoice Pdf
+         * @description Generate one invoice after RLS and permission checks have resolved it.
+         */
+        get: operations["download_invoice_pdf_api_v1_billing_invoices__invoice_id__pdf_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1718,8 +1778,9 @@ export interface components {
          *
          *       * exactly one membership -> auto-selected, cookies are set, the caller is
          *         logged in and can proceed.
-         *       * several memberships    -> `select_required = true`, NO access cookie is set,
-         *         and the caller must call `POST /auth/context` to pick one.
+         *       * several memberships    -> `select_required = true`, a short-lived,
+         *         context-only access cookie is set, and the caller must call
+         *         `POST /auth/context` to pick one.
          *
          *     The second case is not an error, so it is still a 200. A user who teaches at two
          *     schools has not done anything wrong; they simply have not said which hat they
@@ -2431,6 +2492,8 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+            /** Totp Code */
+            totp_code?: string | null;
         };
         /**
          * RegisterRequest
@@ -2450,6 +2513,16 @@ export interface components {
             organization_name: string;
             /** Country */
             country?: string | null;
+            /**
+             * Plan Code
+             * @default free
+             */
+            plan_code?: string;
+            /**
+             * Billing Cycle
+             * @default monthly
+             */
+            billing_cycle?: string;
         };
         /**
          * RegisterResponse
@@ -3407,6 +3480,52 @@ export interface operations {
             };
         };
     };
+    platform_logout_api_v1_platform_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     platform_me_api_v1_platform_auth_me_get: {
         parameters: {
             query?: never;
@@ -3527,6 +3646,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_organization_schools_api_v1_platform_organizations__organization_id__schools_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchoolRead"][];
                 };
             };
             /** @description Bad Request */
@@ -4891,7 +5060,9 @@ export interface operations {
     subscribe_api_v1_billing_subscribe_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4943,7 +5114,9 @@ export interface operations {
     change_plan_api_v1_billing_change_plan_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4995,7 +5168,9 @@ export interface operations {
     cancel_subscription_api_v1_billing_cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5060,6 +5235,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    download_invoice_pdf_api_v1_billing_invoices__invoice_id__pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Bad Request */

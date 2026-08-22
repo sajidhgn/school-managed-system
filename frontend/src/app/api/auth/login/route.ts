@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { backendUrl } from "@/lib/api/config";
-import { readTokens, setSession } from "@/lib/auth/session";
+import { readAccessToken, readTokens, setAccessToken, setSession } from "@/lib/auth/session";
 
 /**
  * Tenant login. One of the few handlers that touches a raw token.
@@ -54,7 +54,12 @@ export async function POST(request: NextRequest) {
   }
 
   const tokens = readTokens(upstream);
-  if (tokens) await setSession(tokens);
+  if (tokens) {
+    await setSession(tokens);
+  } else {
+    const continuation = readAccessToken(upstream);
+    if (continuation) await setAccessToken(continuation);
+  }
 
   return new NextResponse(payload, {
     status: 200,

@@ -132,13 +132,15 @@ class PlatformAdmin(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+    mfa_secret: Mapped[str | None] = mapped_column(Text)
     """TOTP shared secret. Spec §4.3A requires MFA for this role in production.
 
     Nullable because the seed CLI creates the account before anyone has enrolled a
     device; `require_mfa_in_production` in the service refuses the login rather than
     letting an unenrolled admin through.
     """
+    mfa_last_used_step: Mapped[int | None] = mapped_column(Integer)
+    """Last accepted TOTP counter. Rejecting it again makes codes single-use."""
 
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

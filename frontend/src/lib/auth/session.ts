@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -80,6 +81,16 @@ export function readTokens(response: Response): TokenPair | null {
   return { accessToken, refreshToken };
 }
 
+export function readAccessToken(response: Response): string | null {
+  return response.headers.get("x-access-token");
+}
+
+export async function setAccessToken(accessToken: string): Promise<void> {
+  const store = await cookies();
+  store.set(ACCESS_COOKIE, accessToken, { ...BASE_COOKIE, maxAge: 60 * 5 });
+  store.delete(REFRESH_COOKIE);
+}
+
 export async function setSession(tokens: TokenPair, kind: SessionKind = "tenant"): Promise<void> {
   const store = await cookies();
   const [access, refresh] = cookieNames(kind);
@@ -120,10 +131,9 @@ export async function getRefreshToken(kind: SessionKind = "tenant"): Promise<str
  *
  * Returns null when the refresh token is expired, revoked, or was already rotated.
  */
-export async function refreshSession(kind: SessionKind = "tenant"): Promise<TokenPair | null> {
-  const refresh = await getRefreshToken(kind);
-  if (!refresh) return null;
+const refreshes = new Map<string, Promise<TokenPair | null>>();
 
+async function rotateRefreshToken(refresh: string): Promise<TokenPair | null> {
   const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/auth/refresh`, {
     method: "POST",
     headers: {
@@ -137,16 +147,34 @@ export async function refreshSession(kind: SessionKind = "tenant"): Promise<Toke
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    await clearSession(kind);
-    return null;
-  }
+  if (!response.ok) return null;
 
   const tokens = readTokens(response);
+  return tokens;
+}
+
+export async function refreshSession(kind: SessionKind = "tenant"): Promise<TokenPair | null> {
+  const refresh = await getRefreshToken(kind);
+  if (!refresh) return null;
+
+  // Key by the credential digest, not only tenant/platform kind: two users whose
+  // requests land on the same Next.js process must never share a refresh result.
+  const key = `${kind}:${createHash("sha256").update(refresh).digest("hex")}`;
+  let pending = refreshes.get(key);
+  if (!pending) {
+    pending = rotateRefreshToken(refresh);
+    refreshes.set(key, pending);
+    void pending.finally(() => refreshes.delete(key));
+  }
+
+  const tokens = await pending;
   if (!tokens) {
     await clearSession(kind);
     return null;
   }
+
+  // Each waiting route-handler request writes the shared result into its own
+  // response cookie context. The backend rotation itself occurred exactly once.
   await setSession(tokens, kind);
   return tokens;
 }
@@ -162,10 +190,12 @@ export async function fetchWithSession(
   path: string,
   init: RequestInit = {},
   kind: SessionKind = "tenant",
+  allowRefresh = false,
 ): Promise<Response | null> {
   let token = await getAccessToken(kind);
 
   if (!token) {
+    if (!allowRefresh) return null;
     const refreshed = await refreshSession(kind);
     if (!refreshed) return null;
     token = refreshed.accessToken;
@@ -194,6 +224,7 @@ export async function fetchWithSession(
   let response = await send(token);
 
   if (response.status === 401) {
+    if (!allowRefresh) return response;
     const refreshed = await refreshSession(kind);
     if (!refreshed) return null;
     response = await send(refreshed.accessToken);

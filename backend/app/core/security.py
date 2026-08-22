@@ -101,6 +101,7 @@ class PrincipalType(StrEnum):
 
     TENANT = "tenant"
     PLATFORM = "platform"
+    CONTEXT_SELECTION = "context_selection"
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,10 @@ class AccessClaims:
     def is_platform(self) -> bool:
         return self.principal_type is PrincipalType.PLATFORM
 
+    @property
+    def is_context_selection(self) -> bool:
+        return self.principal_type is PrincipalType.CONTEXT_SELECTION
+
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
         """Build from raw JWT claims, rejecting anything malformed.
@@ -244,6 +249,7 @@ def create_access_token(
     school_id: UUID | None = None,
     role_code: str | None = None,
     permissions_version: int | None = None,
+    expires_minutes: int | None = None,
     settings: Settings | None = None,
 ) -> str:
     """Mint a short-lived access token for exactly one membership.
@@ -274,7 +280,12 @@ def create_access_token(
         "typ": principal_type.value,
         "sid": str(session_id),
         "iat": now,
-        "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        "exp": now
+        + timedelta(
+            minutes=expires_minutes
+            if expires_minutes is not None
+            else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        ),
         "jti": str(uuid4()),
     }
     # Absent rather than null: a claim that is not there cannot be mistaken for a

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { RolesView } from "./roles-view";
-import { serverGet } from "@/lib/api/server";
+import { serverGetRequired } from "@/lib/api/server";
 import type { PermissionCategory, RoleRead } from "@/lib/api/types";
 import { requireSchoolContext } from "@/lib/auth/session";
 
@@ -12,8 +12,8 @@ export default async function RolesPage() {
   const schoolId = user.school_id!;
 
   const [roles, catalog] = await Promise.all([
-    serverGet<RoleRead[]>(`/schools/${schoolId}/roles`, []),
-    serverGet<PermissionCategory[]>("/permissions", []),
+    serverGetRequired<RoleRead[]>(`/schools/${schoolId}/roles`),
+    serverGetRequired<PermissionCategory[]>("/permissions"),
   ]);
 
   return (

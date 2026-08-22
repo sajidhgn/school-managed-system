@@ -10,7 +10,9 @@ import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/errors";
+import { api, authRequest } from "@/lib/api/client";
 import { schools } from "@/lib/api/resources";
+import type { MeResponse, MembershipSummary } from "@/lib/api/types";
 import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/schools";
 
 /**
@@ -34,11 +36,24 @@ export function OnboardingForm() {
   async function onSubmit(values: SchoolCreateValues) {
     setFormError(null);
     try {
-      await schools.create({
+      const created = await schools.create({
         name: values.name,
         code: values.code.toUpperCase(),
         city: values.city || undefined,
       });
+      if (created.principal_granted) {
+        const me = await api.get<MeResponse>("/auth/me");
+        const principal = me.memberships.find(
+          (membership) =>
+            membership.school_id === created.school.id && membership.role_code === "principal",
+        );
+        if (!principal) {
+          throw new Error("The principal context was not provisioned.");
+        }
+        await authRequest<MembershipSummary>("/context", {
+          membership_id: principal.membership_id,
+        });
+      }
       router.refresh();
       router.push("/dashboard");
     } catch (error) {

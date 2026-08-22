@@ -17,6 +17,7 @@ USAGE
     python -m app.cli seed
     python -m app.cli seed --demo
     python -m app.cli reconcile-usage
+    python -m app.cli run-maintenance
 
 =============================================================================
 IDEMPOTENT MEANS SAFE TO RE-RUN, NOT "SKIPS IF ANYTHING EXISTS"
@@ -40,22 +41,26 @@ import sys
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from email_validator import EmailNotValidError, validate_email
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db.registry  # noqa: F401  (side effect: registers every mapper)
 from app.core.config import Environment, Settings, get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.totp import encrypt_totp_secret, generate_totp_secret, provisioning_uri
 from app.db.session import dispose_engine, init_engine, session_scope
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.billing.models import OrganizationUsage
-from app.modules.platform_admin.models import UNLIMITED, Plan, PlanCode
+from app.modules.invitations.models import Invitation, InvitationStatus
+from app.modules.platform_admin.models import UNLIMITED, Plan, PlanCode, PlatformAdmin
 from app.modules.platform_admin.service import create_platform_admin
 from app.modules.rbac.catalog import CATALOG
 from app.modules.rbac.models import Membership, Permission, Role
-from app.modules.tenancy.models import School
+from app.modules.tenancy.models import Organization, OrganizationStatus, School
 
 logger = get_logger(__name__)
 
@@ -444,7 +449,7 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
     }
 
 
-async def reconcile_usage(session: AsyncSession) -> int:
+async def reconcile_usage(session: AsyncSession, organization_id: UUID) -> None:
     """Recompute `organization_usage` counters from the source tables.
 
     WHY THIS COMMAND EXISTS
@@ -460,58 +465,86 @@ async def reconcile_usage(session: AsyncSession) -> int:
     """
     from app.modules.students.models import Student, StudentStatus
 
-    usage_rows = (await session.execute(select(OrganizationUsage))).scalars().all()
-    for usage in usage_rows:
-        org_id = usage.organization_id
-
-        schools = (
-            await session.execute(
-                select(func.count())
-                .select_from(School)
-                .where(School.organization_id == org_id, School.deleted_at.is_(None))
-            )
-        ).scalar_one()
-        staff = (
-            await session.execute(
-                select(func.count())
-                .select_from(Membership)
-                .where(
-                    Membership.organization_id == org_id,
-                    Membership.deleted_at.is_(None),
-                )
-            )
-        ).scalar_one()
-        custom_roles = (
-            await session.execute(
-                select(func.count())
-                .select_from(Role)
-                .where(Role.organization_id == org_id, Role.is_system.is_(False))
-            )
-        ).scalar_one()
-        students = (
-            await session.execute(
-                select(func.count())
-                .select_from(Student)
-                .where(
-                    Student.organization_id == org_id,
-                    Student.deleted_at.is_(None),
-                    Student.status == StudentStatus.ACTIVE,
-                )
-            )
-        ).scalar_one()
-
+    organization = await session.get(Organization, organization_id)
+    if organization is None:
+        return
+    usage = (
         await session.execute(
-            update(OrganizationUsage)
-            .where(OrganizationUsage.organization_id == org_id)
-            .values(
-                schools_count=schools,
-                staff_count=staff,
-                custom_roles_count=custom_roles,
-                students_count=students,
-                recomputed_at=datetime.now(UTC),
+            select(OrganizationUsage).where(OrganizationUsage.organization_id == organization_id)
+        )
+    ).scalar_one_or_none()
+    if usage is None:
+        usage = OrganizationUsage(organization_id=organization_id)
+        session.add(usage)
+        await session.flush()
+
+    schools = (
+        await session.execute(
+            select(func.count())
+            .select_from(School)
+            .where(
+                School.organization_id == organization_id,
+                School.deleted_at.is_(None),
             )
         )
-    return len(usage_rows)
+    ).scalar_one()
+    active_staff = (
+        await session.execute(
+            select(func.count())
+            .select_from(Membership)
+            .where(
+                Membership.organization_id == organization_id,
+                Membership.deleted_at.is_(None),
+                Membership.status == "active",
+                Membership.user_id != organization.owner_user_id,
+            )
+        )
+    ).scalar_one()
+    pending_invitations = (
+        await session.execute(
+            select(func.count())
+            .select_from(Invitation)
+            .where(
+                Invitation.organization_id == organization_id,
+                Invitation.status == InvitationStatus.PENDING,
+                Invitation.expires_at > datetime.now(UTC),
+            )
+        )
+    ).scalar_one()
+    custom_roles = (
+        await session.execute(
+            select(func.count())
+            .select_from(Role)
+            .where(
+                Role.organization_id == organization_id,
+                Role.is_system.is_(False),
+            )
+        )
+    ).scalar_one()
+    students = (
+        await session.execute(
+            select(func.count())
+            .select_from(Student)
+            .where(
+                Student.organization_id == organization_id,
+                Student.deleted_at.is_(None),
+                Student.status == StudentStatus.ACTIVE,
+            )
+        )
+    ).scalar_one()
+
+    usage.schools_count = schools
+    usage.staff_count = active_staff + pending_invitations
+    usage.custom_roles_count = custom_roles
+    usage.students_count = students
+    usage.recomputed_at = datetime.now(UTC)
+    await session.flush()
+
+    over_limit = await EntitlementService(session).is_over_limit(organization_id)
+    if over_limit:
+        organization.status = OrganizationStatus.OVER_LIMIT
+    elif organization.status is OrganizationStatus.OVER_LIMIT:
+        organization.status = OrganizationStatus.ACTIVE
 
 
 # ---------------------------------------------------------------------------
@@ -562,8 +595,70 @@ async def _run_reconcile() -> None:
     init_engine(settings)
     try:
         async with session_scope(None, platform_admin=True) as session:
-            count = await reconcile_usage(session)
-            logger.info("usage_reconciled", organizations=count)
+            organization_ids = list((await session.execute(select(Organization.id))).scalars())
+        for organization_id in organization_ids:
+            async with session_scope(organization_id) as session:
+                await reconcile_usage(session, organization_id)
+        logger.info("usage_reconciled", organizations=len(organization_ids))
+    finally:
+        await dispose_engine()
+
+
+async def _run_maintenance() -> None:
+    """Advance billing lifecycle and apply each plan's audit retention."""
+    from app.modules.billing.jobs import process_billing_lifecycle, purge_expired_audit_logs
+    from app.modules.invitations.service import expire_pending_invitations
+
+    settings = get_settings()
+    configure_logging(settings)
+    init_engine(settings)
+    lifecycle_events = 0
+    audit_rows_purged = 0
+    invitations_expired = 0
+    try:
+        async with session_scope(None, platform_admin=True) as session:
+            organization_ids = list(
+                (
+                    await session.execute(
+                        select(Organization.id).where(Organization.deleted_at.is_(None))
+                    )
+                ).scalars()
+            )
+        for organization_id in organization_ids:
+            async with session_scope(organization_id) as session:
+                lifecycle_events += len(await process_billing_lifecycle(session, organization_id))
+                audit_rows_purged += await purge_expired_audit_logs(session, organization_id)
+                invitations_expired += await expire_pending_invitations(session, organization_id)
+        logger.info(
+            "maintenance_complete",
+            organizations=len(organization_ids),
+            lifecycle_events=lifecycle_events,
+            audit_rows_purged=audit_rows_purged,
+            invitations_expired=invitations_expired,
+        )
+    finally:
+        await dispose_engine()
+
+
+async def _run_mfa_enroll(*, email: str) -> None:
+    """Enroll or rotate platform TOTP and print the secret exactly once."""
+    settings = get_settings()
+    configure_logging(settings)
+    init_engine(settings)
+    try:
+        async with session_scope(None, platform_admin=True) as session:
+            admin = (
+                await session.execute(select(PlatformAdmin).where(PlatformAdmin.email == email))
+            ).scalar_one_or_none()
+            if admin is None:
+                raise SystemExit(f"No platform administrator exists for '{email}'.")
+
+            secret = generate_totp_secret()
+            admin.mfa_secret = encrypt_totp_secret(secret, settings)
+            admin.mfa_last_used_step = None
+            print("Platform MFA enrolled. Store this secret now; it will not be shown again.")
+            print(f"Secret: {secret}")
+            print(f"URI: {provisioning_uri(secret=secret, email=admin.email)}")
     finally:
         await dispose_engine()
 
@@ -581,6 +676,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "reconcile-usage", help="Recompute organization usage counters from source tables."
     )
+    sub.add_parser(
+        "run-maintenance",
+        help="Advance billing lifecycle, anonymize expired accounts, and purge audit logs.",
+    )
+    mfa_parser = sub.add_parser(
+        "mfa-enroll", help="Enroll or rotate TOTP for a platform administrator."
+    )
+    mfa_parser.add_argument("--email", required=True, help="Platform administrator email.")
 
     args = parser.parse_args(argv)
 
@@ -588,6 +691,10 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(_run_seed(demo=args.demo))
     elif args.command == "reconcile-usage":
         asyncio.run(_run_reconcile())
+    elif args.command == "run-maintenance":
+        asyncio.run(_run_maintenance())
+    elif args.command == "mfa-enroll":
+        asyncio.run(_run_mfa_enroll(email=args.email))
     return 0
 
 

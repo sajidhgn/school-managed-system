@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authRequest } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import type { RegisterResponse } from "@/lib/api/types";
+import type { BillingCycle, PlanPublic, RegisterResponse } from "@/lib/api/types";
 import { signupSchema, type SignupValues } from "@/lib/validation/auth";
 
 /**
@@ -26,7 +26,15 @@ import { signupSchema, type SignupValues } from "@/lib/validation/auth";
  * act. The backend's message is shown verbatim: it explains WHY, which no generic
  * client-side copy could.
  */
-export function SignupForm() {
+export function SignupForm({
+  plans,
+  initialPlanCode,
+  initialCycle,
+}: {
+  plans: PlanPublic[];
+  initialPlanCode: string;
+  initialCycle: BillingCycle;
+}) {
   const { t } = useTranslations();
   const [done, setDone] = useState<RegisterResponse | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -40,6 +48,8 @@ export function SignupForm() {
       country: "",
       password: "",
       confirm_password: "",
+      plan_code: initialPlanCode,
+      billing_cycle: initialCycle,
     },
   });
 
@@ -52,6 +62,8 @@ export function SignupForm() {
         password: values.password,
         organization_name: values.organization_name,
         country: values.country || undefined,
+        plan_code: values.plan_code,
+        billing_cycle: values.billing_cycle,
       });
       setDone(result);
     } catch (error) {
@@ -95,6 +107,32 @@ export function SignupForm() {
       >
         <Input autoFocus autoComplete="organization" {...form.register("organization_name")} />
       </Field>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <label htmlFor="plan_code" className="text-sm font-medium">Plan</label>
+          <select
+            id="plan_code"
+            className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+            {...form.register("plan_code")}
+          >
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.code}>{plan.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-1.5">
+          <label htmlFor="billing_cycle" className="text-sm font-medium">Billing cycle</label>
+          <select
+            id="billing_cycle"
+            className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+            {...form.register("billing_cycle")}
+          >
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+      </div>
 
       <Field
         label={t.auth.fullName}

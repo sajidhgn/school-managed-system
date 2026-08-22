@@ -38,6 +38,9 @@ const BLOCKED = new Set([
   "auth/refresh",
   "auth/register",
   "auth/context",
+  "auth/forgot-password",
+  "auth/reset-password",
+  "students/admissions",
   "platform/auth/login",
   "invitations/accept",
 ]);
@@ -117,6 +120,7 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
       redirect: "manual",
     },
     sessionKindFor(path),
+    true,
   );
 
   if (!upstream) {

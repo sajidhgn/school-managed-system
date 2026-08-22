@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.audit import AuditAction, record_audit
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.db.session import bind_tenant
 from app.modules.billing.entitlements import EntitlementService
 from app.modules.billing.gateways.base import (
     GatewayEvent,
@@ -75,8 +76,14 @@ async def _plan_by_code(session: AsyncSession, code: str) -> Plan:
     return plan
 
 
-async def ensure_free_subscription(session: AsyncSession, *, organization_id: UUID) -> Subscription:
-    """Give a newly verified organization its free-plan subscription and usage row.
+async def ensure_free_subscription(
+    session: AsyncSession,
+    *,
+    organization_id: UUID,
+    plan_code: str = PlanCode.FREE.value,
+    billing_cycle: str = BillingCycle.MONTHLY.value,
+) -> Subscription:
+    """Give a verified organization its requested public plan and usage row.
 
     IDEMPOTENT. Called from email verification, which a user can trigger twice by
     double-clicking the link or by a retried request. Returning the existing row
@@ -90,19 +97,21 @@ async def ensure_free_subscription(session: AsyncSession, *, organization_id: UU
     if existing is not None:
         return existing
 
-    plan = await _plan_by_code(session, PlanCode.FREE.value)
+    plan = await _plan_by_code(session, plan_code)
     now = datetime.now(UTC)
+    cycle = BillingCycle(billing_cycle)
+    trial_ends_at = now + timedelta(days=plan.trial_days) if plan.trial_days else None
 
     subscription = Subscription(
         organization_id=organization_id,
         plan_id=plan.id,
-        # ACTIVE, not TRIALING: the free plan has nothing to trial. Marking it
-        # trialing would start a clock that, on expiry, would suspend an
-        # organization that never owed anything.
-        status=SubscriptionStatus.ACTIVE,
-        billing_cycle=BillingCycle.MONTHLY,
+        # Plans with a trial start the lifecycle clock; free/non-trial plans become
+        # active immediately and have no period end until a gateway is attached.
+        status=(SubscriptionStatus.TRIALING if plan.trial_days else SubscriptionStatus.ACTIVE),
+        billing_cycle=cycle,
+        trial_ends_at=trial_ends_at,
         current_period_start=now,
-        current_period_end=None,  # free plans do not renew
+        current_period_end=trial_ends_at,
     )
     session.add(subscription)
 
@@ -122,7 +131,11 @@ async def ensure_free_subscription(session: AsyncSession, *, organization_id: UU
             subscription_id=subscription.id,
             event_type="subscription.created",
             to_plan_id=plan.id,
-            payload={"reason": "email_verified", "plan_code": plan.code},
+            payload={
+                "reason": "email_verified",
+                "plan_code": plan.code,
+                "billing_cycle": cycle.value,
+            },
         )
     )
     return subscription
@@ -392,13 +405,22 @@ class WebhookService:
             logger.info("webhook_without_subscription_ref", event_type=event.event_type.value)
             return
 
-        subscription = (
-            await self.session.execute(
-                select(Subscription).where(
-                    Subscription.gateway_subscription_ref == event.subscription_ref
+        # A webhook starts without a tenant, while subscriptions are protected by
+        # organization RLS. Arm the narrowly scoped platform-read mode only for the
+        # provider-reference lookup, then clear it on every path before doing
+        # anything else. The verified, unguessable provider reference is the sole
+        # lookup key; request input can never supply an organization id directly.
+        await bind_tenant(self.session, None, platform_admin=True)
+        try:
+            subscription = (
+                await self.session.execute(
+                    select(Subscription).where(
+                        Subscription.gateway_subscription_ref == event.subscription_ref
+                    )
                 )
-            )
-        ).scalar_one_or_none()
+            ).scalar_one_or_none()
+        finally:
+            await bind_tenant(self.session, None)
 
         if subscription is None:
             # Recorded, not raised. An event for an unknown subscription is worth
@@ -407,6 +429,10 @@ class WebhookService:
             logger.warning("webhook_unknown_subscription", ref=event.subscription_ref)
             return
 
+        # Every mutation from here onward runs as the resolved organization, under
+        # the same forced RLS policies as an ordinary tenant request. Platform-read
+        # mode is already off and is never used to write tenant data.
+        await bind_tenant(self.session, subscription.organization_id)
         record.organization_id = subscription.organization_id
         organization = await self.session.get(Organization, subscription.organization_id)
 

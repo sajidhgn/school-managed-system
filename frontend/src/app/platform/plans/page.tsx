@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { PlansView } from "./plans-view";
 import { PlatformChrome } from "@/components/platform/platform-chrome";
-import { serverGet } from "@/lib/api/server";
+import { serverGetRequired } from "@/lib/api/server";
 import type { OrganizationSummary, PlanAdminRead } from "@/lib/api/types";
 import { requirePlatformAdmin } from "@/lib/auth/session";
 
@@ -23,8 +23,8 @@ export default async function PlansPage() {
   const admin = await requirePlatformAdmin();
 
   const [plans, organizations] = await Promise.all([
-    serverGet<PlanAdminRead[]>("/platform/plans", [], "platform"),
-    serverGet<OrganizationSummary[]>("/platform/organizations?limit=200", [], "platform"),
+    serverGetRequired<PlanAdminRead[]>("/platform/plans", "platform"),
+    serverGetRequired<OrganizationSummary[]>("/platform/organizations?limit=200", "platform"),
   ]);
 
   const subscriberCounts = organizations.reduce<Record<string, number>>((counts, org) => {

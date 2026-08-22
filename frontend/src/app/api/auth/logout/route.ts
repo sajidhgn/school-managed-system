@@ -21,9 +21,12 @@ export async function POST(request: NextRequest) {
   const everywhere = request.nextUrl.searchParams.get("all") === "true";
 
   try {
-    await fetchWithSession(everywhere ? "/auth/logout-all" : "/auth/logout", {
-      method: "POST",
-    });
+    await fetchWithSession(
+      everywhere ? "/auth/logout-all" : "/auth/logout",
+      { method: "POST" },
+      "tenant",
+      true,
+    );
   } catch {
     // Deliberately swallowed — see the docstring.
   }

@@ -336,6 +336,33 @@
         }
       }
     },
+    "/api/v1/platform/auth/logout": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "summary": "Platform Logout",
+        "description": "Revoke the operator session before clearing platform cookies.",
+        "operationId": "platform_logout_api_v1_platform_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/platform/auth/me": {
       "get": {
         "tags": [
@@ -507,6 +534,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrganizationDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/organizations/{organization_id}/schools": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "summary": "List Organization Schools",
+        "description": "Every campus inside one organization (spec \u00a78's org-detail drilldown).",
+        "operationId": "list_organization_schools_api_v1_platform_organizations__organization_id__schools_get",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Organization Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SchoolRead"
+                  },
+                  "title": "Response List Organization Schools Api V1 Platform Organizations  Organization Id  Schools Get"
                 }
               }
             }
@@ -1717,15 +1794,35 @@
         "summary": "Subscribe",
         "description": "Move onto a paid plan.\n\nShares an implementation with `change-plan`: from the system's point of view\n\"subscribe\" and \"change plan\" are the same transition, since every organization\nalready holds a free-plan subscription row. Kept as two endpoints because they\nare two different intentions in the UI, and the audit trail reads better for it.",
         "operationId": "subscribe_api_v1_billing_subscribe_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SubscribeRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1761,15 +1858,35 @@
         "summary": "Change Plan",
         "description": "Upgrade or downgrade. A downgrade below current usage never deletes data.",
         "operationId": "change_plan_api_v1_billing_change_plan_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SubscribeRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1805,15 +1922,35 @@
         "summary": "Cancel Subscription",
         "description": "Cancel at period end. Immediate cancellation is a super-admin action.",
         "operationId": "cancel_subscription_api_v1_billing_cancel_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CancelRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1861,6 +1998,50 @@
                   "type": "array",
                   "title": "Response List Invoices Api V1 Billing Invoices Get"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/billing/invoices/{invoice_id}/pdf": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Download Invoice Pdf",
+        "description": "Generate one invoice after RLS and permission checks have resolved it.",
+        "operationId": "download_invoice_pdf_api_v1_billing_invoices__invoice_id__pdf_get",
+        "parameters": [
+          {
+            "name": "invoice_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invoice Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -4757,7 +4938,7 @@
           "select_required"
         ],
         "title": "LoginResponse",
-        "description": "Login result.\n\nTWO SHAPES IN ONE RESPONSE, driven by `select_required` (spec \u00a74.3D):\n\n  * exactly one membership -> auto-selected, cookies are set, the caller is\n    logged in and can proceed.\n  * several memberships    -> `select_required = true`, NO access cookie is set,\n    and the caller must call `POST /auth/context` to pick one.\n\nThe second case is not an error, so it is still a 200. A user who teaches at two\nschools has not done anything wrong; they simply have not said which hat they\nare wearing, and the system must not guess. Guessing would drop a teacher into\nthe wrong school's data."
+        "description": "Login result.\n\nTWO SHAPES IN ONE RESPONSE, driven by `select_required` (spec \u00a74.3D):\n\n  * exactly one membership -> auto-selected, cookies are set, the caller is\n    logged in and can proceed.\n  * several memberships    -> `select_required = true`, a short-lived,\n    context-only access cookie is set, and the caller must call\n    `POST /auth/context` to pick one.\n\nThe second case is not an error, so it is still a 200. A user who teaches at two\nschools has not done anything wrong; they simply have not said which hat they\nare wearing, and the system must not guess. Guessing would drop a teacher into\nthe wrong school's data."
       },
       "MeResponse": {
         "properties": {
@@ -6535,6 +6716,18 @@
             "maxLength": 200,
             "minLength": 1,
             "title": "Password"
+          },
+          "totp_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Totp Code"
           }
         },
         "type": "object",
@@ -6581,6 +6774,19 @@
               }
             ],
             "title": "Country"
+          },
+          "plan_code": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Plan Code",
+            "default": "free"
+          },
+          "billing_cycle": {
+            "type": "string",
+            "pattern": "^(monthly|yearly)$",
+            "title": "Billing Cycle",
+            "default": "monthly"
           }
         },
         "type": "object",

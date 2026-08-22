@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { clearSession } from "@/lib/auth/session";
+import { clearSession, fetchWithSession } from "@/lib/auth/session";
 
 /**
  * Sign out of the platform console.
@@ -14,6 +14,11 @@ import { clearSession } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
+  try {
+    await fetchWithSession("/platform/auth/logout", { method: "POST" }, "platform", true);
+  } catch {
+    // Local sign-out still wins if the API is unavailable or already expired.
+  }
   await clearSession("platform");
   return NextResponse.json({ message: "Signed out of the platform console." });
 }

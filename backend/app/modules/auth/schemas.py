@@ -53,6 +53,8 @@ class RegisterRequest(BaseSchema):
 
     organization_name: str = Field(min_length=2, max_length=200)
     country: str | None = Field(default=None, min_length=2, max_length=2)
+    plan_code: str = Field(default="free", min_length=1, max_length=50)
+    billing_cycle: str = Field(default="monthly", pattern=r"^(monthly|yearly)$")
 
 
 class RegisterResponse(BaseSchema):
@@ -104,8 +106,9 @@ class LoginResponse(BaseSchema):
 
       * exactly one membership -> auto-selected, cookies are set, the caller is
         logged in and can proceed.
-      * several memberships    -> `select_required = true`, NO access cookie is set,
-        and the caller must call `POST /auth/context` to pick one.
+      * several memberships    -> `select_required = true`, a short-lived,
+        context-only access cookie is set, and the caller must call
+        `POST /auth/context` to pick one.
 
     The second case is not an error, so it is still a 200. A user who teaches at two
     schools has not done anything wrong; they simply have not said which hat they

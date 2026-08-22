@@ -41,6 +41,7 @@ from sqlalchemy.pool import NullPool
 
 from app.common.email.sender import EmailMessage
 from app.core.config import Environment, Settings, get_settings
+from app.core.rate_limit import reset_memory_rate_limits
 from app.db.session import dispose_engine, init_engine
 from app.main import create_app
 from app.modules.auth.router import get_email_dispatcher
@@ -68,6 +69,7 @@ _APP_TABLES = (
     "memberships",
     "role_permissions",
     "roles",
+    "billing_idempotency_keys",
     "payments",
     "invoices",
     "subscription_events",
@@ -181,6 +183,7 @@ async def db_client(
     admin_sessionmaker: async_sessionmaker[AsyncSession],  # ensures the DB is cleaned first
 ) -> AsyncIterator[AsyncClient]:
     """HTTP client wired to the app, connecting to PostgreSQL as `sms_app`."""
+    await reset_memory_rate_limits()
     await dispose_engine()
     init_engine(db_settings)
 

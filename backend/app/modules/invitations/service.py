@@ -40,7 +40,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -68,6 +68,36 @@ from app.modules.rbac.service import RbacService
 from app.modules.tenancy.models import Organization, School
 
 logger = get_logger(__name__)
+
+
+async def expire_pending_invitations(
+    session: AsyncSession,
+    organization_id: UUID,
+    *,
+    now: datetime | None = None,
+) -> int:
+    """Expire abandoned links and release exactly their reserved staff seats."""
+    expired_ids = (
+        (
+            await session.execute(
+                update(Invitation)
+                .where(
+                    Invitation.organization_id == organization_id,
+                    Invitation.status == InvitationStatus.PENDING,
+                    Invitation.expires_at <= (now or datetime.now(UTC)),
+                )
+                .values(status=InvitationStatus.EXPIRED)
+                .returning(Invitation.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if expired_ids:
+        await EntitlementService(session).release(
+            organization_id, "max_staff", delta=len(expired_ids)
+        )
+    return len(expired_ids)
 
 
 class InvitationGoneError(AppError):
@@ -144,6 +174,11 @@ class InvitationService:
 
         # 2. Escalation guard -- the same rule as role editing (guard 4 above).
         rbac._assert_can_grant(ctx, await rbac.role_permission_codes(role_id))
+
+        # Expired pending invitations no longer reserve capacity. Cleaning them in
+        # the same transaction before the entitlement check makes abandoned links
+        # stop blocking new staff without waiting for a background sweep.
+        await expire_pending_invitations(self.session, ctx.organization_id)
 
         # 4. Reject if this person is already a member here. (Step 3, the entitlement
         #    check, comes after -- there is no point consuming a seat for a duplicate.)

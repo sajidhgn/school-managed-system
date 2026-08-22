@@ -37,12 +37,23 @@ export const loginSchema = z.object({
 });
 export type LoginValues = z.infer<typeof loginSchema>;
 
+export const platformLoginSchema = loginSchema.extend({
+  totp_code: z
+    .string()
+    .regex(/^\d{6}$/, "Enter the 6-digit authentication code")
+    .optional()
+    .or(z.literal("")),
+});
+export type PlatformLoginValues = z.infer<typeof platformLoginSchema>;
+
 export const signupSchema = z
   .object({
     full_name: z.string().min(2, "Enter your full name").max(200),
     email,
     organization_name: z.string().min(2, "Enter your organization's name").max(200),
     country: z.string().length(2, "Use a 2-letter country code").optional().or(z.literal("")),
+    plan_code: z.string().min(1).max(50),
+    billing_cycle: z.enum(["monthly", "yearly"]),
     password,
     confirm_password: z.string(),
   })

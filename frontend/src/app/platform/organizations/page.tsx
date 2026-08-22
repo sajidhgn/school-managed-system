@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { OrganizationsView } from "./organizations-view";
 import { PlatformChrome } from "@/components/platform/platform-chrome";
-import { serverGet } from "@/lib/api/server";
+import { serverGetRequired } from "@/lib/api/server";
 import type { OrganizationSummary } from "@/lib/api/types";
 import { requirePlatformAdmin } from "@/lib/auth/session";
 
@@ -27,9 +27,8 @@ export default async function OrganizationsPage({
   if (params.q) query.set("q", params.q);
   if (params.status) query.set("status", params.status);
 
-  const organizations = await serverGet<OrganizationSummary[]>(
+  const organizations = await serverGetRequired<OrganizationSummary[]>(
     `/platform/organizations${query.toString() ? `?${query}` : ""}`,
-    [],
     "platform",
   );
 

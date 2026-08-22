@@ -79,13 +79,17 @@ async def app_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     log = logger.error if exc.status_code >= 500 else logger.info
     log("app_error", code=exc.code, status=exc.status_code, detail=exc.message)
 
-    return _problem_response(
+    response = _problem_response(
         status_code=exc.status_code,
         title=exc.__class__.__name__.removesuffix("Error"),
         detail=exc.message,
         code=exc.code,
         meta=exc.details or None,
     )
+    retry_after = exc.details.get("retry_after")
+    if exc.status_code == 429 and retry_after is not None:
+        response.headers["Retry-After"] = str(retry_after)
+    return response
 
 
 async def validation_error_handler(_request: Request, exc: Exception) -> JSONResponse:

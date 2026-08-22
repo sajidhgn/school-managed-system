@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { EmptyState } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { serverGet } from "@/lib/api/server";
+import { serverGetRequired } from "@/lib/api/server";
 import type { AuditLogRead } from "@/lib/api/types";
 import { requireSchoolContext } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
@@ -23,12 +25,19 @@ export const metadata: Metadata = { title: "Audit log" };
  * itself a deliberate schema decision: whole-row snapshots would have made this
  * table a second, less-protected copy of the student database.
  */
-export default async function AuditPage() {
+export default async function AuditPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ before?: string }>;
+}) {
+  const params = await searchParams;
   const [user, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
-  const entries = await serverGet<AuditLogRead[]>(
-    `/schools/${user.school_id}/audit-logs?limit=100`,
-    [],
+  const query = new URLSearchParams({ limit: "51" });
+  if (params.before) query.set("before", params.before);
+  const entries = await serverGetRequired<AuditLogRead[]>(
+    `/schools/${user.school_id}/audit-logs?${query}`,
   );
+  const page = entries.slice(0, 50);
 
   return (
     <div className="mx-auto w-full max-w-5xl">
@@ -54,7 +63,7 @@ export default async function AuditPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => (
+              {page.map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {new Date(entry.created_at).toLocaleString()}
@@ -72,6 +81,16 @@ export default async function AuditPage() {
           </Table>
         </div>
       )}
+      {entries.length > 0 ? (
+        <div className="mt-4 flex justify-between">
+          {params.before ? <Button asChild variant="outline"><Link href="/audit">Newest</Link></Button> : <span />}
+          {entries.length > 50 ? (
+            <Button asChild variant="outline">
+              <Link href={`/audit?before=${encodeURIComponent(page.at(-1)!.created_at)}`}>Older</Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

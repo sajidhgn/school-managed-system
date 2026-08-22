@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { BillingView } from "./billing-view";
 import { API_BASE_URL, API_V1_PREFIX } from "@/lib/api/config";
-import { serverGet } from "@/lib/api/server";
+import { serverGetRequired } from "@/lib/api/server";
 import type {
   InvoiceRead,
   PlanPublic,
@@ -20,13 +20,13 @@ export default async function BillingPage() {
 
   const [subscription, usage, invoices, plansResponse] = await Promise.all([
     canRead
-      ? serverGet<SubscriptionRead | null>("/billing/subscription", null)
+      ? serverGetRequired<SubscriptionRead>("/billing/subscription")
       : Promise.resolve(null),
     // Usage is readable by any member, so it renders even for someone without
     // billing rights — they can still see why a create was refused.
-    serverGet<UsageResponse | null>("/org/usage", null),
+    serverGetRequired<UsageResponse>("/org/usage"),
     hasPermission(user, PERMISSIONS.invoiceRead)
-      ? serverGet<InvoiceRead[]>("/billing/invoices", [])
+      ? serverGetRequired<InvoiceRead[]>("/billing/invoices")
       : Promise.resolve<InvoiceRead[]>([]),
     fetch(`${API_BASE_URL}${API_V1_PREFIX}/public/plans`, { next: { revalidate: 300 } }),
   ]);

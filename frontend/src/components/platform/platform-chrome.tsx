@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { Building2, Gauge, Layers, LogOut } from "lucide-react";
+import { Building2, FileClock, Gauge, Layers, LogOut } from "lucide-react";
 
 import { PlatformSignOut } from "@/components/platform/platform-sign-out";
 
@@ -29,6 +29,7 @@ export function PlatformChrome({
     { href: "/platform/organizations" as Route, label: "Organizations", icon: Building2 },
     { href: "/platform/plans" as Route, label: "Plans", icon: Layers },
     { href: "/platform/metrics" as Route, label: "Metrics", icon: Gauge },
+    { href: "/platform/audit" as Route, label: "Audit", icon: FileClock },
   ] as const;
 
   return (

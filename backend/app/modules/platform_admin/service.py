@@ -56,6 +56,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.totp import decrypt_totp_secret, encrypt_totp_secret, verify_totp
 from app.db.session import bind_tenant
 from app.modules.billing.models import (
     OrganizationUsage,
@@ -93,7 +94,12 @@ class PlatformService:
     # -----------------------------------------------------------------------
 
     async def authenticate(
-        self, *, email: str, password: str, ip: str | None = None
+        self,
+        *,
+        email: str,
+        password: str,
+        totp_code: str | None = None,
+        ip: str | None = None,
     ) -> PlatformAdmin:
         """Verify operator credentials (spec §4.3A).
 
@@ -107,9 +113,22 @@ class PlatformService:
 
         if admin is None:
             dummy_password_verify()
+            await record_platform_audit(
+                self.session,
+                action=PlatformAuditAction.ADMIN_LOGIN_FAILED,
+                ip=ip,
+                metadata={"reason": "invalid_credentials"},
+            )
             raise self._invalid()
 
         if admin.locked_until is not None and admin.locked_until > datetime.now(UTC):
+            await record_platform_audit(
+                self.session,
+                action=PlatformAuditAction.ADMIN_LOGIN_FAILED,
+                actor_admin_id=admin.id,
+                ip=ip,
+                metadata={"reason": "locked"},
+            )
             raise self._invalid()
 
         if not verify_password(password, admin.password_hash):
@@ -129,17 +148,55 @@ class PlatformService:
             raise self._invalid()
 
         if not admin.is_active:
+            await record_platform_audit(
+                self.session,
+                action=PlatformAuditAction.ADMIN_LOGIN_FAILED,
+                actor_admin_id=admin.id,
+                ip=ip,
+                metadata={"reason": "inactive"},
+            )
             raise self._invalid()
 
         # Spec §4.3A: "MFA required in production." Refusing at login is the only
         # place this can be enforced -- an unenrolled operator who gets a session is
         # an unenrolled operator with full platform access until someone notices.
         if self.settings.is_production and not admin.mfa_secret:
+            await record_platform_audit(
+                self.session,
+                action=PlatformAuditAction.ADMIN_LOGIN_FAILED,
+                actor_admin_id=admin.id,
+                ip=ip,
+                metadata={"reason": "mfa_not_enrolled"},
+            )
             raise AuthorizationError(
                 "Multi-factor authentication must be enrolled before signing in. "
                 "Enrol via the CLI.",
                 code="MFA_ENROLMENT_REQUIRED",
             )
+
+        if admin.mfa_secret:
+            secret, was_legacy_plaintext = decrypt_totp_secret(admin.mfa_secret, self.settings)
+            accepted_step = verify_totp(
+                secret,
+                totp_code or "",
+                unix_time=int(datetime.now(UTC).timestamp()),
+                last_used_step=admin.mfa_last_used_step,
+            )
+            if accepted_step is None:
+                await record_platform_audit(
+                    self.session,
+                    action=PlatformAuditAction.ADMIN_LOGIN_FAILED,
+                    actor_admin_id=admin.id,
+                    ip=ip,
+                    metadata={"reason": "invalid_or_replayed_totp"},
+                )
+                raise AuthenticationError(
+                    "The authentication code is invalid or has expired.",
+                    code="MFA_CODE_INVALID",
+                )
+            admin.mfa_last_used_step = accepted_step
+            if was_legacy_plaintext:
+                admin.mfa_secret = encrypt_totp_secret(secret, self.settings)
 
         admin.failed_login_count = 0
         admin.locked_until = None
@@ -252,6 +309,26 @@ class PlatformService:
                 "usage": usage,
                 "school_count": school_count,
             }
+        finally:
+            await bind_tenant(self.session, None)
+
+    async def list_schools(self, organization_id: UUID) -> list[School]:
+        """Every campus inside one organization, for the operator's org-detail drilldown."""
+        await bind_tenant(self.session, None, platform_admin=True)
+        try:
+            organization = await self.session.get(Organization, organization_id)
+            if organization is None or organization.deleted_at is not None:
+                raise NotFoundError("Organization not found.")
+
+            rows = await self.session.execute(
+                select(School)
+                .where(
+                    School.organization_id == organization_id,
+                    School.deleted_at.is_(None),
+                )
+                .order_by(School.name)
+            )
+            return list(rows.scalars())
         finally:
             await bind_tenant(self.session, None)
 

@@ -6,9 +6,24 @@ downgrade behaviour, and webhook idempotency -- plus the public plan catalog.
 
 from __future__ import annotations
 
+import asyncio
 import json
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.cli import reconcile_usage
+from app.db.session import bind_tenant, get_session_factory
+from app.modules.billing.entitlements import EntitlementService, PlanLimitExceededError
+from app.modules.billing.gateways.mock import SIGNATURE_HEADER, MockGateway
+from app.modules.billing.jobs import process_billing_lifecycle, purge_expired_audit_logs
+from app.modules.billing.models import Invoice, InvoiceStatus
+from app.modules.billing.service import WebhookService
+from app.modules.rbac.models import AuditLog
 from tests.integration.conftest import API, Tenant
 
 
@@ -156,8 +171,6 @@ async def test_duplicate_webhook_is_processed_once(db_client: Any, tenant: Tenan
         and a duplicate WAS delivered -- we simply had it already. Any other status
         provokes further retries of an event that is fully handled.
     """
-    from app.modules.billing.gateways.mock import SIGNATURE_HEADER, MockGateway
-
     gateway = MockGateway("test-webhook-secret")
 
     subscribed = await tenant.post(
@@ -192,6 +205,140 @@ async def test_duplicate_webhook_is_processed_once(db_client: Any, tenant: Tenan
     assert second.json()["status"] == "duplicate", (
         "a redelivered webhook was processed a second time"
     )
+
+
+async def test_known_webhook_binds_exactly_one_tenant(
+    db_client: Any,
+    make_tenant: Any,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A verified provider reference resolves cross-tenant, then writes tenant-bound."""
+    target: Tenant = await make_tenant(
+        name="Webhook Target", email="webhook-target@test.example", plan="starter"
+    )
+    other: Tenant = await make_tenant(
+        name="Webhook Other", email="webhook-other@test.example", plan="starter"
+    )
+
+    async with admin_sessionmaker() as session:
+        subscription_ref = (
+            await session.execute(
+                text(
+                    "SELECT gateway_subscription_ref FROM subscriptions "
+                    "WHERE organization_id = :organization_id"
+                ),
+                {"organization_id": target.organization_id},
+            )
+        ).scalar_one()
+        other_status_before = (
+            await session.execute(
+                text("SELECT status FROM organizations WHERE id = :organization_id"),
+                {"organization_id": other.organization_id},
+            )
+        ).scalar_one()
+
+    gateway = MockGateway("test-webhook-secret")
+    payload = json.dumps(
+        {
+            "event_id": "evt_known_tenant_binding_001",
+            "type": "payment.failed",
+            "subscription_ref": subscription_ref,
+            "amount": "29.00",
+            "currency": "USD",
+        }
+    ).encode()
+    response = await db_client.post(
+        f"{API}/webhooks/payments/mock",
+        content=payload,
+        headers={SIGNATURE_HEADER: gateway.sign(payload), "Content-Type": "application/json"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "processed"
+
+    async with admin_sessionmaker() as session:
+        organizations = dict(
+            (
+                await session.execute(
+                    text(
+                        "SELECT id::text, status FROM organizations "
+                        "WHERE id IN (:target_id, :other_id)"
+                    ),
+                    {"target_id": target.organization_id, "other_id": other.organization_id},
+                )
+            ).all()
+        )
+        assert organizations[target.organization_id] == "past_due"
+        assert organizations[other.organization_id] == other_status_before
+
+        payment_orgs = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT organization_id::text FROM payments WHERE gateway_ref = :event_id"
+                    ),
+                    {"event_id": "evt_known_tenant_binding_001"},
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert payment_orgs == [target.organization_id]
+
+        event_org = (
+            await session.execute(
+                text(
+                    "SELECT organization_id::text FROM webhook_events "
+                    "WHERE gateway_event_id = :event_id"
+                ),
+                {"event_id": "evt_known_tenant_binding_001"},
+            )
+        ).scalar_one()
+        assert event_org == target.organization_id
+
+
+async def test_unknown_webhook_reference_is_inert_and_clears_platform_read(
+    db_client: Any,
+) -> None:
+    """Unknown references are retained without mutation or a leaked privileged GUC."""
+    del db_client  # initializes the restricted application engine used below
+    gateway = MockGateway("test-webhook-secret")
+    payload = json.dumps(
+        {
+            "event_id": "evt_unknown_tenant_binding_001",
+            "type": "payment.succeeded",
+            "subscription_ref": "mock_sub_does_not_exist",
+            "amount": "29.00",
+            "currency": "USD",
+        }
+    ).encode()
+
+    factory = get_session_factory()
+    async with factory() as session:
+        await bind_tenant(session, None)
+        processed = await WebhookService(session, gateway).handle(
+            payload=payload,
+            headers={SIGNATURE_HEADER: gateway.sign(payload)},
+        )
+        assert processed is True
+
+        platform_mode, organization_id = (
+            await session.execute(
+                text(
+                    "SELECT current_setting('app.is_platform_admin', true), "
+                    "current_setting('app.current_org_id', true)"
+                )
+            )
+        ).one()
+        assert platform_mode == "off"
+        assert organization_id == ""
+
+        payment_count = (
+            await session.execute(
+                text("SELECT count(*) FROM payments WHERE gateway_ref = :event_id"),
+                {"event_id": "evt_unknown_tenant_binding_001"},
+            )
+        ).scalar_one()
+        assert payment_count == 0
 
 
 async def test_webhook_with_a_bad_signature_is_rejected(db_client: Any) -> None:
@@ -278,3 +425,346 @@ async def test_cancellation_is_at_period_end(tenant: Tenant) -> None:
     assert body["cancel_at_period_end"] is True
     # Still ACTIVE: they keep access for the period they paid for.
     assert body["status"] in ("active", "trialing")
+
+
+async def test_student_capacity_tracks_status_transitions_and_deletion(tenant: Tenant) -> None:
+    """Only active students consume the plan; every transition releases/reserves once."""
+    me = await tenant.get(f"{API}/auth/me")
+    school_membership = next(
+        item for item in me.json()["memberships"] if item["school_id"] == tenant.school_id
+    )
+    switched = await tenant.client.post(
+        f"{API}/auth/context",
+        json={"membership_id": school_membership["membership_id"]},
+        headers={
+            **tenant.headers(),
+            "X-Token-Transport": "body",
+        },
+    )
+    assert switched.status_code == 200, switched.text
+    tenant.access_token = switched.headers["X-Access-Token"]
+
+    created = await tenant.post(
+        f"{API}/students",
+        json={
+            "admission_number": "CAP-001",
+            "first_name": "Capacity",
+            "last_name": "Student",
+            "status": "active",
+        },
+    )
+    assert created.status_code == 201, created.text
+    student_id = created.json()["id"]
+
+    async def count() -> int:
+        usage = await tenant.get(f"{API}/org/usage")
+        return next(i["current"] for i in usage.json()["items"] if i["key"] == "max_students")
+
+    assert await count() == 1
+    inactive = await tenant.patch(f"{API}/students/{student_id}", json={"status": "inactive"})
+    assert inactive.status_code == 200, inactive.text
+    assert await count() == 0
+
+    active = await tenant.patch(f"{API}/students/{student_id}", json={"status": "active"})
+    assert active.status_code == 200, active.text
+    assert await count() == 1
+
+    deleted = await tenant.delete(f"{API}/students/{student_id}")
+    assert deleted.status_code == 204, deleted.text
+    assert await count() == 0
+
+
+async def test_concurrent_seat_reservations_cannot_exceed_plan(
+    db_client: Any,
+    make_tenant: Any,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The counter UPDATE serializes contenders at the final free-plan staff seat."""
+    del db_client
+    tenant: Tenant = await make_tenant(plan=None)
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text(
+                "UPDATE organization_usage SET staff_count = 2 "
+                "WHERE organization_id = :organization_id"
+            ),
+            {"organization_id": tenant.organization_id},
+        )
+        await session.commit()
+
+    async def reserve() -> str:
+        factory = get_session_factory()
+        async with factory() as session:
+            await bind_tenant(session, UUID(tenant.organization_id))
+            try:
+                await EntitlementService(session).check_and_consume(
+                    UUID(tenant.organization_id), "max_staff"
+                )
+                await session.commit()
+                return "reserved"
+            except PlanLimitExceededError:
+                await session.rollback()
+                return "blocked"
+
+    assert sorted(await asyncio.gather(reserve(), reserve())) == ["blocked", "reserved"]
+    async with admin_sessionmaker() as session:
+        count = (
+            await session.execute(
+                text(
+                    "SELECT staff_count FROM organization_usage "
+                    "WHERE organization_id = :organization_id"
+                ),
+                {"organization_id": tenant.organization_id},
+            )
+        ).scalar_one()
+        assert count == 3
+
+
+async def test_usage_reconciliation_is_idempotent(
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Reconciliation repairs drift and a second run makes no further changes."""
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text(
+                "UPDATE organization_usage SET schools_count = 99, students_count = 88, "
+                "staff_count = 77, custom_roles_count = 66 "
+                "WHERE organization_id = :organization_id"
+            ),
+            {"organization_id": tenant.organization_id},
+        )
+        await session.commit()
+
+    factory = get_session_factory()
+    snapshots: list[tuple[int, int, int, int]] = []
+    for _ in range(2):
+        async with factory() as session:
+            await bind_tenant(session, UUID(tenant.organization_id))
+            await reconcile_usage(session, UUID(tenant.organization_id))
+            await session.commit()
+        async with admin_sessionmaker() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT schools_count, students_count, staff_count, custom_roles_count "
+                        "FROM organization_usage WHERE organization_id = :organization_id"
+                    ),
+                    {"organization_id": tenant.organization_id},
+                )
+            ).one()
+            snapshots.append(tuple(row))
+
+    assert snapshots[0] == snapshots[1]
+    assert snapshots[0][0:3] == (1, 0, 0)
+
+
+async def test_invoice_pdf_is_permission_checked_and_tenant_safe(
+    make_tenant: Any,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """An invoice renders as a PDF, while another tenant's known id stays hidden."""
+    target: Tenant = await make_tenant(name="Invoice Target", email="invoice-target@test.example")
+    other: Tenant = await make_tenant(name="Invoice Other", email="invoice-other@test.example")
+    now = datetime.now(UTC)
+    async with admin_sessionmaker() as session:
+        target_invoice = Invoice(
+            organization_id=UUID(target.organization_id),
+            number="INV-TARGET-001",
+            amount_subtotal=Decimal("79.00"),
+            amount_tax=Decimal("3.95"),
+            amount_total=Decimal("82.95"),
+            currency="USD",
+            status=InvoiceStatus.OPEN,
+            issued_at=now,
+            due_at=now + timedelta(days=14),
+        )
+        other_invoice = Invoice(
+            organization_id=UUID(other.organization_id),
+            number="INV-OTHER-001",
+            amount_subtotal=Decimal("29.00"),
+            amount_tax=Decimal("0.00"),
+            amount_total=Decimal("29.00"),
+            currency="USD",
+            status=InvoiceStatus.PAID,
+            issued_at=now,
+            due_at=now,
+        )
+        session.add_all([target_invoice, other_invoice])
+        await session.commit()
+
+    rendered = await target.get(f"{API}/billing/invoices/{target_invoice.id}/pdf")
+    assert rendered.status_code == 200, rendered.text
+    assert rendered.headers["content-type"] == "application/pdf"
+    assert "INV-TARGET-001" in rendered.headers["content-disposition"]
+    assert rendered.content.startswith(b"%PDF-")
+    assert len(rendered.content) > 1_000
+
+    hidden = await target.get(f"{API}/billing/invoices/{other_invoice.id}/pdf")
+    assert hidden.status_code == 404, hidden.text
+
+
+async def test_billing_mutations_replay_same_idempotency_key(
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Equal retries replay once; reusing the key for another payload is rejected."""
+    headers = {**tenant.headers(), "Idempotency-Key": "upgrade-checkout-001"}
+    payload = {"plan_code": "starter", "billing_cycle": "yearly"}
+    first = await tenant.client.post(f"{API}/billing/change-plan", json=payload, headers=headers)
+    assert first.status_code == 200, first.text
+
+    replay = await tenant.client.post(f"{API}/billing/change-plan", json=payload, headers=headers)
+    assert replay.status_code == 200, replay.text
+    assert replay.json() == first.json()
+
+    conflict = await tenant.client.post(
+        f"{API}/billing/change-plan",
+        json={"plan_code": "free", "billing_cycle": "monthly"},
+        headers=headers,
+    )
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+    async with admin_sessionmaker() as session:
+        events = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM subscription_events "
+                    "WHERE organization_id = :organization_id "
+                    "AND event_type = 'subscription.plan_changed' "
+                    "AND payload ->> 'to' = 'starter'"
+                ),
+                {"organization_id": tenant.organization_id},
+            )
+        ).scalar_one()
+        assert events == 1
+
+
+async def test_billing_lifecycle_grace_cancellation_and_anonymization(
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The scheduled job advances overdue and cancelled tenants exactly on policy."""
+    now = datetime.now(UTC)
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text(
+                "UPDATE subscriptions SET status = 'past_due', "
+                "current_period_end = :grace_started WHERE organization_id = :organization_id"
+            ),
+            {
+                "grace_started": now - timedelta(days=8),
+                "organization_id": tenant.organization_id,
+            },
+        )
+        await session.execute(
+            text("UPDATE organizations SET status = 'past_due' WHERE id = :organization_id"),
+            {"organization_id": tenant.organization_id},
+        )
+        await session.commit()
+
+    factory = get_session_factory()
+    async with factory() as session:
+        await bind_tenant(session, UUID(tenant.organization_id))
+        assert await process_billing_lifecycle(session, UUID(tenant.organization_id), now=now) == [
+            "subscription.suspended"
+        ]
+        await session.commit()
+
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text(
+                "UPDATE subscriptions SET status = 'active', cancel_at_period_end = true, "
+                "current_period_end = :period_end WHERE organization_id = :organization_id"
+            ),
+            {"period_end": now - timedelta(seconds=1), "organization_id": tenant.organization_id},
+        )
+        await session.execute(
+            text("UPDATE organizations SET status = 'active' WHERE id = :organization_id"),
+            {"organization_id": tenant.organization_id},
+        )
+        await session.commit()
+
+    async with factory() as session:
+        await bind_tenant(session, UUID(tenant.organization_id))
+        assert await process_billing_lifecycle(session, UUID(tenant.organization_id), now=now) == [
+            "subscription.period_cancelled"
+        ]
+        await session.commit()
+
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text(
+                "UPDATE subscriptions SET cancelled_at = :cancelled_at "
+                "WHERE organization_id = :organization_id"
+            ),
+            {"cancelled_at": now - timedelta(days=31), "organization_id": tenant.organization_id},
+        )
+        await session.commit()
+
+    async with factory() as session:
+        await bind_tenant(session, UUID(tenant.organization_id))
+        assert await process_billing_lifecycle(session, UUID(tenant.organization_id), now=now) == [
+            "organization.anonymized"
+        ]
+        await session.commit()
+
+    async with admin_sessionmaker() as session:
+        organization = (
+            await session.execute(
+                text(
+                    "SELECT name, billing_email, tax_id, deleted_at FROM organizations "
+                    "WHERE id = :organization_id"
+                ),
+                {"organization_id": tenant.organization_id},
+            )
+        ).one()
+        assert organization.name.startswith("Anonymized organization")
+        assert organization.billing_email is None
+        assert organization.tax_id is None
+        assert organization.deleted_at is not None
+
+
+async def test_plan_audit_retention_purges_only_expired_rows(
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Growth keeps 365 days: an older event is purged while a recent one remains."""
+    now = datetime.now(UTC)
+    async with admin_sessionmaker() as session:
+        session.add_all(
+            [
+                AuditLog(
+                    organization_id=UUID(tenant.organization_id),
+                    action="retention.old",
+                    created_at=now - timedelta(days=366),
+                ),
+                AuditLog(
+                    organization_id=UUID(tenant.organization_id),
+                    action="retention.current",
+                    created_at=now - timedelta(days=364),
+                ),
+            ]
+        )
+        await session.commit()
+
+    factory = get_session_factory()
+    async with factory() as session:
+        await bind_tenant(session, UUID(tenant.organization_id))
+        assert await purge_expired_audit_logs(session, UUID(tenant.organization_id), now=now) == 1
+        await session.commit()
+
+    async with admin_sessionmaker() as session:
+        actions = set(
+            (
+                await session.execute(
+                    text(
+                        "SELECT action FROM audit_logs WHERE organization_id = :organization_id "
+                        "AND action LIKE 'retention.%'"
+                    ),
+                    {"organization_id": tenant.organization_id},
+                )
+            ).scalars()
+        )
+        assert actions == {"retention.current"}

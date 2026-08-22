@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Header, Query, Request, Response, status
 from sqlalchemy import select
 
-from app.api.cookies import set_auth_cookies
+from app.api.cookies import clear_auth_cookies, set_auth_cookies
 from app.api.deps import (
     ClientIp,
     PlatformAuth,
@@ -29,7 +29,9 @@ from app.api.deps import (
     PublicDbSession,
     SettingsDep,
 )
-from app.core.exceptions import AuthorizationError
+from app.common.audit import PlatformAuditAction, record_platform_audit
+from app.core.exceptions import AuthenticationError, AuthorizationError
+from app.core.rate_limit import enforce_rate_limit
 from app.core.security import (
     PrincipalType,
     create_access_token,
@@ -39,7 +41,7 @@ from app.core.security import (
 from app.db.session import bind_tenant
 from app.modules.auth.models import Session
 from app.modules.auth.router import _attach_body_tokens, _wants_body_tokens
-from app.modules.auth.service import IssuedTokens
+from app.modules.auth.service import AuthService, IssuedTokens
 from app.modules.platform_admin.models import Plan, PlatformAdmin, PlatformAuditLog
 from app.modules.platform_admin.schemas import (
     ImpersonateRequest,
@@ -59,6 +61,7 @@ from app.modules.platform_admin.schemas import (
     PlatformLoginRequest,
 )
 from app.modules.platform_admin.service import PlatformService
+from app.modules.tenancy.schemas import SchoolRead
 
 router = APIRouter()
 
@@ -85,9 +88,24 @@ async def platform_login(
     password reset for this role would reduce the platform's security to the security
     of one inbox -- and this role can read every school's records.
     """
-    admin = await PlatformService(session, settings).authenticate(
-        email=payload.email, password=payload.password, ip=ip
+    await enforce_rate_limit(
+        "platform_login",
+        f"{ip or 'unknown'}:{payload.email}",
+        limit=settings.AUTH_RATE_LIMIT,
+        window_seconds=settings.AUTH_RATE_WINDOW_SECONDS,
     )
+    try:
+        admin = await PlatformService(session, settings).authenticate(
+            email=payload.email,
+            password=payload.password,
+            totp_code=payload.totp_code,
+            ip=ip,
+        )
+    except (AuthenticationError, AuthorizationError):
+        # Failed authentication is itself an audit event. Commit only those
+        # security counters/events before returning the expected error response.
+        await session.commit()
+        raise
 
     raw_refresh = generate_opaque_token()
     session_row = Session(
@@ -138,6 +156,30 @@ async def platform_login(
         mfa_enabled=admin.mfa_secret is not None,
         last_login_at=admin.last_login_at,
     )
+
+
+@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def platform_logout(
+    response: Response,
+    request: Request,
+    session: PlatformDbSession,
+    settings: SettingsDep,
+    ctx: PlatformAuth,
+    ip: ClientIp,
+) -> Response:
+    """Revoke the operator session before clearing platform cookies."""
+    await AuthService(session, settings).revoke_session(ctx.session_id, reason="logout")
+    await record_platform_audit(
+        session,
+        action=PlatformAuditAction.ADMIN_LOGGED_OUT,
+        actor_admin_id=ctx.admin_id,
+        entity_type="session",
+        entity_id=ctx.session_id,
+        ip=ip,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    clear_auth_cookies(response, settings=settings)
+    return response
 
 
 @router.get("/auth/me", response_model=PlatformAdminRead)
@@ -221,6 +263,18 @@ async def get_organization(
         current_period_end=subscription.current_period_end if subscription else None,
         limits=plan.limits if plan else None,
     )
+
+
+@router.get("/organizations/{organization_id}/schools", response_model=list[SchoolRead])
+async def list_organization_schools(
+    organization_id: UUID,
+    session: PlatformDbSession,
+    settings: SettingsDep,
+    ctx: PlatformAuth,
+) -> list[SchoolRead]:
+    """Every campus inside one organization (spec §8's org-detail drilldown)."""
+    schools = await PlatformService(session, settings).list_schools(organization_id)
+    return [SchoolRead.model_validate(s) for s in schools]
 
 
 @router.patch("/organizations/{organization_id}/status", response_model=OrganizationSummary)

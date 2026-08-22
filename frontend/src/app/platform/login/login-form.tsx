@@ -6,18 +6,18 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { ApiError, toProblem } from "@/lib/api/errors";
-import { loginSchema, type LoginValues } from "@/lib/validation/auth";
+import { platformLoginSchema, type PlatformLoginValues } from "@/lib/validation/auth";
 
 export function PlatformLoginForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
-  const form = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<PlatformLoginValues>({
+    resolver: zodResolver(platformLoginSchema),
+    defaultValues: { email: "", password: "", totp_code: "" },
   });
 
-  async function onSubmit(values: LoginValues) {
+  async function onSubmit(values: PlatformLoginValues) {
     setError(null);
     try {
       const response = await fetch("/api/platform/login", {
@@ -53,6 +53,25 @@ export function PlatformLoginForm() {
         />
         {form.formState.errors.email ? (
           <p className="text-xs text-red-400">{form.formState.errors.email.message}</p>
+        ) : null}
+      </div>
+
+      <div className="grid gap-1.5">
+        <label htmlFor="totp_code" className="text-sm font-medium text-slate-300">
+          Authentication code
+        </label>
+        <input
+          id="totp_code"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          placeholder="123456"
+          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 font-mono text-sm tracking-widest text-slate-100 outline-none focus:ring-2 focus:ring-slate-500"
+          {...form.register("totp_code")}
+        />
+        {form.formState.errors.totp_code ? (
+          <p className="text-xs text-red-400">{form.formState.errors.totp_code.message}</p>
         ) : null}
       </div>
 

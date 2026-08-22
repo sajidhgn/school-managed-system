@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, Plus, Shield, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus, Shield, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -11,6 +11,15 @@ import { PermissionMatrix } from "@/components/rbac/permission-matrix";
 import { RoleFormDialog } from "@/components/rbac/role-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
@@ -55,6 +64,9 @@ export function RolesView({
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<RoleRead | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<RoleRead | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   const selected = roles.find((r) => r.id === selectedId) ?? null;
   const isOrgLevel = selected?.school_id === null;
@@ -80,6 +92,34 @@ export function RolesView({
     } finally {
       setBusy(false);
       setDeleting(null);
+    }
+  }
+
+  function beginEdit(role: RoleRead) {
+    setEditing(role);
+    setEditName(role.name);
+    setEditDescription(role.description ?? "");
+  }
+
+  async function saveMetadata() {
+    if (!editing || editName.trim().length < 2) return;
+    setBusy(true);
+    try {
+      await rolesApi.update(schoolId, editing.id, {
+        name: editName.trim(),
+        description: editDescription.trim() || null,
+      });
+      toast({ title: `${editName.trim()} updated.` });
+      setEditing(null);
+      router.refresh();
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not update this role",
+        description: error instanceof ApiError ? error.message : undefined,
+      });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -137,17 +177,25 @@ export function RolesView({
               </div>
 
               {selected.is_editable && !selected.is_system ? (
-                <Can permission={PERMISSIONS.roleDelete}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => setDeleting(selected)}
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                    {t.common.delete}
-                  </Button>
-                </Can>
+                <div className="flex gap-1">
+                  <Can permission={PERMISSIONS.roleUpdate}>
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => beginEdit(selected)}>
+                      <Pencil className="size-4" aria-hidden />
+                      Edit details
+                    </Button>
+                  </Can>
+                  <Can permission={PERMISSIONS.roleDelete}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setDeleting(selected)}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                      {t.common.delete}
+                    </Button>
+                  </Can>
+                </div>
               ) : null}
             </header>
 
@@ -197,6 +245,37 @@ export function RolesView({
         loading={busy}
         onConfirm={() => deleting && remove(deleting)}
       />
+
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit role details</DialogTitle>
+            <DialogDescription>
+              Renaming is cosmetic. Permissions remain in the separate matrix and are audited separately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <label htmlFor="role-edit-name" className="text-sm font-medium">Display name</label>
+              <Input id="role-edit-name" value={editName} onChange={(event) => setEditName(event.target.value)} />
+            </div>
+            <div className="grid gap-1.5">
+              <label htmlFor="role-edit-description" className="text-sm font-medium">Description</label>
+              <Input
+                id="role-edit-description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={saveMetadata} loading={busy} disabled={editName.trim().length < 2}>
+              Save details
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

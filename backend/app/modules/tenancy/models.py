@@ -146,6 +146,12 @@ class Organization(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     payable, not to the principal who signed up."""
 
     tax_id: Mapped[str | None] = mapped_column(String(64))
+    requested_plan_code: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="free", server_default="free"
+    )
+    requested_billing_cycle: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="monthly", server_default="monthly"
+    )
 
     __table_args__ = (Index("ix_organizations_status_created_at", "status", "created_at"),)
 

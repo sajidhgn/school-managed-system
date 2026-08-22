@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.db.session import session_scope
+from app.modules.invitations.service import expire_pending_invitations
 from tests.integration.conftest import API, STRONG_PASSWORD, Tenant, latest_token
 
 
@@ -277,6 +280,42 @@ async def test_revoking_returns_the_staff_seat(tenant: Tenant, mailbox: list[Any
         json={"token": token, "full_name": "Revoked", "password": STRONG_PASSWORD},
     )
     assert dead.status_code == 410
+
+
+async def test_scheduled_expiry_returns_the_reserved_staff_seat(
+    tenant: Tenant,
+    mailbox: list[Any],
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The maintenance sweep expires abandoned links and releases their seats."""
+    before = (await tenant.get(f"{API}/org/usage")).json()
+    staff_before = next(i for i in before["items"] if i["key"] == "max_staff")["current"]
+
+    invitation_id, _ = await _invite(tenant, "scheduled-expiry@test.example")
+    during = (await tenant.get(f"{API}/org/usage")).json()
+    staff_during = next(i for i in during["items"] if i["key"] == "max_staff")["current"]
+    assert staff_during == staff_before + 1
+
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text("UPDATE invitations SET expires_at = :past WHERE id = :id"),
+            {"past": datetime.now(UTC) - timedelta(days=1), "id": invitation_id},
+        )
+        await session.commit()
+
+    # session_scope uses the normal sms_app role and applies the organization's RLS
+    # context, exactly as the CLI maintenance command does in production.
+    async with session_scope(UUID(tenant.organization_id)) as session:
+        expired = await expire_pending_invitations(session, UUID(tenant.organization_id))
+    assert expired == 1
+
+    after = (await tenant.get(f"{API}/org/usage")).json()
+    staff_after = next(i for i in after["items"] if i["key"] == "max_staff")["current"]
+    assert staff_after == staff_before
+
+    invitations = await tenant.get(f"{API}/schools/{tenant.school_id}/invitations")
+    swept = next(item for item in invitations.json() if item["id"] == invitation_id)
+    assert swept["status"] == "expired"
 
 
 async def test_inviting_an_existing_member_is_409(tenant: Tenant, mailbox: list[Any]) -> None:

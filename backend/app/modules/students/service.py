@@ -110,6 +110,14 @@ class StudentService:
         new_status = values.get("status")
         if new_status is StudentStatus.ACTIVE and student.status is not StudentStatus.ACTIVE:
             await self._reserve_seat()
+        elif (
+            "status" in values
+            and student.status is StudentStatus.ACTIVE
+            and new_status is not StudentStatus.ACTIVE
+        ):
+            await EntitlementService(self.session).release(
+                require_organization_id(), "max_students"
+            )
 
         updated = await self.repo.update(student, **values)
         logger.info("student_updated", student_id=str(student_id), fields=sorted(values))
@@ -123,6 +131,10 @@ class StudentService:
         of the student from the active directory.
         """
         student = await self._get_or_404(student_id)
+        if student.status is StudentStatus.ACTIVE:
+            await EntitlementService(self.session).release(
+                require_organization_id(), "max_students"
+            )
         await self.repo.soft_delete(student)
         logger.info("student_deleted", student_id=str(student_id))
 

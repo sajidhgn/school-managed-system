@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, Header, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.api.cookies import clear_auth_cookies, set_auth_cookies
+from app.api.cookies import clear_auth_cookies, set_access_cookie, set_auth_cookies
 from app.api.deps import (
     ClientIp,
     CurrentAuth,
@@ -44,6 +44,7 @@ from app.common.email.sender import EmailSender, build_email_sender
 from app.core.config import Settings
 from app.core.context import set_organization_id, set_school_id
 from app.core.exceptions import AuthenticationError
+from app.core.rate_limit import enforce_rate_limit
 from app.db.session import bind_tenant
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
@@ -121,6 +122,8 @@ async def register(
         password=payload.password,
         organization_name=payload.organization_name,
         country=payload.country,
+        plan_code=payload.plan_code,
+        billing_cycle=payload.billing_cycle,
         ip=ip,
         user_agent=request.headers.get("User-Agent"),
     )
@@ -150,6 +153,7 @@ async def resend_verification(
     session: PublicDbSession,
     settings: SettingsDep,
     sender: EmailDispatcher,
+    ip: ClientIp,
 ) -> MessageResponse:
     """Re-send the verification link.
 
@@ -157,6 +161,12 @@ async def resend_verification(
     verified -- otherwise this becomes a cheap way to test which addresses are
     registered.
     """
+    await enforce_rate_limit(
+        "verification_resend",
+        f"{ip or 'unknown'}:{payload.email}",
+        limit=settings.AUTH_RATE_LIMIT,
+        window_seconds=settings.AUTH_RATE_WINDOW_SECONDS,
+    )
     service = _service(session, settings, sender)
     user = await service._find_user_by_email(payload.email)
     if user is not None and not user.is_email_verified:
@@ -186,6 +196,12 @@ async def login(
     """
     service = _service(session, settings)
     user_agent = request.headers.get("User-Agent")
+    await enforce_rate_limit(
+        "tenant_login",
+        f"{ip or 'unknown'}:{payload.email}",
+        limit=settings.AUTH_RATE_LIMIT,
+        window_seconds=settings.AUTH_RATE_WINDOW_SECONDS,
+    )
 
     try:
         user = await service.authenticate(
@@ -225,8 +241,17 @@ async def login(
     )
 
     if selected is None:
-        # No tokens yet. A refresh cookie without a chosen context would be a
-        # half-authenticated state the rest of the system has no way to reason about.
+        continuation = await service.issue_context_selection(
+            user=user, ip=ip, user_agent=user_agent
+        )
+        set_access_cookie(
+            response,
+            access_token=continuation.access_token,
+            settings=settings,
+            max_age=continuation.expires_in,
+        )
+        if _wants_body_tokens(x_token_transport):
+            response.headers["X-Access-Token"] = continuation.access_token
         return result
 
     membership = await service.resolve_membership(
@@ -290,6 +315,9 @@ async def switch_context(
     """
     service = _service(session, settings)
     user_agent = request.headers.get("User-Agent")
+
+    if claims.is_platform:
+        raise AuthenticationError("Wrong token type.", code="WRONG_TOKEN_TYPE")
 
     membership = await service.resolve_membership(
         user_id=claims.user_id, membership_id=payload.membership_id
@@ -392,9 +420,24 @@ async def logout(
     claims: CurrentClaims,
     session: DbSession,
     settings: SettingsDep,
+    request: Request,
+    ip: ClientIp,
 ) -> MessageResponse:
     """Revoke this session and clear the cookies."""
     await _service(session, settings).revoke_session(claims.session_id, reason="logout")
+    if claims.organization_id is not None:
+        await record_audit(
+            session,
+            organization_id=claims.organization_id,
+            school_id=claims.school_id,
+            action=AuditAction.USER_LOGGED_OUT,
+            actor_user_id=claims.user_id,
+            actor_membership_id=claims.membership_id,
+            entity_type="session",
+            entity_id=claims.session_id,
+            ip=ip,
+            user_agent=request.headers.get("User-Agent"),
+        )
     clear_auth_cookies(response, settings=settings)
     return MessageResponse(message="Signed out.")
 
@@ -405,9 +448,27 @@ async def logout_all(
     claims: CurrentClaims,
     session: DbSession,
     settings: SettingsDep,
+    request: Request,
+    ip: ClientIp,
 ) -> MessageResponse:
     """Revoke every session for this user, on every device (spec §4.3F)."""
+    if claims.is_context_selection:
+        raise AuthenticationError(
+            "Choose an organization or school before managing sessions.",
+            code="CONTEXT_SELECTION_REQUIRED",
+        )
     await _service(session, settings).revoke_all_sessions(claims.user_id, reason="logout_all")
+    assert claims.organization_id is not None
+    await record_audit(
+        session,
+        organization_id=claims.organization_id,
+        school_id=claims.school_id,
+        action=AuditAction.USER_LOGGED_OUT_ALL,
+        actor_user_id=claims.user_id,
+        actor_membership_id=claims.membership_id,
+        ip=ip,
+        user_agent=request.headers.get("User-Agent"),
+    )
     clear_auth_cookies(response, settings=settings)
     return MessageResponse(message="Signed out on all devices.")
 
@@ -423,8 +484,15 @@ async def forgot_password(
     session: PublicDbSession,
     settings: SettingsDep,
     sender: EmailDispatcher,
+    ip: ClientIp,
 ) -> MessageResponse:
     """Send a reset link. Identical response for known and unknown addresses."""
+    await enforce_rate_limit(
+        "password_reset",
+        f"{ip or 'unknown'}:{payload.email}",
+        limit=settings.AUTH_RATE_LIMIT,
+        window_seconds=settings.AUTH_RATE_WINDOW_SECONDS,
+    )
     await _service(session, settings, sender).request_password_reset(payload.email)
     return MessageResponse(
         message="If an account exists for that address, we have sent a reset link."

@@ -1,6 +1,7 @@
 "use client";
 
 import { Ban, Eye, MoreHorizontal, Play } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -21,7 +22,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import { ORG_STATUS_LABELS, label, type OrganizationSummary } from "@/lib/api/types";
+import {
+  ORG_STATUS_LABELS,
+  label,
+  type ImpersonationGrant,
+  type OrganizationSummary,
+} from "@/lib/api/types";
 
 /**
  * Operator view of every organization.
@@ -113,7 +119,12 @@ export function OrganizationsView({
               {filtered.map((org) => (
                 <TableRow key={org.id}>
                   <TableCell>
-                    <div className="font-medium">{org.name}</div>
+                    <Link
+                      href={`/platform/organizations/${org.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {org.name}
+                    </Link>
                     <div className="text-xs text-muted-foreground">{org.slug}</div>
                   </TableCell>
                   <TableCell>{org.plan_name ?? "—"}</TableCell>
@@ -145,14 +156,13 @@ export function OrganizationsView({
                         <DropdownMenuItem
                           onSelect={async () => {
                             try {
-                              await api.post(`/platform/organizations/${org.id}/impersonate`, {
-                                reason: "Support investigation",
-                              });
-                              toast({
-                                title: "Read-only access recorded",
-                                description:
-                                  "This was written to the platform audit log. Writes are refused by the database.",
-                              });
+                              const grant = await api.post<ImpersonationGrant>(
+                                `/platform/organizations/${org.id}/impersonate`,
+                                { reason: "Support investigation" },
+                              );
+                              router.push(
+                                `/platform/organizations/${org.id}?supportUntil=${encodeURIComponent(grant.expires_at)}`,
+                              );
                             } catch {
                               toast({ variant: "destructive", title: "Could not start" });
                             }

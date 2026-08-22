@@ -28,6 +28,7 @@ from app.api.deps import (
     require,
 )
 from app.core.exceptions import AuthenticationError
+from app.core.rate_limit import enforce_rate_limit
 from app.modules.auth.router import EmailDispatcher, _attach_body_tokens, _wants_body_tokens
 from app.modules.auth.service import AuthService
 from app.modules.invitations.models import Invitation
@@ -94,6 +95,12 @@ async def send_invitation(
     already hold every permission the invited role grants. Without that, inviting is
     simply a slower way to create authority you do not have.
     """
+    await enforce_rate_limit(
+        "invitation_send",
+        f"{ctx.user_id}:{ip or 'unknown'}",
+        limit=settings.PUBLIC_MUTATION_RATE_LIMIT,
+        window_seconds=settings.PUBLIC_MUTATION_RATE_WINDOW_SECONDS,
+    )
     _assert_school_scope(ctx, school_id)
     invitation, _raw = await InvitationService(session, settings, sender).create(
         ctx=ctx,
@@ -129,6 +136,7 @@ async def resend_invitation(
     session: DbSession,
     settings: SettingsDep,
     sender: EmailDispatcher,
+    ip: ClientIp,
     ctx: Annotated[AuthContext, Depends(require("invitation:resend"))],
 ) -> InvitationRead:
     """Resend with a FRESH token. The previous link dies immediately.
@@ -137,6 +145,12 @@ async def resend_invitation(
     unrecoverable by design. Rotating is also the safer behaviour -- if the first
     email went to a mistyped or compromised address, this kills that link.
     """
+    await enforce_rate_limit(
+        "invitation_resend",
+        f"{ctx.user_id}:{ip or 'unknown'}",
+        limit=settings.PUBLIC_MUTATION_RATE_LIMIT,
+        window_seconds=settings.PUBLIC_MUTATION_RATE_WINDOW_SECONDS,
+    )
     _assert_school_scope(ctx, school_id)
     invitation, _raw = await InvitationService(session, settings, sender).resend(
         ctx=ctx, invitation_id=invitation_id

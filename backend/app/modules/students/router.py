@@ -22,14 +22,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import (
+    ClientIp,
     DbSession,
     Pagination,
     PublicDbSession,
     SearchQuery,
+    SettingsDep,
     Sorting,
     require,
 )
 from app.common.schemas import Page
+from app.core.rate_limit import enforce_rate_limit
 from app.modules.students.models import StudentStatus
 from app.modules.students.schemas import (
     AdmissionResponse,
@@ -50,13 +53,22 @@ router = APIRouter()
     summary="Submit a public admissions application",
 )
 async def submit_admission(
-    payload: StudentAdmissionRequest, db: PublicDbSession
+    payload: StudentAdmissionRequest,
+    db: PublicDbSession,
+    settings: SettingsDep,
+    ip: ClientIp,
 ) -> AdmissionResponse:
     """Public endpoint backing the Next.js admissions form.
 
     `PublicDbSession`, not `DbSession`: there is no caller identity. Declared before
     `/{student_id}` so "admissions" is never parsed as a student id.
     """
+    await enforce_rate_limit(
+        "public_admission",
+        ip or "unknown",
+        limit=settings.PUBLIC_MUTATION_RATE_LIMIT,
+        window_seconds=settings.PUBLIC_MUTATION_RATE_WINDOW_SECONDS,
+    )
     return await StudentService(db).admit(payload)
 
 

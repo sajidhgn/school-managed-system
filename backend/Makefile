@@ -7,7 +7,7 @@
 # same thing.
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo reconcile openapi db-reset
+.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo reconcile maintenance mfa-enroll openapi db-reset
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -75,6 +75,13 @@ seed-demo:  ## Seed + create a demo org with two schools, staff and invitations
 
 reconcile:  ## Recompute organization usage counters from source tables
 	uv run python -m app.cli reconcile-usage
+
+maintenance:  ## Run billing lifecycle, anonymization and audit-retention jobs once
+	uv run python -m app.cli run-maintenance
+
+mfa-enroll:  ## Enroll/rotate platform TOTP: make mfa-enroll email=admin@example.com
+	@test -n "$(email)" || (echo "Usage: make mfa-enroll email=admin@example.com" && exit 1)
+	uv run python -m app.cli mfa-enroll --email "$(email)"
 
 openapi:  ## Regenerate openapi.json (the frontend generates its types from this)
 	uv run python scripts/dump_openapi.py

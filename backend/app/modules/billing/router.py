@@ -18,8 +18,10 @@ INTERACTIONS
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.api.deps import (
@@ -29,8 +31,10 @@ from app.api.deps import (
     SettingsDep,
     require,
 )
-from app.core.exceptions import ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.modules.billing.gateways import GatewayError, PaymentGateway, build_gateway
+from app.modules.billing.idempotency import BillingIdempotencyService
+from app.modules.billing.invoice_pdf import render_invoice_pdf
 from app.modules.billing.models import Invoice, Subscription
 from app.modules.billing.schemas import (
     CancelRequest,
@@ -41,6 +45,7 @@ from app.modules.billing.schemas import (
 )
 from app.modules.billing.service import BillingService, WebhookService
 from app.modules.platform_admin.models import Plan
+from app.modules.tenancy.models import Organization
 
 # Three routers, mounted under different prefixes by the v1 aggregator. Separate
 # because their auth posture differs: `public_router` and `webhook_router` are
@@ -56,6 +61,10 @@ def get_gateway(settings: SettingsDep) -> PaymentGateway:
 
 
 GatewayDep = Annotated[PaymentGateway, Depends(get_gateway)]
+IdempotencyKey = Annotated[
+    str | None,
+    Header(alias="Idempotency-Key", min_length=1, max_length=128),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +143,7 @@ async def subscribe(
     session: DbSession,
     gateway: GatewayDep,
     ctx: Annotated[AuthContext, Depends(require("billing:manage"))],
+    idempotency_key: IdempotencyKey = None,
 ) -> SubscriptionRead:
     """Move onto a paid plan.
 
@@ -142,6 +152,17 @@ async def subscribe(
     already holds a free-plan subscription row. Kept as two endpoints because they
     are two different intentions in the UI, and the audit trail reads better for it.
     """
+    request_payload = payload.model_dump(mode="json")
+    idempotency = BillingIdempotencyService(session)
+    replay = await idempotency.begin(
+        organization_id=ctx.organization_id,
+        operation="billing.subscribe",
+        key=idempotency_key,
+        request_payload=request_payload,
+    )
+    if replay is not None:
+        return SubscriptionRead.model_validate(replay)
+
     service = BillingService(session, gateway)
     subscription = await service.change_plan(
         organization_id=ctx.organization_id,
@@ -150,7 +171,15 @@ async def subscribe(
         actor_user_id=ctx.user_id,
     )
     _, plan = await service.get_subscription(ctx.organization_id)
-    return _subscription_read(subscription, plan)
+    result = _subscription_read(subscription, plan)
+    await idempotency.complete(
+        organization_id=ctx.organization_id,
+        operation="billing.subscribe",
+        key=idempotency_key,
+        request_payload=request_payload,
+        response_payload=result.model_dump(mode="json"),
+    )
+    return result
 
 
 @router.post("/change-plan", response_model=SubscriptionRead)
@@ -159,8 +188,20 @@ async def change_plan(
     session: DbSession,
     gateway: GatewayDep,
     ctx: Annotated[AuthContext, Depends(require("billing:manage"))],
+    idempotency_key: IdempotencyKey = None,
 ) -> SubscriptionRead:
     """Upgrade or downgrade. A downgrade below current usage never deletes data."""
+    request_payload = payload.model_dump(mode="json")
+    idempotency = BillingIdempotencyService(session)
+    replay = await idempotency.begin(
+        organization_id=ctx.organization_id,
+        operation="billing.change_plan",
+        key=idempotency_key,
+        request_payload=request_payload,
+    )
+    if replay is not None:
+        return SubscriptionRead.model_validate(replay)
+
     service = BillingService(session, gateway)
     subscription = await service.change_plan(
         organization_id=ctx.organization_id,
@@ -169,7 +210,15 @@ async def change_plan(
         actor_user_id=ctx.user_id,
     )
     _, plan = await service.get_subscription(ctx.organization_id)
-    return _subscription_read(subscription, plan)
+    result = _subscription_read(subscription, plan)
+    await idempotency.complete(
+        organization_id=ctx.organization_id,
+        operation="billing.change_plan",
+        key=idempotency_key,
+        request_payload=request_payload,
+        response_payload=result.model_dump(mode="json"),
+    )
+    return result
 
 
 @router.post("/cancel", response_model=SubscriptionRead)
@@ -178,6 +227,7 @@ async def cancel_subscription(
     session: DbSession,
     gateway: GatewayDep,
     ctx: Annotated[AuthContext, Depends(require("billing:manage"))],
+    idempotency_key: IdempotencyKey = None,
 ) -> SubscriptionRead:
     """Cancel at period end. Immediate cancellation is a super-admin action."""
     if not payload.at_period_end:
@@ -187,6 +237,17 @@ async def cancel_subscription(
             code="IMMEDIATE_CANCEL_NOT_ALLOWED",
         )
 
+    request_payload = payload.model_dump(mode="json")
+    idempotency = BillingIdempotencyService(session)
+    replay = await idempotency.begin(
+        organization_id=ctx.organization_id,
+        operation="billing.cancel",
+        key=idempotency_key,
+        request_payload=request_payload,
+    )
+    if replay is not None:
+        return SubscriptionRead.model_validate(replay)
+
     service = BillingService(session, gateway)
     subscription = await service.cancel(
         organization_id=ctx.organization_id,
@@ -194,7 +255,15 @@ async def cancel_subscription(
         actor_user_id=ctx.user_id,
     )
     _, plan = await service.get_subscription(ctx.organization_id)
-    return _subscription_read(subscription, plan)
+    result = _subscription_read(subscription, plan)
+    await idempotency.complete(
+        organization_id=ctx.organization_id,
+        operation="billing.cancel",
+        key=idempotency_key,
+        request_payload=request_payload,
+        response_payload=result.model_dump(mode="json"),
+    )
+    return result
 
 
 @router.get("/invoices", response_model=list[InvoiceRead])
@@ -214,6 +283,31 @@ async def list_invoices(
         .all()
     )
     return list(rows)
+
+
+@router.get("/invoices/{invoice_id}/pdf")
+async def download_invoice_pdf(
+    invoice_id: UUID,
+    session: DbSession,
+    ctx: Annotated[AuthContext, Depends(require("invoice:read"))],
+) -> StreamingResponse:
+    """Generate one invoice after RLS and permission checks have resolved it."""
+    invoice = await session.get(Invoice, invoice_id)
+    if invoice is None:
+        raise NotFoundError("Invoice not found.")
+    organization = await session.get(Organization, ctx.organization_id)
+    if organization is None:
+        raise NotFoundError("Organization not found.")
+
+    payload = render_invoice_pdf(invoice, organization)
+    return StreamingResponse(
+        iter([payload]),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="invoice-{invoice.number}.pdf"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 # Usage lives on the tenancy router as `GET /org/usage` (spec §8), because it

@@ -59,3 +59,15 @@ export async function serverGetOrNull<T>(
   if (!response || !response.ok) return null;
   return (await response.json()) as T;
 }
+
+/** Required protected data: fail closed so mutation controls never render on fakes. */
+export async function serverGetRequired<T>(
+  path: string,
+  kind: SessionKind = "tenant",
+): Promise<T> {
+  const response = await fetchWithSession(path, { method: "GET" }, kind);
+  if (!response || !response.ok) {
+    throw new Error(`Required API read failed (${response?.status ?? "no response"}): ${path}`);
+  }
+  return (await response.json()) as T;
+}

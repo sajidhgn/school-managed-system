@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     """Upper bound only. Correctness comes from the `pv` (permissions_version) in the
     cache key, not from expiry: editing a role bumps `pv`, so every existing token
     misses the old key immediately. The TTL merely evicts abandoned versions."""
+    TRUSTED_PROXY_IPS: list[str] = Field(default_factory=list)
+    AUTH_RATE_LIMIT: int = 5
+    AUTH_RATE_WINDOW_SECONDS: int = 60
+    PUBLIC_MUTATION_RATE_LIMIT: int = 10
+    PUBLIC_MUTATION_RATE_WINDOW_SECONDS: int = 60
 
     # --- Invitations (spec §7) ---------------------------------------------
     INVITATION_EXPIRE_DAYS: int = 7

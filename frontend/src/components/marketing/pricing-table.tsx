@@ -130,7 +130,9 @@ export function PricingTable({ plans }: { plans: PlanPublic[] }) {
               ) : null}
 
               <Button asChild className="mt-6" variant={featured ? "default" : "outline"}>
-                <Link href={`/signup?plan=${plan.code}`}>{t.marketing.choosePlan}</Link>
+                <Link href={`/signup?plan=${plan.code}&cycle=${cycle}`}>
+                  {t.marketing.choosePlan}
+                </Link>
               </Button>
 
               <dl className="mt-7 space-y-2.5 border-t border-border pt-6 text-sm">

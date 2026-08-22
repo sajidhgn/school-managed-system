@@ -233,7 +233,12 @@ class RbacService:
         await self.session.flush()
 
         self.session.add_all(
-            RolePermission(role_id=role.id, permission_code=c) for c in sorted(permission_codes)
+            RolePermission(
+                role_id=role.id,
+                organization_id=ctx.organization_id,
+                permission_code=c,
+            )
+            for c in sorted(permission_codes)
         )
 
         await record_audit(
@@ -326,7 +331,12 @@ class RbacService:
 
         await self.session.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
         self.session.add_all(
-            RolePermission(role_id=role_id, permission_code=c) for c in sorted(permission_codes)
+            RolePermission(
+                role_id=role_id,
+                organization_id=role.organization_id,
+                permission_code=c,
+            )
+            for c in sorted(permission_codes)
         )
 
         role.permissions_version += 1

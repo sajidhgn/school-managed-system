@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
@@ -92,6 +93,59 @@ async def test_cross_organization_write_is_rejected(
     # And B's school is untouched.
     check = await org_b.get(f"{API}/schools/{org_b.school_id}")
     assert check.json()["name"] != "Hijacked"
+
+
+async def test_direct_role_permission_dml_cannot_cross_tenants(
+    make_tenant: Callable[..., Any],
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The join table enforces tenancy even when application services are bypassed."""
+    org_a: Tenant = await make_tenant(
+        name="Role Guard A", email="role-guard-a@test.example", school_code="RGA"
+    )
+    org_b: Tenant = await make_tenant(
+        name="Role Guard B", email="role-guard-b@test.example", school_code="RGB"
+    )
+
+    async with admin_sessionmaker() as admin:
+        foreign_role_id = (
+            await admin.execute(
+                text(
+                    "SELECT id FROM roles WHERE organization_id = :organization_id "
+                    "AND code = 'teacher'"
+                ),
+                {"organization_id": org_b.organization_id},
+            )
+        ).scalar_one()
+
+    factory = get_session_factory()
+    async with factory() as app_session:
+        await bind_tenant(app_session, UUID(org_a.organization_id))
+        with pytest.raises(DBAPIError):
+            await app_session.execute(
+                text(
+                    "INSERT INTO role_permissions "
+                    "(role_id, organization_id, permission_code) "
+                    "VALUES (:role_id, :organization_id, :permission_code)"
+                ),
+                {
+                    "role_id": foreign_role_id,
+                    "organization_id": org_a.organization_id,
+                    "permission_code": "school:create",
+                },
+            )
+
+    async with admin_sessionmaker() as admin:
+        attached = (
+            await admin.execute(
+                text(
+                    "SELECT count(*) FROM role_permissions "
+                    "WHERE role_id = :role_id AND permission_code = :permission_code"
+                ),
+                {"role_id": foreign_role_id, "permission_code": "school:create"},
+            )
+        ).scalar_one()
+        assert attached == 0
 
 
 async def test_school_scoped_context_cannot_read_or_mutate_another_school_academic_data(

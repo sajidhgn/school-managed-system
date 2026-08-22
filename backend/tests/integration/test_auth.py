@@ -12,6 +12,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import Settings
+from app.core.rate_limit import reset_memory_rate_limits
+from app.core.security import hash_password
+from app.core.totp import encrypt_totp_secret, totp_code
 from tests.integration.conftest import API, STRONG_PASSWORD, Tenant, latest_token
 
 # ---------------------------------------------------------------------------
@@ -109,6 +113,41 @@ async def test_signup_creates_owner_then_principal_on_first_school(
     assert by_role["principal"]["is_primary"] is False
 
 
+async def test_signup_preserves_selected_plan_and_billing_cycle(
+    db_client: Any, mailbox: list[Any]
+) -> None:
+    """The pricing-page selection becomes the verified tenant's trial subscription."""
+    registered = await db_client.post(
+        f"{API}/auth/register",
+        json={
+            "full_name": "Plan Selector",
+            "email": "plan-selector@test.example",
+            "password": STRONG_PASSWORD,
+            "organization_name": "Selected Plan Trust",
+            "plan_code": "starter",
+            "billing_cycle": "yearly",
+        },
+    )
+    assert registered.status_code == 201, registered.text
+    verified = await db_client.post(
+        f"{API}/auth/verify-email", json={"token": latest_token(mailbox)}
+    )
+    assert verified.status_code == 200, verified.text
+    login = await db_client.post(
+        f"{API}/auth/login",
+        json={"email": "plan-selector@test.example", "password": STRONG_PASSWORD},
+        headers={"X-Token-Transport": "body"},
+    )
+    subscription = await db_client.get(
+        f"{API}/billing/subscription",
+        headers={"Authorization": f"Bearer {login.headers['X-Access-Token']}"},
+    )
+    assert subscription.status_code == 200, subscription.text
+    assert subscription.json()["plan_code"] == "starter"
+    assert subscription.json()["billing_cycle"] == "yearly"
+    assert subscription.json()["status"] == "trialing"
+
+
 async def test_second_school_does_not_auto_grant_principal(tenant: Tenant) -> None:
     """Only the FIRST school auto-grants principal.
 
@@ -198,13 +237,20 @@ async def test_reusing_a_rotated_refresh_token_revokes_the_whole_family(
 # ---------------------------------------------------------------------------
 
 
-async def test_sixth_failed_login_locks_the_account(db_client: Any, tenant: Tenant) -> None:
+async def test_sixth_failed_login_is_rate_limited_and_account_is_locked(
+    db_client: Any,
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
     """Spec §12: "6th failed login -> locked."
 
     Five failures trip the threshold; the sixth attempt is refused even with the
     CORRECT password, which is what proves the lock is real rather than the wrong
     password simply failing again.
     """
+    # The tenant fixture performs its own successful setup login; isolate the
+    # attack window so this test counts exactly the attempts below.
+    await reset_memory_rate_limits()
     for _ in range(5):
         wrong = await db_client.post(
             f"{API}/auth/login",
@@ -212,14 +258,31 @@ async def test_sixth_failed_login_locks_the_account(db_client: Any, tenant: Tena
         )
         assert wrong.status_code == 401
 
-    locked = await db_client.post(
+    limited = await db_client.post(
         f"{API}/auth/login",
         json={"email": tenant.owner_email, "password": STRONG_PASSWORD},
     )
-    assert locked.status_code == 401, "the account was not locked after 5 failures"
-    # Deliberately the SAME error as a bad password: announcing the lock tells an
-    # attacker their guessing is having an effect and exactly when to resume.
-    assert locked.json()["code"] == "INVALID_CREDENTIALS"
+    assert limited.status_code == 429
+    assert limited.json()["code"] == "RATE_LIMITED"
+    assert int(limited.headers["Retry-After"]) > 0
+
+    async with admin_sessionmaker() as session:
+        locked_until = (
+            await session.execute(
+                text("SELECT locked_until FROM users WHERE id = :user_id"),
+                {"user_id": tenant.owner_user_id},
+            )
+        ).scalar_one()
+        assert locked_until is not None, "five failed passwords did not lock the account"
+        actions = set(
+            (
+                await session.execute(
+                    text("SELECT action FROM audit_logs WHERE organization_id = :organization_id"),
+                    {"organization_id": tenant.organization_id},
+                )
+            ).scalars()
+        )
+        assert "user.locked_out" in actions
 
 
 async def test_unknown_and_known_emails_are_indistinguishable(
@@ -382,6 +445,61 @@ async def test_reset_token_is_single_use(
 # ---------------------------------------------------------------------------
 
 
+async def test_multi_membership_login_can_complete_context_selection(
+    db_client: Any,
+    tenant: Tenant,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A user with no primary membership receives a one-use continuation."""
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text("UPDATE memberships SET is_primary = false WHERE user_id = :user_id"),
+            {"user_id": tenant.owner_user_id},
+        )
+        await session.commit()
+
+    login = await db_client.post(
+        f"{API}/auth/login",
+        json={"email": tenant.owner_email, "password": STRONG_PASSWORD},
+        headers={"X-Token-Transport": "body"},
+    )
+    assert login.status_code == 200, login.text
+    assert login.json()["select_required"] is True
+    continuation = login.headers["X-Access-Token"]
+    assert "X-Refresh-Token" not in login.headers
+    continuation_headers = {"Authorization": f"Bearer {continuation}"}
+
+    # The continuation is not an ordinary tenant session.
+    me = await db_client.get(f"{API}/auth/me", headers=continuation_headers)
+    assert me.status_code == 401
+    logout_all = await db_client.post(f"{API}/auth/logout-all", headers=continuation_headers)
+    assert logout_all.status_code == 401
+
+    chosen = login.json()["memberships"][0]
+    selected = await db_client.post(
+        f"{API}/auth/context",
+        json={"membership_id": chosen["membership_id"]},
+        headers={**continuation_headers, "X-Token-Transport": "body"},
+    )
+    assert selected.status_code == 200, selected.text
+    assert selected.headers.get("X-Refresh-Token")
+
+    scoped = await db_client.get(
+        f"{API}/auth/me",
+        headers={"Authorization": f"Bearer {selected.headers['X-Access-Token']}"},
+    )
+    assert scoped.status_code == 200, scoped.text
+    assert scoped.json()["active_membership_id"] == chosen["membership_id"]
+
+    replay = await db_client.post(
+        f"{API}/auth/context",
+        json={"membership_id": chosen["membership_id"]},
+        headers={**continuation_headers, "X-Token-Transport": "body"},
+    )
+    assert replay.status_code == 401
+    assert replay.json()["code"] == "CONTEXT_SELECTION_INVALID"
+
+
 async def test_context_switch_rescopes_the_token(tenant: Tenant) -> None:
     """Spec §4.3E: switching membership re-issues a token for the new scope.
 
@@ -444,6 +562,84 @@ async def test_logout_all_revokes_every_session(db_client: Any, tenant: Tenant) 
     assert stale.status_code == 401
 
 
+async def test_auth_security_mutations_have_audit_rows(
+    db_client: Any,
+    tenant: Tenant,
+    mailbox: list[Any],
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Failed login, reset, logout and reuse all leave the named audit evidence."""
+    wrong = await db_client.post(
+        f"{API}/auth/login",
+        json={"email": tenant.owner_email, "password": "wrong-passphrase-999"},
+    )
+    assert wrong.status_code == 401
+
+    requested = await db_client.post(
+        f"{API}/auth/forgot-password", json={"email": tenant.owner_email}
+    )
+    assert requested.status_code == 200
+    reset = await db_client.post(
+        f"{API}/auth/reset-password",
+        json={"token": latest_token(mailbox), "password": "new-correct-horse-staple-883"},
+    )
+    assert reset.status_code == 200, reset.text
+    db_client.cookies.clear()
+
+    async def login() -> tuple[str, str]:
+        response = await db_client.post(
+            f"{API}/auth/login",
+            json={"email": tenant.owner_email, "password": "new-correct-horse-staple-883"},
+            headers={"X-Token-Transport": "body"},
+        )
+        assert response.status_code == 200, response.text
+        db_client.cookies.clear()
+        return response.headers["X-Access-Token"], response.headers["X-Refresh-Token"]
+
+    access, _ = await login()
+    signed_out = await db_client.post(
+        f"{API}/auth/logout", headers={"Authorization": f"Bearer {access}"}
+    )
+    assert signed_out.status_code == 200, signed_out.text
+
+    access, _ = await login()
+    signed_out_all = await db_client.post(
+        f"{API}/auth/logout-all", headers={"Authorization": f"Bearer {access}"}
+    )
+    assert signed_out_all.status_code == 200, signed_out_all.text
+
+    _, refresh = await login()
+    rotated = await db_client.post(
+        f"{API}/auth/refresh",
+        headers={"X-Refresh-Token": refresh, "X-Token-Transport": "body"},
+    )
+    assert rotated.status_code == 200, rotated.text
+    reuse = await db_client.post(
+        f"{API}/auth/refresh",
+        headers={"X-Refresh-Token": refresh, "X-Token-Transport": "body"},
+    )
+    assert reuse.status_code == 401
+    assert reuse.json()["code"] == "TOKEN_REUSE_DETECTED"
+
+    async with admin_sessionmaker() as session:
+        actions = set(
+            (
+                await session.execute(
+                    text("SELECT action FROM audit_logs WHERE organization_id = :organization_id"),
+                    {"organization_id": tenant.organization_id},
+                )
+            ).scalars()
+        )
+    assert {
+        "user.login_failed",
+        "user.password_reset_requested",
+        "user.password_reset",
+        "user.logged_out",
+        "user.logged_out_all",
+        "session.reuse_detected",
+    } <= actions
+
+
 async def test_tokens_are_set_as_httponly_cookies(db_client: Any, mailbox: list[Any]) -> None:
     """Spec §4.1: tokens ride in httpOnly cookies, never in a body a browser reads.
 
@@ -493,8 +689,6 @@ async def test_platform_token_cannot_reach_tenant_routes(
     "absent field" is a terrible thing to hang a privilege boundary on, because a bug
     that drops the claim silently promotes a tenant user to platform scope.
     """
-    from app.core.security import hash_password
-
     async with admin_sessionmaker() as session:
         await session.execute(
             text(
@@ -521,3 +715,52 @@ async def test_platform_token_cannot_reach_tenant_routes(
     platform_route = await db_client.get(f"{API}/platform/organizations", headers=tenant.headers())
     assert platform_route.status_code == 403, platform_route.text
     assert platform_route.json()["code"] == "PLATFORM_ACCESS_REQUIRED"
+
+
+async def test_platform_totp_is_required_validated_and_single_use(
+    db_client: Any,
+    db_settings: Settings,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Enrolled operators need a current TOTP code and cannot replay its time step."""
+    secret = "JBSWY3DPEHPK3PXP"
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO platform_admins "
+                "(id, email, password_hash, full_name, is_active, mfa_secret) "
+                "VALUES (gen_random_uuid(), :email, :password_hash, 'MFA Ops', true, :secret)"
+            ),
+            {
+                "email": "mfa-ops@platform.example",
+                "password_hash": hash_password(STRONG_PASSWORD),
+                "secret": encrypt_totp_secret(secret, db_settings),
+            },
+        )
+        await session.commit()
+
+    credentials = {"email": "mfa-ops@platform.example", "password": STRONG_PASSWORD}
+
+    missing = await db_client.post(f"{API}/platform/auth/login", json=credentials)
+    assert missing.status_code == 401
+    assert missing.json()["code"] == "MFA_CODE_INVALID"
+
+    invalid = await db_client.post(
+        f"{API}/platform/auth/login", json={**credentials, "totp_code": "000000"}
+    )
+    assert invalid.status_code == 401
+    assert invalid.json()["code"] == "MFA_CODE_INVALID"
+
+    step = int(time.time()) // 30
+    code = totp_code(secret, step)
+    valid = await db_client.post(
+        f"{API}/platform/auth/login", json={**credentials, "totp_code": code}
+    )
+    assert valid.status_code == 200, valid.text
+
+    db_client.cookies.clear()
+    replay = await db_client.post(
+        f"{API}/platform/auth/login", json={**credentials, "totp_code": code}
+    )
+    assert replay.status_code == 401
+    assert replay.json()["code"] == "MFA_CODE_INVALID"

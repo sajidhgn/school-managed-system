@@ -92,7 +92,11 @@ async def _create_role(
     await session.flush()
 
     session.add_all(
-        RolePermission(role_id=role.id, permission_code=code)
+        RolePermission(
+            role_id=role.id,
+            organization_id=organization_id,
+            permission_code=code,
+        )
         for code in sorted(SYSTEM_ROLE_PERMISSIONS[system_role])
     )
     return role

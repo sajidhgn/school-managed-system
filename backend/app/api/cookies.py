@@ -47,6 +47,26 @@ from app.core.config import Settings
 REFRESH_COOKIE_PATH = "/api/v1/auth"
 
 
+def set_access_cookie(
+    response: Response,
+    *,
+    access_token: str,
+    settings: Settings,
+    max_age: int | None = None,
+) -> None:
+    """Attach only an access cookie, used by the pre-context login state."""
+    response.set_cookie(
+        key=settings.ACCESS_COOKIE_NAME,
+        value=access_token,
+        max_age=max_age or settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN or None,
+        path="/",
+    )
+
+
 def set_auth_cookies(
     response: Response,
     *,
@@ -55,16 +75,7 @@ def set_auth_cookies(
     settings: Settings,
 ) -> None:
     """Attach both auth cookies to `response`."""
-    response.set_cookie(
-        key=settings.ACCESS_COOKIE_NAME,
-        value=access_token,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        domain=settings.COOKIE_DOMAIN or None,
-        path="/",
-    )
+    set_access_cookie(response, access_token=access_token, settings=settings)
     response.set_cookie(
         key=settings.REFRESH_COOKIE_NAME,
         value=refresh_token,

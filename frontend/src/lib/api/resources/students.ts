@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { api, publicRequest } from "@/lib/api/client";
 import type {
   AdmissionResponse,
   Page,
@@ -34,11 +34,10 @@ export const studentsApi = {
 /**
  * Public admissions submission.
  *
- * Still routed through the proxy, which simply forwards no Authorization
- * header when there is no session cookie — the backend route is public, so an
- * anonymous prospective parent can submit it.
+ * Routed through a fixed-purpose anonymous handler. The generic BFF remains closed
+ * without a session and cannot be turned into an open proxy.
  */
 export const admissionsApi = {
   submit: (body: StudentAdmissionRequest) =>
-    api.post<AdmissionResponse>("/students/admissions", body),
+    publicRequest<AdmissionResponse>("/admissions", body),
 };

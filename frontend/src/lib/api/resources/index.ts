@@ -98,9 +98,18 @@ export const invitations = {
 // --- Billing ---------------------------------------------------------------
 export const billing = {
   subscription: () => api.get<SubscriptionRead>("/billing/subscription"),
+  subscribe: (body: SubscribeRequest) =>
+    api.post<SubscriptionRead>("/billing/subscribe", body, {
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+    }),
   changePlan: (body: SubscribeRequest) =>
-    api.post<SubscriptionRead>("/billing/change-plan", body),
-  cancel: () => api.post<SubscriptionRead>("/billing/cancel", { at_period_end: true }),
+    api.post<SubscriptionRead>("/billing/change-plan", body, {
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+    }),
+  cancel: () =>
+    api.post<SubscriptionRead>("/billing/cancel", { at_period_end: true }, {
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+    }),
   invoices: () => api.get<InvoiceRead[]>("/billing/invoices"),
 };
 
