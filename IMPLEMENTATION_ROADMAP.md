@@ -1,6 +1,6 @@
 # EduCloud implementation status and delivery guide
 
-Last audited: 2026-08-22
+Last audited: 2026-08-24
 
 This document tracks implementation against `educloud-core-spec.md`. The core spec
 is the source of truth for product behavior; this file records what the repository
@@ -29,9 +29,9 @@ No known foundation code defect remains open. Three release-validation items rem
 At the end of the foundation implementation:
 
 - Backend Ruff lint and format checks pass for 112 Python files.
-- Backend strict mypy passes for all 89 application source files.
-- The complete backend suite passes: 100 tests against real PostgreSQL.
-- Alembic upgrades cleanly to `c9f1a3b5d7e9` (head).
+- Backend strict mypy passes for all 96 application source files.
+- The complete backend suite passes: 126 tests against real PostgreSQL.
+- Alembic upgrades cleanly to `e1b3c5d7f9a1` (head), and downgrades cleanly.
 - OpenAPI is regenerated and the frontend schema matches it.
 - Frontend ESLint, TypeScript, and the production Next.js 15.5.23 build pass.
 - Full `npm audit` reports zero production or development vulnerabilities.
@@ -72,7 +72,7 @@ Implemented:
 
 - Inject the active membership's `school_id` into generic repository selects,
   existence checks, counts, soft deletes, and hard deletes.
-- Skip that filter for an organization-level owner.
+- Skip that filter for the organization-level principal.
 - Scope custom student headcount queries.
 - Scope public admission-number generation to the verified target school.
 - Allow test database host and port overrides so an isolated database can be used.
@@ -83,7 +83,7 @@ Release gate:
 - A School A principal sees only School A academic rows.
 - Known School B resource IDs return 404 for reads and mutations.
 - Failed cross-school mutations leave School B rows unchanged.
-- An organization owner can still read both schools.
+- The organization principal can still read both schools.
 
 ### 2. Multi-membership authentication continuation — implemented, browser coverage pending
 
@@ -303,12 +303,187 @@ feature:
 2. The expanded authenticated Playwright journey matrix in slice 10.
 3. A recorded staging run of the checked-in 1,000-organization k6 profile.
 
-## Guidance for every future school module
+## Academic modules
 
-The current core spec explicitly defers attendance, gradebook, fees, timetable,
-library, transport, HR/payroll, LMS, parent/student portals, and mobile apps. A
-separate academic module specification is not present in this repository. Do not
-guess those workflows from table names; agree the module behavior first.
+### Fees — backend slice 1 implemented
+
+`docs/modules/fees.md` is the agreed specification, written before any code, and
+follows the checklist below. Slice 1 covers fee heads, per-class fee structures,
+bulk-generated per-student vouchers (challans), manually recorded payments with
+receipts, a printable three-copy challan PDF, and a collection summary.
+
+Implemented:
+
+- Six tenant tables (`fee_heads`, `fee_structures`, `fee_structure_items`,
+  `fee_vouchers`, `fee_voucher_items`, `fee_payments`), each with non-null
+  `organization_id` and `school_id` and forced RLS installed by the migration.
+- A partial unique index prevents billing one student twice for the same academic
+  year and period, while leaving a voided challan's period free for reissue.
+- Vouchers snapshot both the amount and the fee head's name at generation, so
+  renaming a head or repricing a structure never rewrites an issued challan.
+- `fee_vouchers` and `fee_payments` carry no `deleted_at`: a voucher is voided and a
+  payment is reversed, never deleted.
+- Five permission codes (`fee:read`, `fee:manage`, `fee:issue`, `fee:collect`,
+  `fee:void`). `fee:collect` and `fee:void` are separate, and `fee:void` is
+  deliberately absent from the default `accountant` role.
+- The migration backfills the three new codes onto existing `principal` and
+  `accountant` roles and bumps `permissions_version`, so an upgraded deployment does
+  not 403 on the new routes.
+- 22 PostgreSQL-backed integration tests covering two-organization isolation,
+  two-school scoping inside one organization, raw cross-tenant DML rejection on every
+  fee table, snapshot immutability, payment and reversal arithmetic, separation of
+  duties, the audit trail, and the challan PDF.
+
+Fees consume no plan capacity; there is no 402 path in this module.
+
+### Fees — backend slice 2 implemented
+
+Slice 2 closes five of the nine deferrals slice 1 recorded. Each was deferred with a
+note claiming it would need no table rewrite; the migration
+(`c6e8f0a2b4d6`) tested that claim, and every change is additive with no existing
+column changing meaning.
+
+- **Concessions** — `fee_concessions` holds the named scheme (Staff Child 50%, Merit
+  25%); a `DISCOUNT` arrangement points at one or carries its own rate. The
+  `discount_amount` column that had sat on `fee_voucher_items` since slice 1, zero on
+  every row, is now written. The challan prints gross, `Less concession`, then
+  `Total payable` — printing net lines *and* a discount row would subtract the
+  remission twice on paper.
+- **Per-student overrides** — an `OVERRIDE` mode restating a class line's amount. It
+  never invents a line the class does not price.
+- **One-off charges** — `PUT /fees/vouchers/{id}/charges`, mirroring the stationery
+  path: draft-only, idempotent by head. Without it the only tool for "charge Ali 500
+  for the lab window" is the class structure, which bills all forty.
+- **Automatic late fees** — `fee_late_fee_policies` plus a run wired into
+  `make run-maintenance`. The fine is minted as its **own** challan rather than added
+  to the overdue one, which is the only way to add a penalty without breaking the
+  module's rule that an issued bill is never rewritten. Four guards make it safe to
+  re-run; a fine is never itself finable.
+- **The running ledger** — `student_ledger_entries`, append-only, every money
+  movement, with `balance_after` denormalised and appended under a per-student lock.
+  `make reconcile-ledger` reports drift against the vouchers rather than repairing it.
+  Arrears are snapshotted onto each new challan and **printed, not billed** — adding
+  them to `total` would bill the same rupee twice.
+- **CSV export** of the voucher register, capped, with the cap announced inside the
+  file.
+
+24 further PostgreSQL-backed integration tests (`tests/integration/test_fees_extended.py`),
+covering the ordering rule that decides whether a scholarship is computed against the
+class list price or the child's negotiated rate, the double-counting rule on arrears,
+late-fee idempotence and non-compounding, ledger RLS, and separation of duties on
+manual adjustments.
+
+**Still deferred, and both are blocked outside this module:**
+
+1. **Online payment by parents** — the same open product decision as SaaS billing
+   (JazzCash / Easypaisa / Stripe). Nothing in fees blocks it: a gateway callback
+   records a payment through the same `record_payment` staff use, which now also
+   writes the ledger entry, so the parent-facing balance follows for free.
+2. **Sibling / family grouping** — needs the guardian aggregate. A `guardians` module
+   is in flight; sibling remission should be built on it rather than on a surname
+   match.
+
+Frontend pages for the slice 2 surfaces and the browser journey are the next slice.
+
+### Academic foundation — implemented
+
+`docs/modules/academic-foundation.md` is the agreed specification. It closes three of
+the four gaps that made students and academics the weakest link under everything
+deferred: those two modules shipped before this checklist existed (~700 lines each
+against 4,900 for fees), and attendance, the gradebook and the timetable all hang
+off them.
+
+Implemented:
+
+- **The calendar.** `academic_years` (school-scoped, with real start/end dates and an
+  explicit `is_current` flag) and `terms`. A partial unique index
+  (`uq_academic_years_one_current ... WHERE is_current`) allows at most one current
+  year per school; promoting one demotes the incumbent through its own endpoint,
+  because it changes two rows. Terms may not overlap and must fall inside their year,
+  both enforced in the service so the error names the offending term rather than a
+  constraint.
+- **The curriculum.** `subjects` (codes upper-cased on the way in, unique per school)
+  and `class_subjects`, keyed on the class rather than the section so two sections of
+  one grade cannot drift onto different syllabi. `subject_id` is `ON DELETE RESTRICT`
+  and the service reads dependents first, so the refusal names the grades.
+- **Enrollment history.** `student_enrollments` records where a student sat and when.
+  `students.section_id` stays as the hot-path head of that ledger. Two partial unique
+  indexes carry the invariants: one open enrollment per student, one roll number per
+  section per year. Roll number is distinct from admission number and sorts
+  numerically everywhere.
+- **Bulk promotion** (`student:promote`, a new dangerous permission). Partial success
+  is the contract — students who cannot be moved return in `skipped` rather than
+  aborting a whole-section run that will certainly be retried. Capacity is checked
+  once for the batch, not per student.
+- The ledger is **opportunistic**: `sync_placement` returns `None` rather than raising
+  when a school has no current year, so the calendar is not a hard prerequisite for
+  enrolling a student. `POST /academic-years/{id}/enrollments/backfill` is the
+  idempotent catch-up, which is why the migration deliberately populated nothing.
+- Ten new permission codes seeded and backfilled onto existing `principal`, `teacher`
+  and `accountant` roles, with `permissions_version` bumped so a warm cache does not
+  serve the pre-migration set.
+- Frontend: `/academic-years` and `/subjects`, generated OpenAPI types, TanStack
+  hooks, and permission-gated nav entries.
+
+Explicitly **not** closed here: the guardian aggregate. It is built as its own module
+(`app/modules/guardians`) because a parent portal needs a global identity spanning
+campuses plus an OTP surface — a larger design than a link table. The `guardian:*`
+codes are still seeded by this migration, since the catalog is seeded ahead of its
+module by design.
+
+Deferred by agreement and recorded in the spec: a holiday/working-days calendar (it
+belongs with the timetable), re-keying `fees.academic_year` onto `academic_years.id`
+(a data migration on issued financial records), and per-section subject-teacher
+assignment (the timetable owns that tuple).
+
+### Attendance — backend slice 1 implemented, frontend implemented
+
+`docs/modules/attendance.md` is the agreed specification, written alongside the
+schema. Two tables: `attendance_sessions` (one register per section per date per
+period) and `attendance_records` (one line per student).
+
+Implemented:
+
+- A register is a **row**, not an implicit grouping. That is what makes "which classes
+  have not submitted today?" answerable — in a flat attendance table, an unmarked
+  register and a fully-present one are both an absence of rows. `GET /attendance/today`
+  is that list.
+- `period` is NOT NULL with `0` meaning whole-day. NULL would make the duplicate-register
+  unique constraint inert, since PostgreSQL treats NULLs as distinct in a unique index.
+- Registers are **pre-filled present** from the enrollment roster; the teacher flips the
+  exceptions. A draft is therefore complete by construction, and draft rows reach no
+  report.
+- Five statuses. `excused` leaves the percentage denominator entirely, `half_day`
+  contributes 0.5, `late` counts as present. Those rules live once on the enum so the
+  student report and the section report cannot drift.
+- **Separation of duties.** `attendance:mark` opens, marks and submits;
+  `attendance:amend` — a new, dangerous, non-default code — is required to change or
+  reopen a SUBMITTED register, requires a reason, and writes one audit row per changed
+  student. A system where whoever records absences can also erase them has no
+  attendance record, only an attendance opinion.
+- Opening a register is **idempotent**, so a double tap on a slow connection returns
+  the existing register instead of a 409 nobody can act on.
+- 38 PostgreSQL-backed integration tests in `tests/integration/test_academic_foundation.py`
+  covering both modules: the calendar invariants, curriculum RESTRICT behaviour, the
+  enrollment ledger and promotion, the full register lifecycle, the report arithmetic,
+  two-organization isolation, two-school scoping, and raw cross-tenant DML rejection on
+  all seven new tables as the restricted `sms_app` role.
+- Frontend: `/attendance` — the daily register board with the three-state distinction
+  (not started / in progress / submitted) and a marking dialog that batches taps into
+  one PATCH.
+
+Attendance consumes no plan capacity; there is no 402 path in this module.
+
+Deferred by agreement and recorded in the spec: absence notifications (the messaging
+transport does not exist yet — nothing about the schema changes when a sender is
+added), leave applications, staff attendance, and device-driven auto-marking.
+
+### Guidance for every future school module
+
+The core spec explicitly defers attendance, gradebook, timetable, library, transport,
+HR/payroll, LMS, parent/student portals, and mobile apps. No specification for those
+is present in this repository. Do not guess those workflows from table names; agree
+the module behavior first, as `docs/modules/fees.md` does.
 
 Every new tenant-owned module must follow this checklist:
 

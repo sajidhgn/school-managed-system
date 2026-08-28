@@ -29,7 +29,7 @@ from app.core.config import Settings
 from app.db.session import bind_tenant, dispose_engine, get_session_factory, init_engine
 from app.modules.academics.models import SchoolClass, Section
 from app.modules.students.models import Student, StudentStatus
-from tests.integration.conftest import API, Tenant
+from tests.integration.conftest import API, Tenant, make_campus_head
 
 
 async def test_organization_cannot_see_another_organizations_schools(
@@ -150,14 +150,15 @@ async def test_direct_role_permission_dml_cannot_cross_tenants(
 
 async def test_school_scoped_context_cannot_read_or_mutate_another_school_academic_data(
     tenant: Tenant,
+    mailbox: list[Any],
     admin_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     """The soft boundary: a School A token cannot reach School B rows.
 
-    Organization RLS cannot enforce this boundary because an organization owner is
-    intentionally allowed to read across all of its campuses.  School-scoped
-    memberships therefore rely on the repository base query injecting the active
-    ``school_id``.  This exercises every generic CRUD path plus the custom academic
+    Organization RLS cannot enforce this boundary because the organization's
+    principal is intentionally allowed to read across all of its campuses.
+    School-scoped memberships therefore rely on the repository base query injecting
+    the active ``school_id``.  This exercises every generic CRUD path plus the custom academic
     aggregate queries, because omitting the filter from even one of them exposes
     minors' records to staff at another campus in the same organization.
     """
@@ -166,11 +167,11 @@ async def test_school_scoped_context_cannot_read_or_mutate_another_school_academ
         json={"name": "Test Trust North", "code": "NORTH"},
     )
     assert second_school.status_code == 201, second_school.text
-    second_school_id = second_school.json()["school"]["id"]
+    second_school_id = second_school.json()["id"]
 
     # Seed valid School B domain rows through the administrative test connection.
     # The public fixtures intentionally create state through the API, but School B
-    # has no principal yet and the subject of this test is visibility, not staffing.
+    # has no staff yet and the subject of this test is visibility, not staffing.
     async with admin_sessionmaker() as session:
         foreign_class = SchoolClass(
             organization_id=tenant.organization_id,
@@ -202,25 +203,12 @@ async def test_school_scoped_context_cannot_read_or_mutate_another_school_academ
         foreign_section_id = str(foreign_section.id)
         foreign_student_id = str(foreign_student.id)
 
-    # Switch from the owner's org-wide context into the first school's principal
-    # membership.  The resulting token must be narrowed to School A.
-    me = await tenant.get(f"{API}/auth/me")
-    assert me.status_code == 200, me.text
-    principal = next(
-        membership
-        for membership in me.json()["memberships"]
-        if membership["school_id"] == tenant.school_id
-    )
-    switched = await tenant.client.post(
-        f"{API}/auth/context",
-        json={"membership_id": principal["membership_id"]},
-        headers={
-            **tenant.headers(),
-            "X-Token-Transport": "body",
-        },
-    )
-    assert switched.status_code == 200, switched.text
-    school_a_headers = {"Authorization": f"Bearer {switched.headers['X-Access-Token']}"}
+    # A genuinely SCHOOL-SCOPED actor at School A. Not the principal narrowed by a
+    # header -- that narrows the view of someone whose authority still spans the
+    # organization, and the boundary under test is the one that must hold for staff
+    # whose authority does not.
+    head_token = await make_campus_head(tenant, mailbox, "school-a-head@test.example")
+    school_a_headers = {"Authorization": f"Bearer {head_token}"}
 
     # CREATE is stamped from the verified token, never from request input.
     own_class = await tenant.client.post(
@@ -280,26 +268,20 @@ async def test_school_scoped_context_cannot_read_or_mutate_another_school_academ
         (response.status_code, response.text) for response in attempts
     ]
 
-    # The filter is membership-sensitive, not a blanket school predicate. Switching
-    # back to the organization-owner membership intentionally restores cross-campus
-    # visibility while organization RLS still contains the query to this tenant.
-    owner = next(
-        membership for membership in me.json()["memberships"] if membership["is_org_level"]
-    )
-    switched_back = await tenant.client.post(
-        f"{API}/auth/context",
-        json={"membership_id": owner["membership_id"]},
-        headers={
-            **school_a_headers,
-            "X-Token-Transport": "body",
-        },
-    )
-    assert switched_back.status_code == 200, switched_back.text
-    owner_headers = {"Authorization": f"Bearer {switched_back.headers['X-Access-Token']}"}
-    owner_classes = await tenant.client.get(f"{API}/classes", headers=owner_headers)
-    owner_students = await tenant.client.get(f"{API}/students", headers=owner_headers)
+    # The filter is membership-sensitive, not a blanket school predicate. The
+    # org-level principal, naming no campus, intentionally sees across all of them
+    # while organization RLS still contains the query to this tenant.
+    owner_classes = await tenant.get(f"{API}/classes")
+    owner_students = await tenant.get(f"{API}/students")
     assert foreign_class_id in {row["id"] for row in owner_classes.json()["items"]}
     assert foreign_student_id in {row["id"] for row in owner_students.json()["items"]}
+
+    # ...and naming one narrows the same token to that campus, without any
+    # re-issue: this is the `X-Active-School` view filter, not a scope change.
+    tenant.active_school_id = second_school_id
+    narrowed = await tenant.get(f"{API}/students")
+    assert {row["id"] for row in narrowed.json()["items"]} == {foreign_student_id}
+    tenant.active_school_id = None
 
     # Verify the failed mutations did not merely hide their response after writing.
     async with admin_sessionmaker() as session:

@@ -103,6 +103,18 @@ class PrincipalType(StrEnum):
     PLATFORM = "platform"
     CONTEXT_SELECTION = "context_selection"
 
+    # --- Guardian portal ---------------------------------------------------
+    #
+    # A THIRD SURFACE, for the same reason there is a second: guardians live in their
+    # own identity table, hold no membership, and must never be interchangeable with
+    # staff. A guardian token carries `org` -- so RLS binds correctly when the portal
+    # reads that organization's students -- and it is EXACTLY that claim which makes
+    # an explicit `typ` non-negotiable here. Without it, "has an org claim but no
+    # membership claim" would be the only thing separating a parent from a member of
+    # staff, and one dropped claim would promote the parent.
+    GUARDIAN = "guardian"
+    GUARDIAN_CONTEXT_SELECTION = "guardian_context_selection"
+
 
 # ---------------------------------------------------------------------------
 # Passwords
@@ -200,6 +212,12 @@ class AccessClaims:
     school_id: UUID | None = None
     role_code: str | None = None
     permissions_version: int | None = None
+    guardian_id: UUID | None = None
+    """The tenant-scoped guardian record this portal session is acting as (`grd`).
+
+    Present only on guardian tokens. Deliberately NOT reusing `mid`: a membership and
+    a guardian record are different tables with different privileges, and a bug that
+    read one as the other would hand a parent a staff permission set."""
 
     @property
     def is_platform(self) -> bool:
@@ -208,6 +226,14 @@ class AccessClaims:
     @property
     def is_context_selection(self) -> bool:
         return self.principal_type is PrincipalType.CONTEXT_SELECTION
+
+    @property
+    def is_guardian(self) -> bool:
+        """Either guardian posture: a full portal session or the pre-context step."""
+        return self.principal_type in (
+            PrincipalType.GUARDIAN,
+            PrincipalType.GUARDIAN_CONTEXT_SELECTION,
+        )
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
@@ -234,6 +260,7 @@ class AccessClaims:
                 school_id=_uuid("sch"),
                 role_code=payload.get("rol"),
                 permissions_version=payload.get("pv"),
+                guardian_id=_uuid("grd"),
             )
         except (KeyError, ValueError) as exc:
             raise AuthenticationError("Token claims are malformed.", code="TOKEN_INVALID") from exc
@@ -249,6 +276,7 @@ def create_access_token(
     school_id: UUID | None = None,
     role_code: str | None = None,
     permissions_version: int | None = None,
+    guardian_id: UUID | None = None,
     expires_minutes: int | None = None,
     settings: Settings | None = None,
 ) -> str:
@@ -300,6 +328,8 @@ def create_access_token(
         payload["rol"] = role_code
     if permissions_version is not None:
         payload["pv"] = permissions_version
+    if guardian_id is not None:
+        payload["grd"] = str(guardian_id)
 
     return jwt.encode(payload, settings.jwt_signing_key, algorithm=settings.JWT_ALGORITHM)
 

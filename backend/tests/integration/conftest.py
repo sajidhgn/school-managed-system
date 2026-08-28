@@ -48,12 +48,29 @@ from app.modules.auth.router import get_email_dispatcher
 
 # Test infrastructure credentials. The app connects as the restricted role; the admin
 # engine (superuser) is used only for setup/teardown and cross-tenant assertions.
-# Host/port are configurable so contributors can run the release gate against an
-# isolated PostgreSQL instance without touching a local development database.
+#
+# =============================================================================
+# THIS SUITE TRUNCATES EVERY TENANT TABLE IN THE DATABASE IT POINTS AT
+# =============================================================================
+#     So it points at its OWN database, not the one `make dev` serves. It used to
+#     name `school_manage_db` -- the development database -- which meant a single
+#     `make test` silently destroyed whatever the developer was working with, with
+#     no warning and no way back.
+#
+#     `TEST_POSTGRES_DB` overrides it. Create the database once:
+#
+#         createdb -U postgres school_manage_test_db
+#         psql -U postgres -d school_manage_test_db -f scripts/init-db.sql
+#         TEST_POSTGRES_DB=school_manage_test_db uv run alembic upgrade head
+#         TEST_POSTGRES_DB=school_manage_test_db uv run python -m app.cli seed
+#
+#     Pointing it back at a database with real data in it is a decision that now has
+#     to be made deliberately, which is the whole point.
 _TEST_DB_HOST = os.getenv("TEST_POSTGRES_HOST", "localhost")
 _TEST_DB_PORT = int(os.getenv("TEST_POSTGRES_PORT", "5432"))
+_TEST_DB_NAME = os.getenv("TEST_POSTGRES_DB", "school_manage_test_db")
 _ADMIN_URL = (
-    f"postgresql+asyncpg://postgres:postgres@{_TEST_DB_HOST}:{_TEST_DB_PORT}/school_manage_db"
+    f"postgresql+asyncpg://postgres:postgres@{_TEST_DB_HOST}:{_TEST_DB_PORT}/{_TEST_DB_NAME}"
 )
 
 # Truncated between tests, children first for readability. `plans` and `permissions`
@@ -61,9 +78,58 @@ _ADMIN_URL = (
 # wiping them would break every test that creates an organization (which needs the
 # free plan to exist).
 _APP_TABLES = (
+    # Attendance first of all: `attendance_records.student_id` and
+    # `attendance_sessions.section_id` are ON DELETE RESTRICT, so these must be
+    # emptied before `students` and `sections` even though TRUNCATE ... CASCADE
+    # would otherwise sort it out. Listing them explicitly keeps the dependency
+    # order readable rather than relying on CASCADE to discover it.
+    "attendance_records",
+    "attendance_sessions",
+    # Before `students`, `classes` and `academic_years` -- RESTRICT on the last two.
+    "student_enrollments",
+    # Before `subjects` (RESTRICT) and `classes` (CASCADE).
+    "class_subjects",
+    # Fees: `fee_vouchers.student_id` is ON DELETE RESTRICT, so these must go
+    # before `students` even though TRUNCATE ... CASCADE would otherwise sort it out.
+    #
+    # THE LEDGER GOES FIRST OF ALL THE FEE TABLES. `student_ledger_entries` holds
+    # ON DELETE RESTRICT foreign keys to students, vouchers AND payments -- it is
+    # deliberately the most reference-heavy table in the module, because every row is
+    # a financial record that must outlive any deletion path. Leaving it out of this
+    # list does not merely leave stale rows behind: it makes the whole TRUNCATE fail,
+    # and the next test then runs against a database nobody emptied. That failure
+    # surfaces three tests later as an unrelated 401, which is a long way to walk back
+    # from a missing line here.
+    "student_ledger_entries",
+    "fee_payments",
+    "fee_voucher_items",
+    "fee_vouchers",
+    "fee_structure_items",
+    "fee_structures",
+    # Before `fee_heads` and `students`: references both ON DELETE RESTRICT/CASCADE.
+    # `student_fee_assignments` also references `fee_concessions` ON DELETE RESTRICT,
+    # so the scheme table follows it rather than preceding it.
+    "student_fee_assignments",
+    "fee_concessions",
+    # Before `fee_heads`, which it references ON DELETE RESTRICT.
+    "fee_late_fee_policies",
+    "fee_heads",
+    # After the line tables above: both reference it ON DELETE RESTRICT.
+    "stationery_items",
+    # Guardians: the link table references `students` and `guardians`, so it goes
+    # before both. `guardians.identity_id` is ON DELETE RESTRICT, which is why
+    # `guardian_identities` sits further down beside the other identity tables rather
+    # than next to its children -- the same placement `users` gets, and for the same
+    # reason.
+    "guardian_students",
+    "guardians",
     "students",
     "sections",
     "classes",
+    # After `class_subjects` and `student_enrollments`, which reference them.
+    "subjects",
+    "terms",
+    "academic_years",
     "audit_logs",
     "invitations",
     "memberships",
@@ -78,9 +144,14 @@ _APP_TABLES = (
     "webhook_events",
     "schools",
     "platform_audit_logs",
+    # Before `guardian_identities` and `users`, both of which it references.
     "sessions",
     "password_reset_tokens",
     "email_verification_tokens",
+    "guardian_otp_codes",
+    # The guardian identity surface, alongside `users`: global, outside RLS, and
+    # referenced by `sessions` and `guardians`, so it is emptied after both.
+    "guardian_identities",
     "organizations",
     "users",
     "platform_admins",
@@ -111,7 +182,7 @@ def db_settings() -> Settings:
         POSTGRES_PORT=_TEST_DB_PORT,
         POSTGRES_USER="sms_app",
         POSTGRES_PASSWORD="sms_app_password",
-        POSTGRES_DB="school_manage_db",
+        POSTGRES_DB=_TEST_DB_NAME,
         CORS_ORIGINS=["http://localhost:3000"],
         LOG_LEVEL="WARNING",
         # Off, so the permission cache falls through to Postgres. Tests then assert
@@ -210,8 +281,9 @@ class Tenant:
     Built by driving the PUBLIC API -- register, verify, create school -- rather than
     by inserting rows. That means every test implicitly re-verifies that signup and
     provisioning work, and it makes it impossible for a fixture to construct a state
-    the application itself could never produce (an organization with no owner role, a
-    school with no principal). Hand-built fixtures drift from reality; these cannot.
+    the application itself could never produce (an organization with no principal
+    role, a school with no roles). Hand-built fixtures drift from reality; these
+    cannot.
     """
 
     organization_id: str
@@ -223,8 +295,23 @@ class Tenant:
     refresh_token: str
     client: AsyncClient
 
+    active_school_id: str | None = None
+    """Which campus this org-level principal is looking at.
+
+    The principal's token carries no school -- their one membership is org-level --
+    so the school-scoped repositories would otherwise return every campus at once,
+    and `require_school_id()` routes (create a student, create a class) would have no
+    school to stamp. Setting this sends `X-Active-School`, which is exactly what the
+    frontend does from its cookie. Authority is unchanged; only the view narrows.
+    """
+
     def headers(self, token: str | None = None) -> dict[str, str]:
-        return {"Authorization": f"Bearer {token or self.access_token}"}
+        headers = {"Authorization": f"Bearer {token or self.access_token}"}
+        # Only alongside the tenant's OWN token. Attaching it to a borrowed token
+        # would silently re-point somebody else's request at this tenant's campus.
+        if token is None and self.active_school_id:
+            headers["X-Active-School"] = self.active_school_id
+        return headers
 
     async def get(self, url: str, **kw: Any) -> Any:
         return await self.client.get(url, headers=self.headers(), **kw)
@@ -245,13 +332,81 @@ class Tenant:
 API = "/api/v1"
 
 
+async def make_campus_head(
+    tenant: Tenant,
+    mailbox: list[EmailMessage],
+    email: str,
+    *,
+    school_id: str | None = None,
+    code: str = "campus_head",
+    full_name: str = "Campus Head",
+) -> str:
+    """A SCHOOL-SCOPED actor holding every school permission. Returns their token.
+
+    Stands in for the seeded school `principal` role, which no longer exists -- there
+    is one `principal` now and it is org-level. The invariants that role used to
+    exercise still need a subject: a school-scoped actor must not reach billing,
+    another campus, or the definition of its own authority. A custom role is how a
+    customer builds one, so building it through the public API is also a test that
+    the role editor can express what the seeded role used to.
+
+    `SCHOOL_SCOPED_CODES` is read from the catalog rather than listed here, so a new
+    school permission joins this actor automatically instead of silently leaving a
+    gap in the tests that use it.
+    """
+    from app.modules.rbac.catalog import SCHOOL_SCOPED_CODES
+
+    target_school_id = school_id or tenant.school_id
+
+    role = await tenant.post(
+        f"{API}/schools/{target_school_id}/roles",
+        json={
+            "code": code,
+            "name": full_name,
+            "permissions": sorted(SCHOOL_SCOPED_CODES),
+        },
+    )
+    assert role.status_code == 201, role.text
+
+    invited = await tenant.post(
+        f"{API}/schools/{target_school_id}/invitations",
+        json={"email": email, "full_name": full_name, "role_id": role.json()["id"]},
+    )
+    assert invited.status_code == 201, invited.text
+
+    # Accept as an ANONYMOUS caller. The accept endpoint checks any session it finds
+    # against the invited address, so a lingering cookie from another account would
+    # (correctly) be refused with INVITATION_EMAIL_MISMATCH.
+    tenant.client.cookies.clear()
+    accepted = await tenant.client.post(
+        f"{API}/invitations/accept",
+        json={
+            "token": latest_token(mailbox),
+            "full_name": full_name,
+            "password": STRONG_PASSWORD,
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    tenant.client.cookies.clear()
+
+    login = await tenant.client.post(
+        f"{API}/auth/login",
+        json={"email": email, "password": STRONG_PASSWORD},
+        headers={"X-Token-Transport": "body"},
+    )
+    assert login.status_code == 200, login.text
+    tenant.client.cookies.clear()
+    return str(login.headers["X-Access-Token"])
+
+
 @pytest.fixture
 def make_tenant(db_client: AsyncClient, mailbox: list[EmailMessage]) -> Callable[..., Any]:
     """Factory: register an organization, verify it, and create its first school.
 
-    Returns a `Tenant` holding the owner's tokens. The owner's token is ORG-LEVEL
-    (`school_id` is null), which is what lets a test exercise the cross-school reads
-    only an owner should have.
+    Returns a `Tenant` holding the principal's tokens. That token is ORG-LEVEL
+    (`school_id` is null) and stays that way -- creating a school no longer mints a
+    second, school-scoped membership -- which is what lets a test exercise the
+    cross-school reads only the principal should have.
     """
 
     async def _make(
@@ -321,7 +476,7 @@ def make_tenant(db_client: AsyncClient, mailbox: list[EmailMessage]) -> Callable
                 headers={"Authorization": f"Bearer {access}"},
             )
             assert created.status_code == 201, created.text
-            school_id = created.json()["school"]["id"]
+            school_id = created.json()["id"]
 
         return Tenant(
             organization_id=registered["organization_id"],

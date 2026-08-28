@@ -127,6 +127,59 @@ class Settings(BaseSettings):
     INVITATION_EXPIRE_DAYS: int = 7
     INVITATION_MAX_RESENDS: int = 5
 
+    # --- Guardian portal: phone-OTP authentication -------------------------
+    #
+    # A SECOND AUTHENTICATION SURFACE, not a variant of the staff one. Guardians
+    # frequently have no email address, hold no membership, and are the same human
+    # across several campuses of one group -- so they get their own identity table,
+    # their own principal type, and the settings below. See
+    # `modules/guardians/auth_service.py`.
+    GUARDIAN_PORTAL_ENABLED: bool = True
+    """Kill switch. Turning it off makes every guardian auth route 404 without
+    touching the staff surface, which is what a school group wants on the day they
+    decide parents should not yet have logins."""
+
+    GUARDIAN_OTP_TTL_MINUTES: int = 5
+    """Shorter than the 10-minute email OTP. An SMS lands on a lock screen in
+    seconds, so the usability argument for a long window is much weaker, and the
+    exposure -- a code visible to anyone holding the handset -- is much higher."""
+
+    GUARDIAN_OTP_MAX_ATTEMPTS: int = 5
+    GUARDIAN_OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    GUARDIAN_OTP_DAILY_LIMIT: int = 10
+    """Per phone number, per day. SMS costs real money per message, so an
+    unthrottled request endpoint is a way to spend a tenant's budget as well as a
+    way to harass a parent."""
+
+    GUARDIAN_SESSION_EXPIRE_DAYS: int = 30
+    GUARDIAN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    GUARDIAN_ACCESS_COOKIE_NAME: str = "educloud_guardian_access"
+    GUARDIAN_REFRESH_COOKIE_NAME: str = "educloud_guardian_refresh"
+    """SEPARATE COOKIE NAMES, deliberately. The parent portal and the staff app are
+    served from the same registrable domain, and a teacher who is also a parent will
+    hold both sessions in one browser. Sharing a cookie name would mean signing into
+    the portal silently signs you out of the staff app -- and, far worse, that the
+    two surfaces could be confused for one another by a bug in cookie handling."""
+
+    # --- Phone numbers ------------------------------------------------------
+    DEFAULT_COUNTRY_CALLING_CODE: str = "92"
+    """Digits only, no `+`. Applied ONLY to input that carries no international
+    prefix, so `0300...` from a Pakistani front office becomes `+92300...`.
+
+    Set it to "" for a multi-country deployment: national-format input is then
+    refused outright rather than silently landing in whichever country this default
+    happens to name. Guessing wrong here creates a valid-looking number that belongs
+    to a stranger."""
+    NATIONAL_TRUNK_PREFIX: str = "0"
+
+    # --- SMS transport ------------------------------------------------------
+    SMS_BACKEND: Literal["console", "null"] = "console"
+    """`console` logs the message (including OTP codes) and sends nothing -- correct
+    locally, refused in production by `_reject_console_sms_in_prod`. `null` accepts
+    and discards without logging bodies. A real gateway becomes a third value and a
+    new class in `common/sms/sender.py`; nothing else changes."""
+    SMS_SENDER_ID: str = "EduCloud"
+
     # --- Payments (spec §6.4) ----------------------------------------------
     # `mock` is an in-process adapter that approves everything -- correct for
     # development and tests, catastrophic in production, which
@@ -215,6 +268,25 @@ class Settings(BaseSettings):
             raise ValueError(
                 "EMAIL_BACKEND=console logs OTP codes in plaintext and sends no "
                 "mail; it cannot be used in production. Set EMAIL_BACKEND=smtp."
+            )
+        return v
+
+    @field_validator("SMS_BACKEND")
+    @classmethod
+    def _reject_console_sms_in_prod(cls, v: str, info) -> str:  # type: ignore[no-untyped-def]
+        """Refuse to boot production with the console SMS backend.
+
+        Same reasoning as the email guard above, and the same two failures at once:
+        guardian OTP codes written to the log in plaintext, and no parent ever
+        receiving one. `null` is permitted in production -- suppressing SMS is a
+        legitimate choice for a group that has not launched the portal -- because it
+        logs no bodies. `console` is not.
+        """
+        if v == "console" and info.data.get("ENVIRONMENT") is Environment.PRODUCTION:
+            raise ValueError(
+                "SMS_BACKEND=console logs guardian OTP codes in plaintext and sends "
+                "no messages; it cannot be used in production. Set SMS_BACKEND=null "
+                "until a real gateway is configured."
             )
         return v
 

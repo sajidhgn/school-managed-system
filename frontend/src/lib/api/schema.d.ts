@@ -157,6 +157,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/guardian/auth/request-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a one-time login code by SMS
+         * @description Text a code to the number, if it belongs to a registered guardian.
+         *
+         *     THE RESPONSE IS IDENTICAL EITHER WAY. See the enumeration note in
+         *     `auth_service.py`: an honest "no such guardian" would turn this endpoint into a
+         *     way to ask whether a specific person has a child at a school on this platform.
+         */
+        post: operations["request_code_api_v1_guardian_auth_request_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardian/auth/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a code for a portal session
+         * @description Three outcomes -- see `GuardianLoginResponse`.
+         *
+         *     The single-context path issues a full session immediately. Several contexts get a
+         *     five-minute continuation token instead, which can do exactly one thing: choose.
+         */
+        post: operations["verify_code_api_v1_guardian_auth_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardian/auth/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose which school group to open
+         * @description Upgrade a continuation token into a full portal session.
+         *
+         *     Accepts EITHER posture: the five-minute continuation from `/verify`, and an
+         *     already-authenticated portal session switching between school groups. The second
+         *     is the same "switch context" affordance staff have, and refusing it would make a
+         *     parent with children in two groups sign out and back in to see the other one.
+         */
+        post: operations["select_context_api_v1_guardian_auth_context_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardian/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate a portal session
+         * @description Exchange a refresh token for a new pair, revoking the presented one.
+         *
+         *     Reads the cookie first and the header second, mirroring the staff endpoint: a
+         *     browser has no way to send the header, and a non-browser client has no cookie jar.
+         */
+        post: operations["refresh_api_v1_guardian_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardian/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End the portal session
+         * @description Revoke this session, or every session for this handset.
+         *
+         *     `all_devices` matters more here than on the staff surface: a parent's phone is
+         *     lent, lost and resold, and "sign out everywhere" is the only control they have
+         *     over a session on a device they no longer hold.
+         */
+        post: operations["logout_api_v1_guardian_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/auth/login": {
         parameters: {
             query?: never;
@@ -901,9 +1020,9 @@ export interface paths {
          * List Schools
          * @description Schools the caller can see.
          *
-         *     An org-level owner (`ctx.school_id is None`) sees every school; a school-scoped
-         *     member sees only their own. That is spec §2.3's soft boundary, applied here
-         *     rather than by a policy.
+         *     The principal (`ctx.school_id is None`) sees every school; a school-scoped member
+         *     sees only their own. That is spec §2.3's soft boundary, applied here rather than
+         *     by a policy.
          */
         get: operations["list_schools_api_v1_schools_get"];
         put?: never;
@@ -912,8 +1031,12 @@ export interface paths {
          * @description Create a school. Entitlement-checked; 402 when the plan's limit is reached.
          *
          *     `school:create` is an ORG-scoped permission, so this route is reachable only by
-         *     an org-level role. A principal cannot manufacture campuses the organization has
-         *     not paid for.
+         *     the org-level principal. A school-scoped role cannot manufacture campuses the
+         *     organization has not paid for.
+         *
+         *     Returns the school and nothing else. The caller's access is unchanged by this
+         *     call -- their org-level principal membership already covers the new campus -- so
+         *     there is no membership grant for the response to report.
          */
         post: operations["create_school_api_v1_schools_post"];
         delete?: never;
@@ -1044,7 +1167,62 @@ export interface paths {
         /** List Members */
         get: operations["list_members_api_v1_schools__school_id__members_get"];
         put?: never;
+        /**
+         * Create Member
+         * @description Create a login-ready member in a branch without sending an invitation.
+         */
+        post: operations["create_member_api_v1_schools__school_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/teachers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Teachers
+         * @description The branch's teaching staff, for the class-teacher and curriculum pickers.
+         *
+         *     Gated on `teacher:read` ("View teaching staff assignments") rather than on
+         *     `member:read`. They overlap today, but they answer different questions: this is
+         *     "who can I put in front of this class", not "show me the staff table". A school
+         *     that narrows its front-office role to the latter should not lose the former.
+         *
+         *     WHY THIS IS NOT A FILTER THE BROWSER APPLIES
+         *         Deciding who counts as a teacher means reading role permissions, and the only
+         *         way to do that client-side is to ship every role's permission set to the page
+         *         and re-implement `TEACHING_PERMISSIONS` in TypeScript. Two copies of one rule
+         *         drift, and the copy that drifts is the one on the machine we do not control.
+         */
+        get: operations["list_teachers_api_v1_schools__school_id__teachers_get"];
+        put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/members/{membership_id}/branches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Member Branches
+         * @description Give one member memberships in multiple school branches.
+         */
+        post: operations["assign_member_branches_api_v1_schools__school_id__members__membership_id__branches_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1204,6 +1382,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in guardian and the school group they are viewing */
+        get: operations["me_api_v1_portal_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The children this guardian may view
+         * @description Only children linked with `can_view_results`. See the module docstring.
+         *
+         *     Returns a list rather than a `Page`: a guardian has a handful of children, and
+         *     pagination on a list that never exceeds single digits is machinery the portal UI
+         *     would have to implement for no benefit.
+         */
+        get: operations["children_api_v1_portal_children_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/children/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One child
+         * @description 404 for a child this guardian is not linked to -- never 403.
+         *
+         *     A 403 would confirm that the id names a real student at this school, which is a
+         *     small but real leak on a surface reachable by anyone with a handset and a code.
+         */
+        get: operations["child_api_v1_portal_children__student_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search everything this member can see
+         * @description Grouped, ranked results across every entity kind the caller may read.
+         *
+         *     An empty or whitespace-only `q` returns an empty result rather than a 422: the
+         *     omnibar calls this as the user clears the box, and an error there would render
+         *     as a failure toast for the act of deleting text.
+         */
+        get: operations["search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Typeahead suggestions
+         * @description A flat, ranked list for the dropdown under the input.
+         *
+         *     Same ranking as `/search`, by construction -- see `SearchService.suggest`.
+         */
+        get: operations["suggest_api_v1_search_suggest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this member's search box can do
+         * @description The scopes, filters and example queries available to THIS caller.
+         *
+         *     Fetched once when the omnibar mounts. It is derived entirely from the caller's
+         *     permissions and role, which is what keeps the frontend from having to hold its
+         *     own copy of the permission catalog -- a copy that would drift the first time a
+         *     permission is renamed.
+         */
+        get: operations["config_api_v1_search_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/classes/summary": {
         parameters: {
             query?: never;
@@ -1297,6 +1610,67 @@ export interface paths {
         patch: operations["update_section_api_v1_classes_sections__section_id__patch"];
         trace?: never;
     };
+    "/api/v1/classes/curriculum/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a subject from a class's curriculum */
+        delete: operations["remove_from_curriculum_api_v1_classes_curriculum__link_id__delete"];
+        options?: never;
+        head?: never;
+        /** Change a curriculum entry's teacher or period count */
+        patch: operations["update_curriculum_entry_api_v1_classes_curriculum__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/classes/{class_id}/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The subjects this class studies */
+        get: operations["list_curriculum_api_v1_classes__class_id__subjects_get"];
+        put?: never;
+        /** Add a subject to a class's curriculum */
+        post: operations["add_to_curriculum_api_v1_classes__class_id__subjects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/classes/sections/{section_id}/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The class register for a section, in roll order
+         * @description Gated on `student:read`, not `class:read`.
+         *
+         *     The response is a list of children with their guardian's phone number on it.
+         *     That is student data that happens to be reached through a section, and letting
+         *     `class:read` -- which exists so staff can see the school's structure -- return it
+         *     would make the structure permission a back door into the directory.
+         */
+        get: operations["section_roster_api_v1_classes_sections__section_id__roster_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/students/admissions": {
         parameters: {
             query?: never;
@@ -1327,7 +1701,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List and search students */
+        /**
+         * List and search students
+         * @description The `fees` filter needs `fee:read` ON TOP of `student:read`.
+         *
+         *     =====================================================================
+         *     WHY A "JUST A FILTER" NEEDS ITS OWN PERMISSION
+         *     =====================================================================
+         *         It returns no amount, no challan and no payment -- only which students come
+         *         back. That is precisely the problem: `?fees=overdue` is a list of the families
+         *         behind on their payments, and the seeded `teacher` role does NOT hold
+         *         `fee:read`. Leaving it ungated would let anyone who can see a class roll
+         *         enumerate which children's parents are struggling, which is exactly the
+         *         disclosure `fee:read` exists to control. That the answer is one bit per
+         *         student makes it easier to read, not less sensitive.
+         *
+         *     403 rather than silently ignoring the parameter. A filter that quietly does
+         *     nothing returns the whole roll, and "everyone" and "everyone who owes money" are
+         *     indistinguishable to the caller -- so a school would read an unfiltered list as
+         *     having no defaulters.
+         */
         get: operations["list_students_api_v1_students_get"];
         put?: never;
         /** Enroll a student */
@@ -1360,10 +1753,1469 @@ export interface paths {
         patch: operations["update_student_api_v1_students__student_id__patch"];
         trace?: never;
     };
+    "/api/v1/students/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote a section's students into the next academic year
+         * @description Bulk, once-a-year, and gated on its own `student:promote` permission.
+         *
+         *     Partial success is the contract: students who cannot be moved come back named
+         *     in `skipped` rather than aborting the batch. See `EnrollmentService.promote`.
+         */
+        post: operations["promote_students_api_v1_students_promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/students/{student_id}/enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where this student has sat, newest first */
+        get: operations["student_enrollments_api_v1_students__student_id__enrollments_get"];
+        put?: never;
+        /**
+         * Seat a student in a section from a given date
+         * @description The dated version of changing `section_id` through PATCH.
+         *
+         *     A registrar recording a transfer that happened last Monday needs to say so; a
+         *     PATCH has nowhere to put the date, so it assumes today.
+         */
+        post: operations["place_student_api_v1_students__student_id__enrollments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardians/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the guardians of one student
+         * @description The contact card: every linked guardian, primary contact first.
+         */
+        get: operations["guardians_of_student_api_v1_guardians_students__student_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardians": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List guardians */
+        get: operations["list_guardians_api_v1_guardians_get"];
+        put?: never;
+        /**
+         * Register a guardian
+         * @description Create this organization's record for a parent.
+         *
+         *     If the phone already belongs to a guardian identity -- because another school
+         *     group registered them, or because this group did and then removed the record --
+         *     the existing identity is reused, so one handset stays one login. That reuse is not
+         *     reported back: confirming that a given number is known to the platform would leak
+         *     across the tenant boundary.
+         */
+        post: operations["register_guardian_api_v1_guardians_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardians/{guardian_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a guardian with their children */
+        get: operations["get_guardian_api_v1_guardians__guardian_id__get"];
+        put?: never;
+        post?: never;
+        /** Remove a guardian with no linked children */
+        delete: operations["remove_guardian_api_v1_guardians__guardian_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update a guardian */
+        patch: operations["update_guardian_api_v1_guardians__guardian_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/guardians/{guardian_id}/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change the phone number a guardian signs in with
+         * @description Re-point this record at a different handset.
+         *
+         *     A CREDENTIAL CHANGE, not a profile edit -- see the service. PUT rather than PATCH
+         *     because it replaces the whole identifier, and a separate permission because it
+         *     hands portal access to whoever holds the new number.
+         */
+        put: operations["change_guardian_phone_api_v1_guardians__guardian_id__phone_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardians/{guardian_id}/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Enable or disable parent-portal access
+         * @description Close the portal for THIS organization's records only.
+         *
+         *     The same person's login at another school group is untouched, which is why the
+         *     flag lives on the record rather than on the identity.
+         */
+        put: operations["set_portal_access_api_v1_guardians__guardian_id__portal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardians/{guardian_id}/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link a guardian to a student */
+        post: operations["link_student_api_v1_guardians__guardian_id__students_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guardians/{guardian_id}/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink a guardian from a student */
+        delete: operations["unlink_student_api_v1_guardians__guardian_id__students__student_id__delete"];
+        options?: never;
+        head?: never;
+        /** Change what a guardian may do for one student */
+        patch: operations["update_link_api_v1_guardians__guardian_id__students__student_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/academic-years": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List academic years */
+        get: operations["list_academic_years_api_v1_academic_years_get"];
+        put?: never;
+        /** Create an academic year */
+        post: operations["create_academic_year_api_v1_academic_years_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/academic-years/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The year new work defaults to
+         * @description 422 with `NO_CURRENT_ACADEMIC_YEAR` when the school has not set one.
+         *
+         *     Declared before `/{year_id}` so "current" is never parsed as a year id.
+         */
+        get: operations["current_academic_year_api_v1_academic_years_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/academic-years/{year_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an academic year */
+        get: operations["get_academic_year_api_v1_academic_years__year_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete an academic year nothing depends on */
+        delete: operations["delete_academic_year_api_v1_academic_years__year_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit an academic year's name or dates */
+        patch: operations["update_academic_year_api_v1_academic_years__year_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/academic-years/{year_id}/set-current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make this the year new work defaults to
+         * @description Its own endpoint because promoting one year DEMOTES another.
+         *
+         *     A PATCH setting `is_current: true` would look like a single-record edit while
+         *     silently rewriting the row every default in the app reads from.
+         */
+        post: operations["set_current_academic_year_api_v1_academic_years__year_id__set_current_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/academic-years/{year_id}/terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the terms of an academic year */
+        get: operations["list_terms_api_v1_academic_years__year_id__terms_get"];
+        put?: never;
+        /** Add a term to an academic year */
+        post: operations["create_term_api_v1_academic_years__year_id__terms_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/academic-years/terms/{term_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a term */
+        delete: operations["delete_term_api_v1_academic_years_terms__term_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit a term */
+        patch: operations["update_term_api_v1_academic_years_terms__term_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/academic-years/{year_id}/enrollments/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open enrollment history for students who predate the calendar
+         * @description One-off catch-up for installations that had students before they had a year.
+         *
+         *     The migration that created `student_enrollments` deliberately populated nothing:
+         *     an enrollment needs an academic year, and no school had one until it created one.
+         *     This is that population, run against an explicit year rather than a guessed one.
+         *
+         *     Idempotent -- students who already have an open enrollment are counted and left
+         *     alone -- so a retry after a timeout is safe.
+         *
+         *     Gated on `student:promote` rather than `calendar:manage`: it writes a row per
+         *     student, which is the same bulk, whole-school blast radius promotion has.
+         */
+        post: operations["backfill_enrollments_api_v1_academic_years__year_id__enrollments_backfill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List and search subjects */
+        get: operations["list_subjects_api_v1_subjects_get"];
+        put?: never;
+        /** Create a subject */
+        post: operations["create_subject_api_v1_subjects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subjects/{subject_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a subject */
+        get: operations["get_subject_api_v1_subjects__subject_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete a subject no class studies */
+        delete: operations["delete_subject_api_v1_subjects__subject_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit a subject */
+        patch: operations["update_subject_api_v1_subjects__subject_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/attendance/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every section and whether its register has been taken
+         * @description The head teacher's morning chase list.
+         *
+         *     `session_id: null` means nobody has opened that section's register -- a state a
+         *     flat attendance table cannot distinguish from "everybody was present".
+         */
+        get: operations["daily_overview_api_v1_attendance_today_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List attendance registers */
+        get: operations["list_sessions_api_v1_attendance_get"];
+        put?: never;
+        /**
+         * Open a register for a section, pre-filled from its roster
+         * @description IDEMPOTENT: opening a register that already exists returns it.
+         *
+         *     Two teachers tapping "take attendance" at once, or one tapping twice on a slow
+         *     connection, must not produce two registers for one lesson -- and a 409 from the
+         *     unique constraint is not something either of them can act on.
+         *
+         *     Every student on the roster is written in as `present`; the teacher then flips
+         *     the exceptions. See `AttendanceService` for why the register is pre-filled.
+         */
+        post: operations["open_session_api_v1_attendance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One register with every line, in roll order */
+        get: operations["get_session_api_v1_attendance__session_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Discard a draft register
+         * @description Only a DRAFT. A submitted register is corrected by amendment, which leaves a
+         *     trail; deleting one would not.
+         */
+        delete: operations["discard_session_api_v1_attendance__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/{session_id}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set statuses for some of the students on a register
+         * @description Partial: students not named keep the status they already have.
+         *
+         *     On a SUBMITTED register this becomes an AMENDMENT -- it requires
+         *     `attendance:amend` as well, requires a `reason`, and writes one audit row per
+         *     changed student. The permission is resolved here and passed to the service as a
+         *     flag, so the service stays callable from a CLI or a worker.
+         */
+        patch: operations["mark_attendance_api_v1_attendance__session_id__entries_patch"];
+        trace?: never;
+    };
+    "/api/v1/attendance/{session_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assert that a register is complete and correct
+         * @description From here the register feeds reports and absence alerts, and further changes
+         *     need `attendance:amend`.
+         */
+        post: operations["submit_session_api_v1_attendance__session_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/{session_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen a submitted register for correction
+         * @description `attendance:amend`, not `attendance:mark`.
+         *
+         *     The reason is required, not optional: an audit row saying only that a register
+         *     was reopened answers none of the questions asked of it later.
+         */
+        post: operations["reopen_session_api_v1_attendance__session_id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/students/{student_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One student's attendance rate over a date range
+         * @description Counts only SUBMITTED registers, and excludes EXCUSED absences from the
+         *     denominator. `percentage` is null -- not 0 -- when nothing countable exists.
+         */
+        get: operations["student_summary_api_v1_attendance_students__student_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/sections/{section_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One section's attendance, day by day */
+        get: operations["section_report_api_v1_attendance_sections__section_id__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fee collection summary for a year or period
+         * @description Billed, collected, outstanding and overdue. Two grouped queries, never N+1.
+         */
+        get: operations["fee_summary_api_v1_fees_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/heads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List fee heads */
+        get: operations["list_fee_heads_api_v1_fees_heads_get"];
+        put?: never;
+        /** Create a fee head */
+        post: operations["create_fee_head_api_v1_fees_heads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/heads/{head_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a fee head */
+        get: operations["get_fee_head_api_v1_fees_heads__head_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an unused fee head
+         * @description Refused while any structure still prices it -- deactivate instead.
+         */
+        delete: operations["delete_fee_head_api_v1_fees_heads__head_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update a fee head */
+        patch: operations["update_fee_head_api_v1_fees_heads__head_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/fees/stationery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List stationery items */
+        get: operations["list_stationery_items_api_v1_fees_stationery_get"];
+        put?: never;
+        /** Add a stationery item to the catalog */
+        post: operations["create_stationery_item_api_v1_fees_stationery_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/stationery/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a stationery item */
+        get: operations["get_stationery_item_api_v1_fees_stationery__item_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an uncharged stationery item
+         * @description Refused once any structure or challan line charges it -- deactivate instead.
+         */
+        delete: operations["delete_stationery_item_api_v1_fees_stationery__item_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update or reprice a stationery item
+         * @description Repricing is NOT retroactive: every line that charged this article snapshotted
+         *     the price it sold at, so this changes the next challan and no past one.
+         */
+        patch: operations["update_stationery_item_api_v1_fees_stationery__item_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/fees/structures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List fee structures */
+        get: operations["list_fee_structures_api_v1_fees_structures_get"];
+        put?: never;
+        /**
+         * Create a fee structure
+         * @description Starts as a DRAFT so it can be assembled over several sittings.
+         */
+        post: operations["create_fee_structure_api_v1_fees_structures_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a fee structure with its priced lines */
+        get: operations["get_fee_structure_api_v1_fees_structures__structure_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rename a fee structure */
+        patch: operations["update_fee_structure_api_v1_fees_structures__structure_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add or reprice a fee head in a structure
+         * @description PUT, not POST: idempotent by head. Sending the same head twice reprices the
+         *     existing line rather than creating a duplicate the unique constraint would reject.
+         */
+        put: operations["set_fee_structure_item_api_v1_fees_structures__structure_id__items_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}/items/{head_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a fee head from a structure */
+        delete: operations["remove_fee_structure_item_api_v1_fees_structures__structure_id__items__head_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}/stationery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add a stationery item to a structure, or change its quantity
+         * @description The per-class default: "every child in Grade 1 gets twelve copies".
+         *
+         *     PUT, not POST: idempotent by article, exactly like the fee-head route above. The
+         *     unit price is taken from the catalog and is not accepted from the caller -- see
+         *     `FeeStructureStationeryInput`.
+         */
+        put: operations["set_fee_structure_stationery_api_v1_fees_structures__structure_id__stationery_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}/stationery/{stationery_item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a stationery item from a structure */
+        delete: operations["remove_fee_structure_stationery_api_v1_fees_structures__structure_id__stationery__stationery_item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate a fee structure so it can bill */
+        post: operations["activate_fee_structure_api_v1_fees_structures__structure_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/structures/{structure_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a fee structure */
+        post: operations["archive_fee_structure_api_v1_fees_structures__structure_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/concessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List concession schemes
+         * @description Each row carries `student_count` -- how many children are on the scheme, which
+         *     is what makes "what does merit cost us this year?" answerable from this screen
+         *     rather than from a spreadsheet.
+         */
+        get: operations["list_concessions_api_v1_fees_concessions_get"];
+        put?: never;
+        /** Create a concession scheme */
+        post: operations["create_concession_api_v1_fees_concessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/concessions/{concession_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a concession scheme
+         * @description 409 while any student is still on it, naming the count. Deactivate instead --
+         *     deleting would silently restore those families to full fees.
+         */
+        delete: operations["delete_concession_api_v1_fees_concessions__concession_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a concession scheme
+         * @description Revising the rate revises it for every student on the scheme, from the NEXT
+         *     generation run. Challans already issued snapshotted their discount and are never
+         *     restated -- the same rule that governs repricing a structure.
+         */
+        patch: operations["update_concession_api_v1_fees_concessions__concession_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/fees/late-fee-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List late fee policies */
+        get: operations["list_late_fee_policies_api_v1_fees_late_fee_policies_get"];
+        /**
+         * Create or replace the late fee policy for a year
+         * @description PUT because it is idempotent by academic year: sending it twice revises that
+         *     year's rule rather than creating a second one. Two live policies would make the
+         *     fine a family owes depend on which row the job read first.
+         */
+        put: operations["set_late_fee_policy_api_v1_fees_late_fee_policies_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/late-fee-policies/{policy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Retire a late fee policy
+         * @description Soft-deleted. The fines it already raised are untouched -- "what rule produced
+         *     this 200?" is asked months later and a vanished policy cannot answer it.
+         */
+        delete: operations["delete_late_fee_policy_api_v1_fees_late_fee_policies__policy_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/late-fee-policies/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply late fees now
+         * @description The manual trigger for what `make run-maintenance` does on a schedule.
+         *
+         *     `fee:issue`, because a fine is a challan and this decides who gets one. It is
+         *     IDEMPOTENT -- re-running the same day assesses nothing further -- so an operator
+         *     who clicks it twice is safe, which is exactly why it can be exposed at all.
+         */
+        post: operations["run_late_fees_api_v1_fees_late_fee_policies_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/billing-schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * When this campus bills automatically
+         * @description Null when automation has never been configured for this year.
+         *
+         *     NULL RATHER THAN A 404, because "not set up" is a normal state that the settings
+         *     screen renders as an empty form -- an error would make a screen that has never
+         *     been visited look broken.
+         */
+        get: operations["get_billing_schedule_api_v1_fees_billing_schedule_get"];
+        /**
+         * Set or revise the automatic billing day
+         * @description PUT, not POST: idempotent by year, like the structure-item route. Sending the
+         *     same year twice revises the schedule rather than creating a second one, so
+         *     changing the billing day is the same call as setting it.
+         */
+        put: operations["set_billing_schedule_api_v1_fees_billing_schedule_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/billing-schedule/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run this month's generation now, without waiting for the day
+         * @description The same run the nightly job performs, on demand and with a name against it.
+         *
+         *     SKIPS THE DAY TEST, NOT THE DUPLICATE TEST. An owner can bill early; they cannot
+         *     bill a period twice by clicking twice -- the second call reports that the period
+         *     has already been generated, and the partial unique index behind it would skip
+         *     every student anyway.
+         *
+         *     Returns a result rather than raising when nothing is due: "already generated" is
+         *     an answer, not a failure, and the screen shows it as one.
+         */
+        post: operations["run_billing_schedule_api_v1_fees_billing_schedule_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/students/{student_id}/fee-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What one student is billed, and where each line comes from
+         * @description The class base, this student's departures from it, and the resulting bill.
+         *
+         *     All three, because the effective list alone cannot answer "why is this student
+         *     paying more than their class?" -- which is the question the screen exists for.
+         */
+        get: operations["student_fee_profile_api_v1_fees_students__student_id__fee_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/students/{student_id}/fee-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add a student to a fee head, or take them off one
+         * @description PUT, not POST: idempotent by head and year, like the structure item route.
+         *     Sending the same head twice changes the arrangement rather than creating a second
+         *     one, so changing a bus fare is the same call as setting it.
+         *
+         *     Takes effect on the NEXT generation run — challans already issued snapshotted
+         *     their lines and are never restated.
+         */
+        put: operations["set_student_fee_assignment_api_v1_fees_students__student_id__fee_assignments_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/students/{student_id}/fee-assignments/{head_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Put a student back on their class default for a fee head */
+        delete: operations["remove_student_fee_assignment_api_v1_fees_students__student_id__fee_assignments__head_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/students/{student_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A student's running account
+         * @description The balance, and the movements that produced it, newest first.
+         *
+         *     `balance` may be NEGATIVE, meaning the school holds the family's money -- an
+         *     advance payment, or a reversal after a refund. It is deliberately not clamped to
+         *     zero: clamping would hide money the school actually owes back.
+         */
+        get: operations["student_ledger_api_v1_fees_students__student_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/students/{student_id}/ledger/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adjust a student's balance by hand
+         * @description `fee:void`, NOT `fee:collect`, and that is the whole point of the route.
+         *
+         *     This is the one action in the module that moves money with no voucher and no
+         *     receipt behind it -- which makes it the one an accountant could use to cover a
+         *     shortfall. The same separation of duties that stops the person recording payments
+         *     from being the person who can reverse them stops them from writing a balance off.
+         */
+        post: operations["adjust_student_ledger_api_v1_fees_students__student_id__ledger_adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate vouchers for a class and period
+         * @description Bulk billing. Students already billed for the period are SKIPPED with a reason
+         *     rather than failing the run -- see the response's `skipped` and `truncated`.
+         */
+        post: operations["generate_vouchers_api_v1_fees_vouchers_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the voucher register as CSV
+         * @description The register a finance office reconciles against its bank statement.
+         *
+         *     Declared BEFORE `/vouchers/{voucher_id}`, or Starlette parses "export" as a UUID
+         *     and answers 422. Capped, and the cap is announced inside the file -- a truncated
+         *     export that reads as a complete one is worse than a refused one.
+         */
+        get: operations["export_vouchers_api_v1_fees_vouchers_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List fee vouchers */
+        get: operations["list_vouchers_api_v1_fees_vouchers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/payments/{payment_id}/reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reverse a recorded payment
+         * @description Declared before `/vouchers/{voucher_id}` purely for grouping; the paths do not
+         *     collide. Requires `fee:void`, not `fee:collect` -- separation of duties.
+         */
+        post: operations["reverse_payment_api_v1_fees_payments__payment_id__reverse_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a voucher with its lines and receipts */
+        get: operations["get_voucher_api_v1_fees_vouchers__voucher_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the printable challan
+         * @description One A4 page, three detachable copies (Bank / School / Student).
+         *
+         *     The voucher is resolved through RLS and the school predicate BEFORE rendering, so
+         *     the renderer itself performs no authorization and cannot be handed a foreign row.
+         */
+        get: operations["download_challan_pdf_api_v1_fees_vouchers__voucher_id__pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a draft voucher */
+        post: operations["issue_voucher_api_v1_fees_vouchers__voucher_id__issue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void a voucher
+         * @description Refused while any non-reversed payment exists. The reason is mandatory and
+         *     lands in the audit row.
+         */
+        post: operations["void_voucher_api_v1_fees_vouchers__voucher_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/stationery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Charge a stationery item to a draft challan
+         * @description The per-student charge: "Ali also took two more copies".
+         *
+         *     DRAFT ONLY -- 409 once the challan is issued, because an issued bill is never
+         *     rewritten. Charge the next period's challan instead, or void and reissue.
+         *
+         *     `fee:issue`, not `fee:manage`: this decides who is charged, not what may be
+         *     charged. PUT because it is idempotent by article -- sending the same item twice
+         *     sets the quantity rather than adding a second line.
+         */
+        put: operations["add_voucher_stationery_api_v1_fees_vouchers__voucher_id__stationery_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Charge a fee head to a draft challan
+         * @description The one-off charge: a fine, a re-exam fee, a broken lab window.
+         *
+         *     WHY THIS EXISTS: without it the only tool for "charge Ali 500 for the window" is
+         *     the CLASS structure -- add a Breakage line, generate, remove it next month. That
+         *     bills the whole grade for one broken window, and forty parents find the error
+         *     before the school does.
+         *
+         *     DRAFT ONLY, and idempotent by head: charging the same head twice sets the line
+         *     rather than adding a second one. Charging a head the structure already priced
+         *     RESTATES that line, which is correct on a bill still being assembled -- the audit
+         *     row carries what was there before.
+         */
+        put: operations["add_voucher_fee_charge_api_v1_fees_vouchers__voucher_id__charges_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/charges/{head_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a fee charge from a draft challan
+         * @description Draft only. Removes a line the class structure put there as readily as a
+         *     one-off charge -- the supported way to say "this student is not paying the exam
+         *     fee this term" without touching the structure every other student is billed from.
+         *     The standing version of the same intent is an EXCLUDED assignment.
+         */
+        delete: operations["remove_voucher_fee_charge_api_v1_fees_vouchers__voucher_id__charges__head_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/stationery/{stationery_item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a stationery charge from a draft challan
+         * @description Draft only, same rule and same reason as adding one.
+         */
+        delete: operations["remove_voucher_stationery_api_v1_fees_vouchers__voucher_id__stationery__stationery_item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/vouchers/{voucher_id}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List receipts against a voucher */
+        get: operations["list_voucher_payments_api_v1_fees_vouchers__voucher_id__payments_get"];
+        put?: never;
+        /**
+         * Record a payment and issue a receipt
+         * @description Rejects overpayment rather than parking it as credit -- slice 1 has no ledger
+         *     to hold a credit balance, and a number with nowhere to live goes missing.
+         */
+        post: operations["record_payment_api_v1_fees_vouchers__voucher_id__payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcademicYearCreate */
+        AcademicYearCreate: {
+            /**
+             * Name
+             * @example 2026-2027
+             */
+            name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Is Current
+             * @description Make this the year new work defaults to. Setting it demotes whichever year currently holds the flag -- there is at most one per school.
+             * @default false
+             */
+            is_current?: boolean;
+        };
+        /** AcademicYearRead */
+        AcademicYearRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Is Current */
+            is_current: boolean;
+            /**
+             * Term Count
+             * @default 0
+             */
+            term_count?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AcademicYearUpdate */
+        AcademicYearUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** End Date */
+            end_date?: string | null;
+        };
         /**
          * AdmissionResponse
          * @description Deliberately thin. The public form must not echo back the stored record --
@@ -1405,6 +3257,267 @@ export interface components {
             /** Breaches */
             breaches: components["schemas"]["PlanLimitBreach"][];
         };
+        /**
+         * AttendanceEntryInput
+         * @description One student's status on a register.
+         */
+        AttendanceEntryInput: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            status: components["schemas"]["AttendanceStatus"];
+            /** Minutes Late */
+            minutes_late?: number | null;
+            /** Remarks */
+            remarks?: string | null;
+        };
+        /** AttendanceEntryRead */
+        AttendanceEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Roll Number */
+            roll_number: string | null;
+            status: components["schemas"]["AttendanceStatus"];
+            /** Minutes Late */
+            minutes_late: number | null;
+            /** Remarks */
+            remarks: string | null;
+        };
+        /**
+         * AttendanceMarkRequest
+         * @description Set statuses for some or all students on a register.
+         *
+         *     PARTIAL BY DESIGN. A teacher marks the four absentees and leaves twenty-six
+         *     students alone; sending the whole register on every keystroke would be a
+         *     write amplification of 30x for no gain. Students not named keep whatever they
+         *     already have -- which, for a freshly opened register, is `present`.
+         */
+        AttendanceMarkRequest: {
+            /** Entries */
+            entries: components["schemas"]["AttendanceEntryInput"][];
+            /**
+             * Reason
+             * @description Why a SUBMITTED register is being changed. Required for amendments and recorded in the audit trail; ignored while the register is still a draft.
+             */
+            reason?: string | null;
+        };
+        /**
+         * AttendanceSessionDetail
+         * @description A register with every line on it, in roll order.
+         *
+         *     `entries` has no default. A default would make it OPTIONAL in the generated
+         *     OpenAPI schema, and every frontend caller would then have to null-check a field
+         *     that is always present -- which in practice means they stop checking and the
+         *     type stops meaning anything. A register always has its lines; the contract says so.
+         */
+        AttendanceSessionDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Academic Year Id
+             * Format: uuid
+             */
+            academic_year_id: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Period */
+            period: number;
+            /** Subject Id */
+            subject_id: string | null;
+            status: components["schemas"]["AttendanceSessionStatus"];
+            /** Taken By User Id */
+            taken_by_user_id: string | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Present Count
+             * @default 0
+             */
+            present_count?: number;
+            /**
+             * Absent Count
+             * @default 0
+             */
+            absent_count?: number;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Entries */
+            entries: components["schemas"]["AttendanceEntryRead"][];
+        };
+        /**
+         * AttendanceSessionOpen
+         * @description Open a register for one section on one date.
+         *
+         *     Idempotent by design at the service layer: opening a register that already
+         *     exists returns the existing one rather than conflicting. A teacher who taps
+         *     "take attendance" twice, or two teachers who tap it at once, must not produce
+         *     two registers for one lesson -- and the unique constraint would otherwise turn
+         *     that double tap into a 409 the user cannot act on.
+         */
+        AttendanceSessionOpen: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Session Date
+             * @description Defaults to today, in the server's timezone.
+             */
+            session_date?: string | null;
+            /**
+             * Period
+             * @description Lesson slot, or 0 for a whole-day register. Primary schools mark once a day (0); secondary schools mark per lesson.
+             * @default 0
+             */
+            period?: number;
+            /**
+             * Subject Id
+             * @description Which lesson this is. Rejected when `period` is 0 -- a whole-day register covers every lesson and so is about no single subject.
+             */
+            subject_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * AttendanceSessionRead
+         * @description A register without its lines -- for lists and the not-yet-submitted view.
+         */
+        AttendanceSessionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Academic Year Id
+             * Format: uuid
+             */
+            academic_year_id: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Period */
+            period: number;
+            /** Subject Id */
+            subject_id: string | null;
+            status: components["schemas"]["AttendanceSessionStatus"];
+            /** Taken By User Id */
+            taken_by_user_id: string | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Present Count
+             * @default 0
+             */
+            present_count?: number;
+            /**
+             * Absent Count
+             * @default 0
+             */
+            absent_count?: number;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AttendanceSessionStatus
+         * @description The register's own lifecycle.
+         *
+         *     DRAFT -> SUBMITTED is one-way through the ordinary `attendance:mark` path.
+         *     Going back requires `attendance:amend`, which is a different permission held by
+         *     a different person -- the same separation `fee:collect` and `fee:void` draw
+         *     across a cash drawer.
+         * @enum {string}
+         */
+        AttendanceSessionStatus: "draft" | "submitted";
+        /**
+         * AttendanceStatus
+         * @description What one student's line on one register says.
+         *
+         *     WHY FIVE VALUES AND NOT TWO
+         *         Present/absent is what a database designer writes and what no school uses.
+         *         Each extra value below exists because it changes a downstream number:
+         *
+         *           LATE      counts as attended for the percentage a report card prints, but
+         *                     is what a punctuality warning is issued from. Folding it into
+         *                     PRESENT loses the warning; folding it into ABSENT understates
+         *                     attendance and triggers absence alerts for children who are in
+         *                     the building.
+         *           EXCUSED   an absence the school authorised -- illness with a note, a
+         *                     funeral, a sanctioned trip. Excluded from the DENOMINATOR of the
+         *                     attendance percentage, which is the whole point: a child off
+         *                     sick for a fortnight with notes should not fail an attendance
+         *                     threshold they were excused from.
+         *           HALF_DAY  counts as half a day present. Standard in this market for a
+         *                     child collected after the morning session.
+         *
+         *         `is_present` and `counts_toward_attendance` below are where those rules are
+         *         stated once, so no report re-derives them.
+         * @enum {string}
+         */
+        AttendanceStatus: "present" | "absent" | "late" | "excused" | "half_day";
         /**
          * AuditLogRead
          * @description One audit entry.
@@ -1452,6 +3565,62 @@ export interface components {
          * @enum {string}
          */
         BillingCycle: "monthly" | "yearly";
+        /**
+         * BillingRunResult
+         * @description What one unattended pass over a campus did.
+         *
+         *     REPORTED PER STRUCTURE-RUN AND IN TOTAL, because "42 challans generated" cannot
+         *     tell an owner whether Grade 9 was among them. `skipped` counts students already
+         *     billed for the period, which is the NORMAL outcome of a re-run and not an error.
+         */
+        BillingRunResult: {
+            /** Academic Year */
+            academic_year: string;
+            /** Period Label */
+            period_label?: string | null;
+            /**
+             * Ran
+             * @default false
+             */
+            ran?: boolean;
+            /**
+             * Structures
+             * @default 0
+             */
+            structures?: number;
+            /**
+             * Created
+             * @default 0
+             */
+            created?: number;
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped?: number;
+            /**
+             * Absorbed Vouchers
+             * @default 0
+             */
+            absorbed_vouchers?: number;
+            /**
+             * Absorbed Total
+             * @default 0.00
+             */
+            absorbed_total?: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated?: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** Body_reopen_session_api_v1_attendance__session_id__reopen_post */
+        Body_reopen_session_api_v1_attendance__session_id__reopen_post: {
+            /** Reason */
+            reason: string;
+        };
         /** CancelRequest */
         CancelRequest: {
             /**
@@ -1496,6 +3665,73 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ClassSubjectCreate */
+        ClassSubjectCreate: {
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+            /**
+             * Teacher Id
+             * @description Default teacher for this subject across the grade.
+             */
+            teacher_id?: string | null;
+            /** Weekly Periods */
+            weekly_periods?: number | null;
+        };
+        /**
+         * ClassSubjectRead
+         * @description A curriculum row with the subject inlined.
+         *
+         *     The subject's code and name are denormalised into the response rather than left
+         *     as an id for the client to resolve. A curriculum screen renders every row's name
+         *     on first paint, so returning ids would guarantee a second request per row -- an
+         *     N+1 moved from the database into the browser.
+         */
+        ClassSubjectRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+            /** Subject Code */
+            subject_code: string;
+            /** Subject Name */
+            subject_name: string;
+            subject_kind: components["schemas"]["SubjectKind"];
+            /** Teacher Id */
+            teacher_id: string | null;
+            /** Weekly Periods */
+            weekly_periods: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ClassSubjectUpdate */
+        ClassSubjectUpdate: {
+            /** Teacher Id */
+            teacher_id?: string | null;
+            /** Weekly Periods */
+            weekly_periods?: number | null;
+        };
         /**
          * ClassSummary
          * @description A class with its sections and headcounts.
@@ -1534,6 +3770,12 @@ export interface components {
             /** Level */
             level?: number | null;
         };
+        /**
+         * ConcessionKind
+         * @description Whether a named concession is a percentage or a flat sum.
+         * @enum {string}
+         */
+        ConcessionKind: "percent" | "amount";
         /** ContextSwitchRequest */
         ContextSwitchRequest: {
             /**
@@ -1541,6 +3783,884 @@ export interface components {
              * Format: uuid
              */
             membership_id: string;
+        };
+        /** DailyOverview */
+        DailyOverview: {
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Sections */
+            sections: components["schemas"]["SectionDayStatus"][];
+            /** Sections Total */
+            sections_total: number;
+            /** Sections Submitted */
+            sections_submitted: number;
+            /** Sections Not Started */
+            sections_not_started: number;
+        };
+        /**
+         * EnrollmentBackfillResult
+         * @description What `POST /academic-years/{id}/enrollments/backfill` did.
+         *
+         *     Exists because the migration that created `student_enrollments` deliberately did
+         *     not populate it: an enrollment needs an academic year, and no school had one
+         *     until it created one. This is that catch-up, run once per school against an
+         *     explicit year.
+         */
+        EnrollmentBackfillResult: {
+            /**
+             * Academic Year Id
+             * Format: uuid
+             */
+            academic_year_id: string;
+            /** Opened */
+            opened: number;
+            /** Already Enrolled */
+            already_enrolled: number;
+            /** Unplaced */
+            unplaced: number;
+        };
+        /**
+         * EnrollmentPlacement
+         * @description Seat a student in a section for a year, closing whatever came before.
+         *
+         *     `class_id` is absent on purpose: a section belongs to exactly one class, so
+         *     accepting both would let a caller submit a pair that disagree, and the service
+         *     would have to pick a winner. It is derived from the section.
+         */
+        EnrollmentPlacement: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Academic Year Id
+             * @description Defaults to the school's current academic year.
+             */
+            academic_year_id?: string | null;
+            /**
+             * Roll Number
+             * @description Omit to take the next free number in the section.
+             */
+            roll_number?: string | null;
+            /**
+             * Effective Date
+             * @description Defaults to today. The day the new placement starts.
+             */
+            effective_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** EnrollmentRead */
+        EnrollmentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * Academic Year Id
+             * Format: uuid
+             */
+            academic_year_id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Section Id */
+            section_id: string | null;
+            /** Roll Number */
+            roll_number: string | null;
+            /**
+             * Enrolled On
+             * Format: date
+             */
+            enrolled_on: string;
+            /** Left On */
+            left_on: string | null;
+            /** Is Promotion */
+            is_promotion: boolean;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * FeeBillingScheduleInput
+         * @description When this campus bills its monthly challans without being asked.
+         *
+         *     UPSERT BY YEAR, like the structure-item and student-assignment routes: sending it
+         *     twice revises the schedule rather than creating a second one, which is also what
+         *     the partial unique index enforces. Changing the billing day is therefore the same
+         *     call as setting it, and a campus cannot end up with two schedules disagreeing
+         *     about when its parents are billed.
+         */
+        FeeBillingScheduleInput: {
+            /**
+             * Academic Year
+             * @example 2026-2027
+             */
+            academic_year: string;
+            /**
+             * Is Active
+             * @description The off switch. Pausing keeps the settings -- an owner who stops automation for a term wants their billing day back when they resume.
+             * @default true
+             */
+            is_active?: boolean;
+            /**
+             * Generate Day
+             * @description Day of the month the run fires. Capped at 28 rather than clamped from 31: a school that picks 'the 31st' means the month end, but February would quietly move that to the 28th while the parents' standing bank instruction did not move with it. The question is answered once, here, instead of differently every February.
+             * @default 1
+             * @example 25
+             */
+            generate_day?: number;
+            /**
+             * Due Day Offset
+             * @description Days from issue to due date. Relative rather than a second day-of-month because that is how schools state it ('payable within ten days'), and because it cannot produce a due date before its own issue date.
+             * @default 10
+             */
+            due_day_offset?: number;
+            /**
+             * Issue Immediately
+             * @description Issue what the run generates instead of leaving drafts. OFF by default: an issued challan counts towards outstanding and earns late fees, and a background job handing out four hundred of those against a mis-typed structure at 2am is the most expensive mistake this feature can make. A draft is the same run with the last step left to a human.
+             * @default false
+             */
+            issue_immediately?: boolean;
+            /**
+             * Include Stationery
+             * @description OFF by default, the opposite of the manual dialog. A structure's book and uniform set is billed once, in the admission month; a schedule fires twelve times, and inheriting the manual default re-bills the books every month until a parent notices.
+             * @default false
+             */
+            include_stationery?: boolean;
+            /**
+             * Carry Forward Dues
+             * @description Bill each family's unpaid earlier challans as a line on the new one, and cancel the challans that balance came from. Part-paid challans are never absorbed -- their receipts point at them.
+             * @default false
+             */
+            carry_forward_dues?: boolean;
+            /**
+             * Carry Forward Head Id
+             * @description The head arrears are billed under. Required when carrying dues forward.
+             */
+            carry_forward_head_id?: string | null;
+        };
+        /** FeeBillingScheduleRead */
+        FeeBillingScheduleRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Generate Day */
+            generate_day: number;
+            /** Due Day Offset */
+            due_day_offset: number;
+            /** Issue Immediately */
+            issue_immediately: boolean;
+            /** Include Stationery */
+            include_stationery: boolean;
+            /** Carry Forward Dues */
+            carry_forward_dues: boolean;
+            /** Carry Forward Head Id */
+            carry_forward_head_id: string | null;
+            /** Carry Forward Head Name */
+            carry_forward_head_name?: string | null;
+            /** Last Run Period */
+            last_run_period: string | null;
+            /** Last Run At */
+            last_run_at: string | null;
+            /** Last Run Created */
+            last_run_created: number;
+            /** Last Run Skipped */
+            last_run_skipped: number;
+            /** Next Run On */
+            next_run_on?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FeeConcessionCreate
+         * @description A remission scheme: Staff Child 50%, Merit 25%, Sibling 1,000 off.
+         */
+        FeeConcessionCreate: {
+            /**
+             * Code
+             * @example STAFF
+             */
+            code: string;
+            /**
+             * Name
+             * @example Staff child remission
+             */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** @default percent */
+            kind?: components["schemas"]["ConcessionKind"];
+            /**
+             * Value
+             * @description A percentage (1-100) when `kind` is percent, a flat sum when amount.
+             * @example 50.00
+             */
+            value: number | string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active?: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order?: number;
+        };
+        /** FeeConcessionRead */
+        FeeConcessionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            kind: components["schemas"]["ConcessionKind"];
+            /** Value */
+            value: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Student Count
+             * @default 0
+             */
+            student_count?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FeeConcessionUpdate
+         * @description Every field optional. `code` is absent on purpose, exactly as on a fee head:
+         *     it is the handle a school's own paperwork refers to, and renaming it silently
+         *     re-points every reference that used it.
+         */
+        FeeConcessionUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            kind?: components["schemas"]["ConcessionKind"] | null;
+            /** Value */
+            value?: number | string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** FeeHeadCreate */
+        FeeHeadCreate: {
+            /**
+             * Code
+             * @example TUITION
+             */
+            code: string;
+            /**
+             * Name
+             * @example Tuition
+             */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** @default monthly */
+            recurrence?: components["schemas"]["FeeRecurrence"];
+            /**
+             * Is Refundable
+             * @default false
+             */
+            is_refundable?: boolean;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active?: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order?: number;
+        };
+        /** FeeHeadRead */
+        FeeHeadRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            recurrence: components["schemas"]["FeeRecurrence"];
+            /** Is Refundable */
+            is_refundable: boolean;
+            /** Is Active */
+            is_active: boolean;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FeeHeadUpdate
+         * @description PATCH: omission means "leave unchanged".
+         *
+         *     `code` is absent on purpose. Renaming a head is safe because vouchers snapshot
+         *     the name, but re-coding one silently re-points every report that groups by code.
+         *     Retire the head and create a new one instead.
+         */
+        FeeHeadUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            recurrence?: components["schemas"]["FeeRecurrence"] | null;
+            /** Is Refundable */
+            is_refundable?: boolean | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /**
+         * FeeLineType
+         * @description What a structure line or a challan line is pricing.
+         *
+         *     THE DISCRIMINATOR. A FEE line names a `fee_head` and carries a flat amount; a
+         *     STATIONERY line names a `stationery_item` and carries a quantity times a unit
+         *     price. The CHECK constraints on both item tables are written against this column,
+         *     so a line can never claim to be one kind while pointing at the other.
+         *
+         *     Defaulted to FEE everywhere, which is what makes the migration that introduced
+         *     stationery a pure addition: every row that existed before it is a fee line, and
+         *     reads it as one without a backfill.
+         * @enum {string}
+         */
+        FeeLineType: "fee" | "stationery";
+        /** FeePaymentCreate */
+        FeePaymentCreate: {
+            /** Amount */
+            amount: number | string;
+            /** @default cash */
+            method?: components["schemas"]["PaymentMethod"];
+            /**
+             * Reference
+             * @description Cheque number or bank transaction id.
+             */
+            reference?: string | null;
+            /**
+             * Received On
+             * @description Defaults to today. Backdate for money taken earlier.
+             */
+            received_on?: string | null;
+            /**
+             * Received By User Id
+             * @description Who physically took the money, if not the person recording it.
+             */
+            received_by_user_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** FeePaymentRead */
+        FeePaymentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Voucher Id
+             * Format: uuid
+             */
+            voucher_id: string;
+            /** Receipt Number */
+            receipt_number: string;
+            /** Amount */
+            amount: string;
+            /** Currency */
+            currency: string;
+            method: components["schemas"]["PaymentMethod"];
+            /** Reference */
+            reference: string | null;
+            /**
+             * Received On
+             * Format: date
+             */
+            received_on: string;
+            /** Received By User Id */
+            received_by_user_id: string | null;
+            status: components["schemas"]["FeePaymentStatus"];
+            /** Notes */
+            notes: string | null;
+            /** Reversed At */
+            reversed_at: string | null;
+            /** Reversal Reason */
+            reversal_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * FeePaymentStatus
+         * @enum {string}
+         */
+        FeePaymentStatus: "recorded" | "reversed";
+        /**
+         * FeeRecurrence
+         * @description How often a head is normally charged.
+         *
+         *     DESCRIPTIVE, NOT EXECUTABLE. It informs the person assembling a structure; it
+         *     does not drive generation. Real schools fold the annual admission fee into the
+         *     August monthly challan rather than issuing it separately, so the operator picks
+         *     the period at generation time and this stays advisory.
+         * @enum {string}
+         */
+        FeeRecurrence: "monthly" | "term" | "annual" | "one_time";
+        /**
+         * FeeStandingFilter
+         * @description How the students list may be narrowed by what a family owes.
+         *
+         *     A three-state filter rather than a `pending: bool`, because the third state is the
+         *     one an accountant actually asks for -- "who can I clear for the trip" is a real
+         *     question and `pending=false` does not express it in a way the URL survives.
+         *
+         *     OVERDUE is a strict subset of PENDING: money that is late is also money owed.
+         * @enum {string}
+         */
+        FeeStandingFilter: "pending" | "overdue" | "clear";
+        /** FeeStructureCreate */
+        FeeStructureCreate: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /**
+             * Academic Year
+             * @example 2026-2027
+             */
+            academic_year: string;
+            /**
+             * Name
+             * @example Grade 10 — 2026-2027
+             */
+            name: string;
+            /**
+             * Items
+             * @description Optional starting lines; more can be added while the structure is a draft.
+             */
+            items?: components["schemas"]["FeeStructureItemInput"][];
+        };
+        /**
+         * FeeStructureDetail
+         * @description A structure with its priced lines and their totals, for the editor screen.
+         */
+        FeeStructureDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Name */
+            name: string;
+            status: components["schemas"]["FeeStructureStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Items */
+            items: components["schemas"]["FeeStructureItemRead"][];
+            /** Total */
+            total: string;
+            /** Fee Total */
+            fee_total: string;
+            /** Stationery Total */
+            stationery_total: string;
+        };
+        /**
+         * FeeStructureItemInput
+         * @description Price one FEE HEAD in a structure. Stationery uses its own input below.
+         *
+         *     Two inputs rather than one polymorphic body with three optional fields: a single
+         *     schema would have to accept `head_id`, `stationery_item_id`, `amount` and
+         *     `quantity` as all-optional and then reject four of the sixteen combinations in a
+         *     validator. Two shapes make the two legal combinations the only expressible ones,
+         *     and give each endpoint an unambiguous OpenAPI contract.
+         */
+        FeeStructureItemInput: {
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /** Amount */
+            amount: number | string;
+        };
+        /**
+         * FeeStructureItemRead
+         * @description One priced line, of either kind.
+         *
+         *     ONE SHAPE FOR BOTH on the way out, unlike the two Create schemas. A client
+         *     rendering the structure editor wants a single list it can sum and sort;
+         *     `line_type` tells it whether to show the quantity column for a row, and the
+         *     reference fields are nullable accordingly.
+         */
+        FeeStructureItemRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            line_type: components["schemas"]["FeeLineType"];
+            /** Name */
+            name: string;
+            /** Code */
+            code: string;
+            /** Head Id */
+            head_id: string | null;
+            /** Stationery Item Id */
+            stationery_item_id: string | null;
+            unit?: components["schemas"]["StationeryUnit"] | null;
+            /** Quantity */
+            quantity: string;
+            /** Unit Price */
+            unit_price: string;
+            /** Amount */
+            amount: string;
+        };
+        /** FeeStructureRead */
+        FeeStructureRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Name */
+            name: string;
+            status: components["schemas"]["FeeStructureStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FeeStructureStationeryInput
+         * @description Add a stationery article to a structure, or change how many of it.
+         *
+         *     `unit_price` is NOT accepted. It is copied from the catalog at the moment the
+         *     line is added, so the amount a structure charges can never be a number the
+         *     catalog has no record of -- which is what keeps "why is this class paying 80 for
+         *     a 60-rupee copy?" answerable.
+         */
+        FeeStructureStationeryInput: {
+            /**
+             * Stationery Item Id
+             * Format: uuid
+             */
+            stationery_item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity?: number | string;
+        };
+        /**
+         * FeeStructureStatus
+         * @description DRAFT -> ACTIVE -> ARCHIVED.
+         *
+         *     DRAFT exists so a structure can be assembled over several sittings without
+         *     becoming billable halfway through. Only ACTIVE structures generate vouchers.
+         * @enum {string}
+         */
+        FeeStructureStatus: "draft" | "active" | "archived";
+        /**
+         * FeeStructureUpdate
+         * @description Metadata only. Status moves through `/activate` and `/archive`, and items
+         *     through the item endpoints -- so a transition is never a side effect of a PATCH
+         *     that was meant to fix a typo in the name.
+         */
+        FeeStructureUpdate: {
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * FeeSummary
+         * @description The collection dashboard for one academic year and optional period.
+         */
+        FeeSummary: {
+            /** Academic Year */
+            academic_year: string;
+            /** Period Label */
+            period_label: string | null;
+            /** Currency */
+            currency: string;
+            /** Billed */
+            billed: string;
+            /** Collected */
+            collected: string;
+            /** Outstanding */
+            outstanding: string;
+            /** Overdue */
+            overdue: string;
+            /** Stationery Billed */
+            stationery_billed: string;
+            /** Voucher Count */
+            voucher_count: number;
+            /** By Status */
+            by_status: components["schemas"]["VoucherStatusCount"][];
+        };
+        /**
+         * FeeVoucherDetail
+         * @description A voucher with its lines and receipts -- the challan detail screen.
+         *
+         *     `student_name` and `admission_number` are inherited; they belong to every voucher
+         *     view, not only this one.
+         */
+        FeeVoucherDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Structure Id */
+            structure_id: string | null;
+            /** Voucher Number */
+            voucher_number: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Issue Date
+             * Format: date
+             */
+            issue_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            status: components["schemas"]["VoucherStatus"];
+            origin: components["schemas"]["VoucherOrigin"];
+            /** Source Voucher Id */
+            source_voucher_id?: string | null;
+            /** Currency */
+            currency: string;
+            /** Subtotal */
+            subtotal: string;
+            /** Discount Total */
+            discount_total: string;
+            /** Total */
+            total: string;
+            /** Paid Total */
+            paid_total: string;
+            /** Outstanding */
+            outstanding: string;
+            /**
+             * Arrears Brought Forward
+             * @default 0.00
+             */
+            arrears_brought_forward?: string;
+            /** Superseded By Voucher Id */
+            superseded_by_voucher_id?: string | null;
+            /** Superseded By Voucher Number */
+            superseded_by_voucher_number?: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Issued At */
+            issued_at: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /** Voided At */
+            voided_at: string | null;
+            /** Void Reason */
+            void_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Items */
+            items: components["schemas"]["VoucherItemRead"][];
+            /** Payments */
+            payments: components["schemas"]["FeePaymentRead"][];
+        };
+        /** FeeVoucherRead */
+        FeeVoucherRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Structure Id */
+            structure_id: string | null;
+            /** Voucher Number */
+            voucher_number: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Issue Date
+             * Format: date
+             */
+            issue_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            status: components["schemas"]["VoucherStatus"];
+            origin: components["schemas"]["VoucherOrigin"];
+            /** Source Voucher Id */
+            source_voucher_id?: string | null;
+            /** Currency */
+            currency: string;
+            /** Subtotal */
+            subtotal: string;
+            /** Discount Total */
+            discount_total: string;
+            /** Total */
+            total: string;
+            /** Paid Total */
+            paid_total: string;
+            /** Outstanding */
+            outstanding: string;
+            /**
+             * Arrears Brought Forward
+             * @default 0.00
+             */
+            arrears_brought_forward?: string;
+            /** Superseded By Voucher Id */
+            superseded_by_voucher_id?: string | null;
+            /** Superseded By Voucher Number */
+            superseded_by_voucher_number?: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Issued At */
+            issued_at: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /** Voided At */
+            voided_at: string | null;
+            /** Void Reason */
+            void_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
@@ -1555,6 +4675,408 @@ export interface components {
          * @enum {string}
          */
         Gender: "male" | "female" | "other";
+        /**
+         * GuardianChildRead
+         * @description One child, as the parent portal shows them.
+         *
+         *     A NARROWER PROJECTION than `StudentRead`, and that is the security control. The
+         *     staff record carries the other guardian's phone number, the family address and
+         *     free-text notes; a separated parent must not read the other's contact details out
+         *     of the portal. Fields are added here one at a time, deliberately.
+         */
+        GuardianChildRead: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * School Id
+             * Format: uuid
+             */
+            school_id: string;
+            /** School Name */
+            school_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /** Section Id */
+            section_id: string | null;
+            /** Status */
+            status: string;
+            relationship_type: components["schemas"]["GuardianRelationship"];
+            /** Can View Results */
+            can_view_results: boolean;
+        };
+        /** GuardianContextRequest */
+        GuardianContextRequest: {
+            /**
+             * Guardian Id
+             * Format: uuid
+             */
+            guardian_id: string;
+        };
+        /**
+         * GuardianContextSummary
+         * @description One organization this guardian holds records in -- the context picker.
+         */
+        GuardianContextSummary: {
+            /**
+             * Guardian Id
+             * Format: uuid
+             */
+            guardian_id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Student Count */
+            student_count: number;
+            /** Schools */
+            schools: string[];
+        };
+        /**
+         * GuardianCreate
+         * @description Register a guardian, or attach to the identity that already holds this phone.
+         *
+         *     `phone` is the identity key. The service normalises it to E.164 and REUSES an
+         *     existing identity when one matches -- which is what makes a father with children
+         *     at two campuses one login rather than two. That reuse is invisible here on
+         *     purpose: the front office types a number, and whether it was already known is not
+         *     a decision a clerk should have to make.
+         */
+        GuardianCreate: {
+            /**
+             * Phone
+             * @example +923001234567
+             */
+            phone: string;
+            /**
+             * Full Name
+             * @example Muhammad Aslam
+             */
+            full_name: string;
+            /** Email */
+            email?: string | null;
+            /** Cnic */
+            cnic?: string | null;
+            /** Occupation */
+            occupation?: string | null;
+            /** Address */
+            address?: string | null;
+            /** Alternate Phone */
+            alternate_phone?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Preferred Locale
+             * @example ur
+             */
+            preferred_locale?: string | null;
+        };
+        /**
+         * GuardianDetail
+         * @description A guardian with every child they are linked to, for the detail screen.
+         */
+        GuardianDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Identity Id
+             * Format: uuid
+             */
+            identity_id: string;
+            /** Phone */
+            phone: string;
+            /** Full Name */
+            full_name: string;
+            /** Email */
+            email: string | null;
+            /** Cnic */
+            cnic: string | null;
+            /** Occupation */
+            occupation: string | null;
+            /** Address */
+            address: string | null;
+            /** Alternate Phone */
+            alternate_phone: string | null;
+            /** Portal Enabled */
+            portal_enabled: boolean;
+            /** Notes */
+            notes: string | null;
+            /** Preferred Locale */
+            preferred_locale: string;
+            /** Identity Status */
+            identity_status: string;
+            /** Last Login At */
+            last_login_at: string | null;
+            /** Student Count */
+            student_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Students */
+            students: components["schemas"]["LinkedStudentRead"][];
+        };
+        /**
+         * GuardianLinkCreate
+         * @description Attach a guardian to a child.
+         *
+         *     Every flag defaults to the SAFE value rather than the convenient one:
+         *     `can_pickup` is false because handing a child to an unauthorised adult is the
+         *     worst outcome this table can produce, and `is_primary_contact` is false because
+         *     exactly one guardian may hold it and silently stealing it from the mother when
+         *     the father is added later is not a decision a default should make.
+         */
+        GuardianLinkCreate: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** @default other */
+            relationship_type?: components["schemas"]["GuardianRelationship"];
+            /** Relationship Label */
+            relationship_label?: string | null;
+            /**
+             * Is Primary Contact
+             * @default false
+             */
+            is_primary_contact?: boolean;
+            /**
+             * Is Emergency Contact
+             * @default false
+             */
+            is_emergency_contact?: boolean;
+            /**
+             * Can Pickup
+             * @default false
+             */
+            can_pickup?: boolean;
+            /**
+             * Receives Notifications
+             * @default true
+             */
+            receives_notifications?: boolean;
+            /**
+             * Can View Results
+             * @default true
+             */
+            can_view_results?: boolean;
+        };
+        /** GuardianLinkUpdate */
+        GuardianLinkUpdate: {
+            relationship_type?: components["schemas"]["GuardianRelationship"] | null;
+            /** Relationship Label */
+            relationship_label?: string | null;
+            /** Is Primary Contact */
+            is_primary_contact?: boolean | null;
+            /** Is Emergency Contact */
+            is_emergency_contact?: boolean | null;
+            /** Can Pickup */
+            can_pickup?: boolean | null;
+            /** Receives Notifications */
+            receives_notifications?: boolean | null;
+            /** Can View Results */
+            can_view_results?: boolean | null;
+        };
+        /**
+         * GuardianLoginResponse
+         * @description The result of verifying a code.
+         *
+         *     THREE OUTCOMES, ONE SHAPE:
+         *       * `authenticated`  -- exactly one usable organization; a full session is issued.
+         *       * `select_required` -- several; `contexts` is populated and the caller must POST
+         *         to `/guardian/auth/context`. Mirrors the staff multi-membership flow.
+         *       * `no_access`      -- the handset is known but no organization currently exposes
+         *         records to it (portal disabled, or every child unlinked). Distinguished from
+         *         a wrong code so the parent is told to call the school rather than made to
+         *         retype a code that will never work.
+         */
+        GuardianLoginResponse: {
+            /** Status */
+            status: string;
+            guardian?: components["schemas"]["GuardianProfile"] | null;
+            /** Contexts */
+            contexts?: components["schemas"]["GuardianContextSummary"][];
+            tokens?: components["schemas"]["GuardianTokenPair"] | null;
+        };
+        /** GuardianMessageResponse */
+        GuardianMessageResponse: {
+            /** Message */
+            message: string;
+        };
+        /**
+         * GuardianPhoneChange
+         * @description Re-point a guardian record at a different handset.
+         */
+        GuardianPhoneChange: {
+            /** Phone */
+            phone: string;
+        };
+        /** GuardianPortalToggle */
+        GuardianPortalToggle: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * GuardianProfile
+         * @description Who the portal thinks you are.
+         */
+        GuardianProfile: {
+            /**
+             * Identity Id
+             * Format: uuid
+             */
+            identity_id: string;
+            /**
+             * Guardian Id
+             * Format: uuid
+             */
+            guardian_id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Full Name */
+            full_name: string;
+            /** Phone */
+            phone: string;
+            /** Email */
+            email: string | null;
+            /** Preferred Locale */
+            preferred_locale: string;
+        };
+        /** GuardianRead */
+        GuardianRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Identity Id
+             * Format: uuid
+             */
+            identity_id: string;
+            /** Phone */
+            phone: string;
+            /** Full Name */
+            full_name: string;
+            /** Email */
+            email: string | null;
+            /** Cnic */
+            cnic: string | null;
+            /** Occupation */
+            occupation: string | null;
+            /** Address */
+            address: string | null;
+            /** Alternate Phone */
+            alternate_phone: string | null;
+            /** Portal Enabled */
+            portal_enabled: boolean;
+            /** Notes */
+            notes: string | null;
+            /** Preferred Locale */
+            preferred_locale: string;
+            /** Identity Status */
+            identity_status: string;
+            /** Last Login At */
+            last_login_at: string | null;
+            /** Student Count */
+            student_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * GuardianRelationship
+         * @description What this person is to this child.
+         *
+         *     An enum rather than free text because it drives BEHAVIOUR, not just display:
+         *     which contact a fee reminder goes to first, who may be handed the child at the
+         *     gate, and what a report card salutation says. Free text ("Baba", "Ammi",
+         *     "guardian?") cannot be branched on and cannot be translated.
+         *
+         *     OTHER exists so the list never blocks an enrolment; the printed label for it
+         *     comes from `GuardianStudent.relationship_label`.
+         * @enum {string}
+         */
+        GuardianRelationship: "father" | "mother" | "grandparent" | "sibling" | "uncle" | "aunt" | "legal_guardian" | "other";
+        /**
+         * GuardianTokenPair
+         * @description Returned ONLY to a caller that opted in with `X-Token-Transport: body`.
+         *
+         *     Browsers get httpOnly cookies and nothing else. This exists for the test suite
+         *     and for a future native parent app, which has no cookie jar. It is not a hole a
+         *     malicious page can exploit: a cross-origin page cannot set that header without
+         *     CORS approval, and the response is not readable to it if it could.
+         */
+        GuardianTokenPair: {
+            /** Access Token */
+            access_token: string;
+            /** Refresh Token */
+            refresh_token?: string | null;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type?: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * GuardianUpdate
+         * @description PATCH semantics: omitted fields are left untouched.
+         *
+         *     `phone` is absent DELIBERATELY. Changing it changes which handset can sign in as
+         *     this person, which is a credential change, not a profile edit -- it goes through
+         *     `PUT /guardians/{id}/phone`, which is separately permissioned and audited.
+         */
+        GuardianUpdate: {
+            /** Full Name */
+            full_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Cnic */
+            cnic?: string | null;
+            /** Occupation */
+            occupation?: string | null;
+            /** Address */
+            address?: string | null;
+            /** Alternate Phone */
+            alternate_phone?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Preferred Locale */
+            preferred_locale?: string | null;
+        };
         /**
          * HealthStatus
          * @description Response for the health endpoints.
@@ -1760,6 +5282,271 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * LateFeeKind
+         * @description How a fine is sized.
+         * @enum {string}
+         */
+        LateFeeKind: "fixed" | "percent";
+        /** LateFeePolicyCreate */
+        LateFeePolicyCreate: {
+            /**
+             * Academic Year
+             * @example 2026-2027
+             */
+            academic_year: string;
+            /**
+             * Name
+             * @example Standard late fee
+             */
+            name: string;
+            /**
+             * Head Id
+             * Format: uuid
+             * @description The fee head fines are billed under.
+             */
+            head_id: string;
+            /** @default fixed */
+            kind?: components["schemas"]["LateFeeKind"];
+            /**
+             * Value
+             * @description A flat sum when `kind` is fixed; a percentage of the OUTSTANDING balance when percent.
+             * @example 200.00
+             */
+            value: number | string;
+            /**
+             * Grace Days
+             * @description Days after the due date before anything is charged.
+             * @default 0
+             */
+            grace_days?: number;
+            /** @default once */
+            recurrence?: components["schemas"]["LateFeeRecurrence"];
+            /**
+             * Max Amount
+             * @description Ceiling on the total fined against one challan. Required unless `once`.
+             */
+            max_amount?: number | string | null;
+            /**
+             * Min Outstanding
+             * @description Balances below this are not fined.
+             * @default 0.00
+             */
+            min_outstanding?: number | string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active?: boolean;
+        };
+        /** LateFeePolicyRead */
+        LateFeePolicyRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Name */
+            name: string;
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /** Head Name */
+            head_name: string;
+            kind: components["schemas"]["LateFeeKind"];
+            /** Value */
+            value: string;
+            /** Grace Days */
+            grace_days: number;
+            recurrence: components["schemas"]["LateFeeRecurrence"];
+            /** Max Amount */
+            max_amount: string | null;
+            /** Min Outstanding */
+            min_outstanding: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * LateFeeRecurrence
+         * @description How often an unpaid challan is fined.
+         *
+         *     ONCE is the default and the one most schools actually operate. The recurring
+         *     members exist because some schools do charge per week of delay, and a policy that
+         *     could only fine once would push those schools into doing it by hand -- which is
+         *     how fines end up applied to the families somebody remembered.
+         * @enum {string}
+         */
+        LateFeeRecurrence: "once" | "weekly" | "monthly";
+        /**
+         * LateFeeRunResult
+         * @description What one pass of the fine job did.
+         *
+         *     `assessed` and `skipped` are both reported, and `skipped_reasons` groups the
+         *     second, because a run that fined nobody is the normal case on most days and an
+         *     operator needs to tell it apart from a run that was misconfigured and fined
+         *     nobody for the wrong reason.
+         */
+        LateFeeRunResult: {
+            /** Academic Year */
+            academic_year: string;
+            /** Considered */
+            considered: number;
+            /** Assessed */
+            assessed: number;
+            /** Total Charged */
+            total_charged: string;
+            /** Skipped */
+            skipped: number;
+            /** Skipped Reasons */
+            skipped_reasons: {
+                [key: string]: number;
+            };
+            /** Voucher Ids */
+            voucher_ids: string[];
+            /**
+             * Truncated
+             * @description True when more overdue challans matched than one pass may fine. The remainder is picked up by the next run, oldest first.
+             * @default false
+             */
+            truncated?: boolean;
+        };
+        /**
+         * LedgerAdjustmentInput
+         * @description A manual correction to a family's balance.
+         *
+         *     GATED ON `fee:void`, not `fee:collect`. It is the one action in this module that
+         *     moves money with no voucher and no receipt behind it, which makes it the one an
+         *     accountant could use to cover a shortfall. The same separation of duties that
+         *     keeps the person recording payments from being the person who can reverse them
+         *     keeps them from being the person who can write a balance off.
+         */
+        LedgerAdjustmentInput: {
+            /**
+             * Amount
+             * @description Signed. Positive charges the family, negative credits them. Zero is rejected -- an entry that moves nothing lengthens the statement without informing it.
+             * @example -1500.00
+             */
+            amount: number | string;
+            /**
+             * Academic Year
+             * @example 2026-2027
+             */
+            academic_year: string;
+            /**
+             * Occurred On
+             * @description Defaults to today. Backdate for a correction.
+             */
+            occurred_on?: string | null;
+            /**
+             * Description
+             * @description Required. An unexplained adjustment is the one entry nobody can audit.
+             * @example Written off — hardship, approved by principal
+             */
+            description: string;
+        };
+        /** LedgerEntryRead */
+        LedgerEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            entry_type: components["schemas"]["LedgerEntryType"];
+            /** Voucher Id */
+            voucher_id: string | null;
+            /** Payment Id */
+            payment_id: string | null;
+            /** Academic Year */
+            academic_year: string;
+            /** Amount */
+            amount: string;
+            /** Balance After */
+            balance_after: string;
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Description */
+            description: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * LedgerEntryType
+         * @description What moved a student's running balance.
+         *
+         *     DEBIT (positive `amount`) increases what the family owes; CREDIT (negative)
+         *     reduces it. One signed column rather than a debit column and a credit column,
+         *     because every consumer of this table wants the net and a two-column ledger makes
+         *     every one of them write the same CASE expression.
+         * @enum {string}
+         */
+        LedgerEntryType: "charge" | "payment" | "payment_reversed" | "voucher_voided" | "late_fee" | "adjustment";
+        /**
+         * LinkedStudentRead
+         * @description One child as seen from the guardian's record.
+         */
+        LinkedStudentRead: {
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * School Id
+             * Format: uuid
+             */
+            school_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Section Id */
+            section_id: string | null;
+            /** Status */
+            status: string;
+            relationship_type: components["schemas"]["GuardianRelationship"];
+            /** Relationship Label */
+            relationship_label: string | null;
+            /** Is Primary Contact */
+            is_primary_contact: boolean;
+            /** Is Emergency Contact */
+            is_emergency_contact: boolean;
+            /** Can Pickup */
+            can_pickup: boolean;
+            /** Receives Notifications */
+            receives_notifications: boolean;
+            /** Can View Results */
+            can_view_results: boolean;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -1851,6 +5638,34 @@ export interface components {
             role_code: string | null;
             /** Permissions */
             permissions: string[];
+        };
+        /**
+         * MemberBranchAssign
+         * @description Additional branches to attach to an existing member.
+         */
+        MemberBranchAssign: {
+            /** School Ids */
+            school_ids: string[];
+        };
+        /**
+         * MemberCreate
+         * @description Create a login-ready member without the invitation flow.
+         */
+        MemberCreate: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Password */
+            password: string;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
         };
         /** MemberRead */
         MemberRead: {
@@ -2131,6 +5946,47 @@ export interface components {
             /** Tax Id */
             tax_id?: string | null;
         };
+        /** OtpRequest */
+        OtpRequest: {
+            /**
+             * Phone
+             * @example +923001234567
+             */
+            phone: string;
+        };
+        /**
+         * OtpRequestResponse
+         * @description Deliberately identical whether or not the number is known.
+         *
+         *     ENUMERATION IS THE WHOLE POINT OF THIS SHAPE. An honest "no guardian with that
+         *     number" turns an unauthenticated endpoint into a way to test whether a given
+         *     person has a child at a given school -- which is exactly the information a
+         *     stalker or a rival school would want, and which no parent consented to publish.
+         *
+         *     So the response is the same in both branches, down to the masked number echoed
+         *     back (derived from the caller's own input, not from a row). `retry_after_seconds`
+         *     is the only variable, and it is a function of the caller's own request rate.
+         */
+        OtpRequestResponse: {
+            /** Message */
+            message: string;
+            /** Phone Masked */
+            phone_masked: string;
+            /** Expires In Seconds */
+            expires_in_seconds: number;
+            /** Retry After Seconds */
+            retry_after_seconds: number;
+        };
+        /** OtpVerifyRequest */
+        OtpVerifyRequest: {
+            /** Phone */
+            phone: string;
+            /**
+             * Code
+             * @example 482913
+             */
+            code: string;
+        };
         /**
          * PageMeta
          * @description Pagination metadata; everything a table UI needs to render its controls.
@@ -2149,17 +6005,106 @@ export interface components {
             /** Has Prev */
             has_prev: boolean;
         };
+        /** Page[AcademicYearRead] */
+        Page_AcademicYearRead_: {
+            /** Items */
+            items: components["schemas"]["AcademicYearRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[AttendanceSessionRead] */
+        Page_AttendanceSessionRead_: {
+            /** Items */
+            items: components["schemas"]["AttendanceSessionRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
         /** Page[ClassRead] */
         Page_ClassRead_: {
             /** Items */
             items: components["schemas"]["ClassRead"][];
             meta: components["schemas"]["PageMeta"];
         };
-        /** Page[StudentRead] */
-        Page_StudentRead_: {
+        /** Page[FeeConcessionRead] */
+        Page_FeeConcessionRead_: {
             /** Items */
-            items: components["schemas"]["StudentRead"][];
+            items: components["schemas"]["FeeConcessionRead"][];
             meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[FeeHeadRead] */
+        Page_FeeHeadRead_: {
+            /** Items */
+            items: components["schemas"]["FeeHeadRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[FeeStructureRead] */
+        Page_FeeStructureRead_: {
+            /** Items */
+            items: components["schemas"]["FeeStructureRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[FeeVoucherRead] */
+        Page_FeeVoucherRead_: {
+            /** Items */
+            items: components["schemas"]["FeeVoucherRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[GuardianRead] */
+        Page_GuardianRead_: {
+            /** Items */
+            items: components["schemas"]["GuardianRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[StationeryItemRead] */
+        Page_StationeryItemRead_: {
+            /** Items */
+            items: components["schemas"]["StationeryItemRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[StudentListRow] */
+        Page_StudentListRow_: {
+            /** Items */
+            items: components["schemas"]["StudentListRow"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[SubjectRead] */
+        Page_SubjectRead_: {
+            /** Items */
+            items: components["schemas"]["SubjectRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /**
+         * ParsedQueryRead
+         * @description How the server read the query string. Rendered as filter chips by the UI.
+         */
+        ParsedQueryRead: {
+            /** Terms */
+            terms: string[];
+            /** Phrases */
+            phrases: string[];
+            /** Exclusions */
+            exclusions: string[];
+            /** Filters */
+            filters: {
+                [key: string]: string[];
+            };
+            /** Negated Filters */
+            negated_filters: {
+                [key: string]: string[];
+            };
+            /**
+             * Summary
+             * @description Plain-English rendering of the above.
+             */
+            summary: string[];
+        };
+        /**
+         * PaymentMethod
+         * @enum {string}
+         */
+        PaymentMethod: "cash" | "bank_transfer" | "cheque" | "card" | "online" | "other";
+        /** PaymentReverseRequest */
+        PaymentReverseRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * PermissionCategory
@@ -2496,6 +6441,87 @@ export interface components {
             totp_code?: string | null;
         };
         /**
+         * PromotionRequest
+         * @description Move a whole section up into the next year (PDF: end-of-year rollover).
+         */
+        PromotionRequest: {
+            /**
+             * From Section Id
+             * Format: uuid
+             */
+            from_section_id: string;
+            /**
+             * To Section Id
+             * Format: uuid
+             */
+            to_section_id: string;
+            /**
+             * To Academic Year Id
+             * Format: uuid
+             */
+            to_academic_year_id: string;
+            /**
+             * Effective Date
+             * @description Defaults to the target year's start date.
+             */
+            effective_date?: string | null;
+            /**
+             * Student Ids
+             * @description Restrict the promotion to these students. Omit to promote everyone currently seated in the source section -- the usual case. Supplying a subset is how a school holds a student back a year.
+             */
+            student_ids?: string[] | null;
+            /**
+             * Reset Roll Numbers
+             * @description Re-number the promoted students 1..N in the target section. Schools re-number every year in register order; keeping last year's numbers leaves gaps wherever a student was held back or left.
+             * @default true
+             */
+            reset_roll_numbers?: boolean;
+        };
+        /** PromotionResult */
+        PromotionResult: {
+            /** Promoted */
+            promoted: number;
+            /** Skipped */
+            skipped: components["schemas"]["PromotionSkip"][];
+            /**
+             * From Section Id
+             * Format: uuid
+             */
+            from_section_id: string;
+            /**
+             * To Section Id
+             * Format: uuid
+             */
+            to_section_id: string;
+            /**
+             * To Academic Year Id
+             * Format: uuid
+             */
+            to_academic_year_id: string;
+        };
+        /**
+         * PromotionSkip
+         * @description One student the promotion could not move, and why.
+         *
+         *     Returned rather than raised. A promotion is a bulk action over a whole section,
+         *     and aborting the entire run because one student is already seated in the target
+         *     would make the feature unusable exactly when it is retried after a partial
+         *     failure.
+         */
+        PromotionSkip: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * RegisterRequest
          * @description Self-service signup: creates the person AND their organization (spec §4.3B).
          */
@@ -2710,20 +6736,6 @@ export interface components {
              */
             locale?: string;
         };
-        /**
-         * SchoolCreateResponse
-         * @description A created school, plus whether the caller was granted principal on it.
-         *
-         *     `principal_granted` tells the frontend where to send the user next: into the new
-         *     school's admin panel if they now hold principal there (their first school), or
-         *     back to the school list if they do not (subsequent schools, which need a
-         *     principal appointed).
-         */
-        SchoolCreateResponse: {
-            school: components["schemas"]["SchoolRead"];
-            /** Principal Granted */
-            principal_granted: boolean;
-        };
         /** SchoolRead */
         SchoolRead: {
             /**
@@ -2787,6 +6799,245 @@ export interface components {
             /** Locale */
             locale?: string | null;
         };
+        /**
+         * SearchConfigResponse
+         * @description What THIS caller's search box should look like.
+         *
+         *     Fetched once when the omnibar mounts. Everything in it is derived from the
+         *     caller's permissions and role, so a teacher's box offers different scopes and
+         *     different examples from an accountant's -- without the frontend holding a copy
+         *     of the permission catalog or a role-to-feature table that would drift from the
+         *     backend's.
+         */
+        SearchConfigResponse: {
+            /**
+             * Scopes
+             * @description Searchable types, ordered by what this role usually wants first.
+             */
+            scopes: components["schemas"]["SearchScopeRead"][];
+            /**
+             * Filter Keys
+             * @description Every recognised `key:` in the query language.
+             */
+            filter_keys: string[];
+            /**
+             * Examples
+             * @description Ready-made queries worth showing on an empty box, chosen for this role.
+             */
+            examples: string[];
+            /**
+             * Cross School Available
+             * @description Whether `school:all` does anything for this caller. True only for an organization-level member; a campus-scoped one cannot widen their scope.
+             */
+            cross_school_available: boolean;
+            /** Max Query Length */
+            max_query_length: number;
+        };
+        /**
+         * SearchEntity
+         * @description The kinds of thing global search can return.
+         *
+         *     The value is the `type:` filter token AND the discriminator on the wire, so the
+         *     frontend switches on the same string the user types. One vocabulary, not three.
+         * @enum {string}
+         */
+        SearchEntity: "student" | "class" | "section" | "member" | "invitation" | "role" | "school" | "voucher" | "fee_head" | "fee_structure" | "audit";
+        /**
+         * SearchGroup
+         * @description All hits of one entity type, plus how many there were in total.
+         */
+        SearchGroup: {
+            type: components["schemas"]["SearchEntity"];
+            /** Label */
+            label: string;
+            /** Icon */
+            icon: string;
+            /** Hits */
+            hits: components["schemas"]["SearchHit"][];
+            /**
+             * Total
+             * @description Total matches of this type, not just the ones returned. Drives the "see all 47" link — a truncated list with no count is indistinguishable from a complete one.
+             */
+            total: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /**
+         * SearchHit
+         * @description One result, in the shape every provider projects onto.
+         */
+        SearchHit: {
+            type: components["schemas"]["SearchEntity"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Title
+             * @description Primary label, e.g. "Ahmed Raza" or "V-2026-0042".
+             */
+            title: string;
+            /**
+             * Subtitle
+             * @description Secondary identifier, e.g. an admission number or email.
+             */
+            subtitle?: string | null;
+            /**
+             * Context
+             * @description Where this sits, e.g. "Grade 10 — A" or "Tuition · 2026-2027".
+             */
+            context?: string | null;
+            /**
+             * Status
+             * @description Lifecycle state, rendered as a badge by the UI.
+             */
+            status?: string | null;
+            /** School Id */
+            school_id?: string | null;
+            /**
+             * School Name
+             * @description Which campus this belongs to. Only meaningful for an organization-level caller searching across campuses; the UI shows it only when the results actually span more than one.
+             */
+            school_name?: string | null;
+            /**
+             * Url
+             * @description Frontend deep link for this result.
+             */
+            url: string;
+            /**
+             * Matched On
+             * @description Which field the search term was found in — 'name', 'subtitle', 'context'. Lets the UI explain a match that is not visible in the title, which is otherwise the single most confusing thing a fuzzy search can do.
+             */
+            matched_on?: string | null;
+            /**
+             * Score
+             * @description Relevance, after the caller's role profile is applied.
+             */
+            score: number;
+        };
+        /**
+         * SearchResponse
+         * @description The full fan-out result.
+         */
+        SearchResponse: {
+            /** Query */
+            query: string;
+            parsed: components["schemas"]["ParsedQueryRead"];
+            /**
+             * Groups
+             * @description Non-empty groups only, ordered by the caller's role profile.
+             */
+            groups: components["schemas"]["SearchGroup"][];
+            /**
+             * Total
+             * @description Sum of every group's total.
+             */
+            total: number;
+            /**
+             * Searched Types
+             * @description Which providers actually ran. Reflects permissions and `type:`.
+             */
+            searched_types: components["schemas"]["SearchEntity"][];
+            /**
+             * Cross School
+             * @description True when this search spanned every campus rather than one.
+             */
+            cross_school: boolean;
+            /** Took Ms */
+            took_ms: number;
+            /**
+             * Warnings
+             * @description Non-fatal notes: unknown filters, ignored dates, capped terms.
+             */
+            warnings?: string[];
+        };
+        /**
+         * SearchScopeRead
+         * @description One entity kind this caller may search, as the UI needs to describe it.
+         */
+        SearchScopeRead: {
+            type: components["schemas"]["SearchEntity"];
+            /** Label */
+            label: string;
+            /** Icon */
+            icon: string;
+            /**
+             * Filters
+             * @description Filter keys that do something for this type.
+             */
+            filters: string[];
+            /**
+             * In Default Scan
+             * @description False means it is only searched when named with `type:`.
+             */
+            in_default_scan: boolean;
+        };
+        /**
+         * SearchSuggestion
+         * @description A typeahead row: the same hit, minus everything the dropdown does not draw.
+         */
+        SearchSuggestion: {
+            type: components["schemas"]["SearchEntity"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string | null;
+            /** Url */
+            url: string;
+            /** Icon */
+            icon: string;
+        };
+        /**
+         * SectionAttendanceDay
+         * @description One day's headline numbers for one section.
+         */
+        SectionAttendanceDay: {
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Present */
+            present: number;
+            /** Absent */
+            absent: number;
+            /** Late */
+            late: number;
+            /** Excused */
+            excused: number;
+            /** Half Day */
+            half_day: number;
+            /** Total */
+            total: number;
+        };
+        /** SectionAttendanceReport */
+        SectionAttendanceReport: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
+            /** Days */
+            days: components["schemas"]["SectionAttendanceDay"][];
+            /** Average Percentage */
+            average_percentage: number | null;
+        };
         /** SectionCreate */
         SectionCreate: {
             /**
@@ -2798,6 +7049,44 @@ export interface components {
             capacity?: number | null;
             /** Class Teacher Id */
             class_teacher_id?: string | null;
+        };
+        /**
+         * SectionDayStatus
+         * @description One section's attendance state for one date.
+         *
+         *     THE POINT OF THE MODULE'S SESSION TABLE. A flat attendance table cannot tell
+         *     "nobody marked Grade 10-B today" apart from "Grade 10-B was fully present",
+         *     because both are an absence of rows. `session_id is None` is that distinction,
+         *     and it is what the head teacher's morning chase list is built from.
+         */
+        SectionDayStatus: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Class Teacher Id */
+            class_teacher_id: string | null;
+            /** Class Teacher Name */
+            class_teacher_name: string | null;
+            /** Session Id */
+            session_id: string | null;
+            status: components["schemas"]["AttendanceSessionStatus"] | null;
+            /** Present Count */
+            present_count: number;
+            /** Absent Count */
+            absent_count: number;
+            /** Total Count */
+            total_count: number;
         };
         /** SectionRead */
         SectionRead: {
@@ -2829,6 +7118,28 @@ export interface components {
             updated_at: string;
         };
         /**
+         * SectionRosterEntry
+         * @description One line of a class register, in roll order.
+         */
+        SectionRosterEntry: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Roll Number */
+            roll_number: string | null;
+            status: components["schemas"]["StudentStatus"];
+            /** Photo Url */
+            photo_url: string | null;
+            /** Guardian Phone */
+            guardian_phone: string | null;
+        };
+        /**
          * SectionSummary
          * @description One section plus its live headcount, for the summaries dashboard.
          */
@@ -2844,6 +7155,8 @@ export interface components {
             capacity: number | null;
             /** Class Teacher Id */
             class_teacher_id: string | null;
+            /** Class Teacher Name */
+            class_teacher_name: string | null;
             /** Student Count */
             student_count: number;
         };
@@ -2861,6 +7174,118 @@ export interface components {
          * @enum {string}
          */
         SortDirection: "asc" | "desc";
+        /**
+         * StationeryCategory
+         * @description How a sellable item is grouped on the shelf and on the challan.
+         *
+         *     Coarse ON PURPOSE. A school stocks two hundred distinct SKUs and cares about six
+         *     groupings of them: the finance office reports "books" against "uniform", never
+         *     "HB pencil" against "2B pencil". Anything finer belongs in the item's name, which
+         *     is free text and costs nothing to change.
+         * @enum {string}
+         */
+        StationeryCategory: "book" | "notebook" | "stationery" | "uniform" | "sports" | "other";
+        /** StationeryItemCreate */
+        StationeryItemCreate: {
+            /**
+             * Code
+             * @example COPY-100
+             */
+            code: string;
+            /**
+             * Name
+             * @example Copy (Register, 100 pages)
+             */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** @default stationery */
+            category?: components["schemas"]["StationeryCategory"];
+            /** @default piece */
+            unit?: components["schemas"]["StationeryUnit"];
+            /**
+             * Unit Price
+             * @example 60.00
+             */
+            unit_price: number | string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active?: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order?: number;
+        };
+        /** StationeryItemRead */
+        StationeryItemRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            category: components["schemas"]["StationeryCategory"];
+            unit: components["schemas"]["StationeryUnit"];
+            /** Unit Price */
+            unit_price: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * StationeryItemUpdate
+         * @description PATCH: omission means "leave unchanged".
+         *
+         *     `code` is absent on purpose, matching `FeeHeadUpdate` -- re-coding an article
+         *     silently re-points every report that groups by code. Retire it and add a new one.
+         *
+         *     `unit_price` IS present and editable: repricing is the normal, expected operation
+         *     on a catalog, and it is safe precisely because every charged line snapshotted the
+         *     price it sold at.
+         */
+        StationeryItemUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            category?: components["schemas"]["StationeryCategory"] | null;
+            unit?: components["schemas"]["StationeryUnit"] | null;
+            /** Unit Price */
+            unit_price?: number | string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /**
+         * StationeryUnit
+         * @description What one unit of the price IS.
+         *
+         *     Printed on the challan next to the quantity, because "Pencil x 2" is ambiguous
+         *     and expensive: two pencils and two dozen pencils differ by a factor of twelve,
+         *     and the parent finds out at the counter.
+         * @enum {string}
+         */
+        StationeryUnit: "piece" | "dozen" | "pack" | "set" | "pair" | "ream";
         /**
          * StudentAdmissionRequest
          * @description Public admissions form payload (PDF: "Digital Admissions Form").
@@ -2897,6 +7322,52 @@ export interface components {
              * @description Which school is being applied to.
              */
             school_id: string;
+        };
+        /**
+         * StudentAttendanceSummary
+         * @description One student's attendance over a date range.
+         *
+         *     `percentage` is computed as `attended_credit / counted_sessions`, where an
+         *     EXCUSED absence is excluded from BOTH -- an authorised absence is neither
+         *     attendance nor a failure to attend, and counting it either way misreports the
+         *     child. A half day contributes 0.5. See `AttendanceStatus` for why.
+         */
+        StudentAttendanceSummary: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
+            /** Total Sessions */
+            total_sessions: number;
+            /** Counted Sessions */
+            counted_sessions: number;
+            /** Present */
+            present: number;
+            /** Absent */
+            absent: number;
+            /** Late */
+            late: number;
+            /** Excused */
+            excused: number;
+            /** Half Day */
+            half_day: number;
+            /** Percentage */
+            percentage: number | null;
         };
         /**
          * StudentCreate
@@ -2936,6 +7407,337 @@ export interface components {
             /** Enrolled On */
             enrolled_on?: string | null;
         };
+        /**
+         * StudentDues
+         * @description What one student owes, under whichever fee filter was applied.
+         *
+         *     THE AMOUNT IS RELATIVE TO THE FILTER, and that is the point. Under
+         *     `fees=overdue` this is the LATE money only, not the full balance -- a family that
+         *     owes 13,000 of which 6,500 is past due appears as 6,500 on an overdue list.
+         *     Showing the full balance there would make every row look worse than it is, and an
+         *     office chasing a number the parent has not yet been asked for loses the argument.
+         */
+        StudentDues: {
+            /** Amount */
+            amount: string;
+            /** Currency */
+            currency: string;
+            /** Overdue Amount */
+            overdue_amount: string;
+            /** Periods */
+            periods: string[];
+        };
+        /**
+         * StudentFeeAssignmentInput
+         * @description Put a student on, or take them off, one fee head for a year.
+         *
+         *     `amount` is required when adding and rejected when excluding, checked here rather
+         *     than only by the CHECK constraint so the error names the field and reaches the
+         *     form that produced it. An excluded head has no amount because the line is ABSENT
+         *     from the challan, not zero -- a "Transport 0.00" line is a phone call.
+         */
+        StudentFeeAssignmentInput: {
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /**
+             * Academic Year
+             * @example 2026-2027
+             */
+            academic_year: string;
+            mode: components["schemas"]["StudentFeeAssignmentMode"];
+            /**
+             * Amount
+             * @description Required when adding a head or overriding its rate. Must be omitted when excluding one. On a discount it is the flat sum taken off, and is one of three mutually exclusive ways to express the remission.
+             */
+            amount?: number | string | null;
+            /**
+             * Percent
+             * @description Discounts only: the share of the line to take off. `50` is half.
+             * @example 50.00
+             */
+            percent?: number | string | null;
+            /**
+             * Concession Id
+             * @description Discounts only: the named scheme supplying the rate. Preferred over an ad-hoc amount or percent, because revising the scheme then revises every student on it.
+             */
+            concession_id?: string | null;
+            /**
+             * Note
+             * @example Route 4 — Gulberg
+             */
+            note?: string | null;
+        };
+        /**
+         * StudentFeeAssignmentMode
+         * @description How one student's bill departs from what their class is charged.
+         *
+         *     FOUR WAYS TO DEPART, AND THE ORDER THEY APPLY IN MATTERS. `_effective_lines()`
+         *     resolves them as: OVERRIDE restates a class line, EXCLUDED removes one, ADDED
+         *     appends one, and DISCOUNT reduces whatever the first three settled on. That order
+         *     is the only one that makes "half of what this child actually pays" mean what a
+         *     principal means by it -- a scholarship computed against the class list price
+         *     while the child is on a negotiated rate bills the wrong number, and bills it
+         *     invisibly.
+         * @enum {string}
+         */
+        StudentFeeAssignmentMode: "added" | "excluded" | "override" | "discount";
+        /** StudentFeeAssignmentRead */
+        StudentFeeAssignmentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /** Head Code */
+            head_code: string;
+            /** Head Name */
+            head_name: string;
+            /** Academic Year */
+            academic_year: string;
+            mode: components["schemas"]["StudentFeeAssignmentMode"];
+            /** Amount */
+            amount: string | null;
+            /** Percent */
+            percent?: string | null;
+            /** Concession Id */
+            concession_id?: string | null;
+            /** Concession Code */
+            concession_code?: string | null;
+            /** Concession Name */
+            concession_name?: string | null;
+            /** Note */
+            note: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * StudentFeeLine
+         * @description One line of what a student will actually be billed, and where it came from.
+         */
+        StudentFeeLine: {
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /** Head Code */
+            head_code: string;
+            /** Head Name */
+            head_name: string;
+            /** Amount */
+            amount: string;
+            /**
+             * Discount Amount
+             * @default 0.00
+             */
+            discount_amount?: string;
+            /**
+             * Net Amount
+             * @default 0.00
+             */
+            net_amount?: string;
+            /** Source */
+            source: string;
+            /** Concession Name */
+            concession_name?: string | null;
+        };
+        /**
+         * StudentFeeProfile
+         * @description What one student is billed for a year: the class base, their departures from
+         *     it, and the result.
+         *
+         *     ALL THREE, NOT JUST THE RESULT. An effective list alone cannot answer "why is
+         *     Ali paying 4,000 more than his class?", which is the question this screen exists
+         *     for. Returning the base and the assignments beside it turns that into something
+         *     the operator can read instead of something they have to reconstruct.
+         */
+        StudentFeeProfile: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Class Id */
+            class_id: string | null;
+            /** Structure Id */
+            structure_id: string | null;
+            /** Structure Name */
+            structure_name: string | null;
+            /** Base */
+            base: components["schemas"]["StudentFeeLine"][];
+            /** Assignments */
+            assignments: components["schemas"]["StudentFeeAssignmentRead"][];
+            /** Effective */
+            effective: components["schemas"]["StudentFeeLine"][];
+            /** Effective Total */
+            effective_total: string;
+            /**
+             * Gross Total
+             * @default 0.00
+             */
+            gross_total?: string;
+            /**
+             * Discount Total
+             * @default 0.00
+             */
+            discount_total?: string;
+        };
+        /**
+         * StudentGuardianRead
+         * @description One guardian as seen from the student's record -- the contact card.
+         */
+        StudentGuardianRead: {
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Guardian Id
+             * Format: uuid
+             */
+            guardian_id: string;
+            /**
+             * Identity Id
+             * Format: uuid
+             */
+            identity_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Phone */
+            phone: string;
+            /** Alternate Phone */
+            alternate_phone: string | null;
+            /** Email */
+            email: string | null;
+            /** Cnic */
+            cnic: string | null;
+            relationship_type: components["schemas"]["GuardianRelationship"];
+            /** Relationship Label */
+            relationship_label: string | null;
+            /** Is Primary Contact */
+            is_primary_contact: boolean;
+            /** Is Emergency Contact */
+            is_emergency_contact: boolean;
+            /** Can Pickup */
+            can_pickup: boolean;
+            /** Receives Notifications */
+            receives_notifications: boolean;
+            /** Can View Results */
+            can_view_results: boolean;
+            /** Portal Enabled */
+            portal_enabled: boolean;
+        };
+        /**
+         * StudentLedgerStatement
+         * @description One family's account: the balance, and the movements that produced it.
+         */
+        StudentLedgerStatement: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Balance */
+            balance: string;
+            /** Entries */
+            entries: components["schemas"]["LedgerEntryRead"][];
+            /** Total Entries */
+            total_entries: number;
+        };
+        /**
+         * StudentListRow
+         * @description A student as the DIRECTORY shows them: the record plus what they owe.
+         *
+         *     Separate from `StudentRead` rather than two more nullable fields on it, because
+         *     `dues` cannot be populated anywhere else. `create`, `get` and `update` answer
+         *     "what is this record", have no fee filter to be relative to, and would carry the
+         *     field as a permanent null that every caller learns to ignore. Same split, and the
+         *     same reason, as `AttendanceSessionRead` and `AttendanceSessionDetail`.
+         */
+        StudentListRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Full Name */
+            full_name: string;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            gender: components["schemas"]["Gender"] | null;
+            /** Address */
+            address: string | null;
+            /** Photo Url */
+            photo_url: string | null;
+            /** Guardian Name */
+            guardian_name: string | null;
+            /** Guardian Phone */
+            guardian_phone: string | null;
+            /** Guardian Email */
+            guardian_email: string | null;
+            /** Emergency Contact Name */
+            emergency_contact_name: string | null;
+            /** Emergency Contact Phone */
+            emergency_contact_phone: string | null;
+            /** Section Id */
+            section_id: string | null;
+            /** Class Name */
+            class_name: string | null;
+            /** Section Name */
+            section_name: string | null;
+            status: components["schemas"]["StudentStatus"];
+            /** Enrolled On */
+            enrolled_on: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            dues: components["schemas"]["StudentDues"] | null;
+        };
         /** StudentRead */
         StudentRead: {
             /**
@@ -2970,6 +7772,10 @@ export interface components {
             emergency_contact_phone: string | null;
             /** Section Id */
             section_id: string | null;
+            /** Class Name */
+            class_name: string | null;
+            /** Section Name */
+            section_name: string | null;
             status: components["schemas"]["StudentStatus"];
             /** Enrolled On */
             enrolled_on: string | null;
@@ -3026,6 +7832,68 @@ export interface components {
             /** Enrolled On */
             enrolled_on?: string | null;
         };
+        /** SubjectCreate */
+        SubjectCreate: {
+            /**
+             * Code
+             * @example MATH
+             */
+            code: string;
+            /**
+             * Name
+             * @example Mathematics
+             */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** @default core */
+            kind?: components["schemas"]["SubjectKind"];
+        };
+        /**
+         * SubjectKind
+         * @description Whether every student in the grade takes this subject.
+         *
+         *     Drives two concrete behaviours rather than being decoration: the gradebook
+         *     must not show an ELECTIVE as missing for a student who never chose it, and the
+         *     timetable may schedule two electives into the same slot but never two cores.
+         * @enum {string}
+         */
+        SubjectKind: "core" | "elective" | "activity";
+        /** SubjectRead */
+        SubjectRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            kind: components["schemas"]["SubjectKind"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SubjectUpdate */
+        SubjectUpdate: {
+            /** Code */
+            code?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            kind?: components["schemas"]["SubjectKind"] | null;
+        };
         /** SubscribeRequest */
         SubscribeRequest: {
             /** Plan Code */
@@ -3058,6 +7926,105 @@ export interface components {
             cancel_at_period_end: boolean;
             /** Cancelled At */
             cancelled_at: string | null;
+        };
+        /**
+         * TeacherOption
+         * @description One selectable teacher, for the class-teacher and curriculum pickers.
+         *
+         *     Deliberately NOT `MemberRead`. A picker needs a value, a label and enough to tell
+         *     two same-named people apart -- nothing else. Reusing `MemberRead` would ship
+         *     `membership_id`, `status`, `is_primary` and `joined_at` to a dropdown that cannot
+         *     act on any of them, and would tie the shape of a UI control to the shape of the
+         *     staff table, so a change to one would silently churn the other.
+         *
+         *     `user_id` is the value because that is what `sections.class_teacher_id` and
+         *     `class_subjects.teacher_id` reference -- NOT `membership_id`. The distinction
+         *     matters for someone who teaches at two branches: one human, one user row, two
+         *     memberships.
+         */
+        TeacherOption: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Email */
+            email: string;
+            /** Role Name */
+            role_name: string;
+        };
+        /** TermCreate */
+        TermCreate: {
+            /**
+             * Name
+             * @example Term 1
+             */
+            name: string;
+            /**
+             * Sequence
+             * @description 1-based ordering within the year.
+             */
+            sequence: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+        };
+        /** TermRead */
+        TermRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Academic Year Id
+             * Format: uuid
+             */
+            academic_year_id: string;
+            /** Name */
+            name: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TermUpdate */
+        TermUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Sequence */
+            sequence?: number | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** End Date */
+            end_date?: string | null;
         };
         /**
          * TransferOwnershipRequest
@@ -3109,6 +8076,248 @@ export interface components {
         VerifyEmailRequest: {
             /** Token */
             token: string;
+        };
+        /**
+         * VoucherFeeChargeInput
+         * @description Put one fee head on ONE student's draft challan, at an amount typed now.
+         *
+         *     The fee-side twin of `VoucherStationeryInput`. It exists because the alternative
+         *     an operator otherwise reaches for is adding a "Breakage" line to the CLASS
+         *     structure and removing it next month -- which bills the whole grade for one broken
+         *     window, and is the kind of mistake that is only discovered by a parent.
+         *
+         *     Idempotent by head: charging the same head twice SETS the line rather than adding
+         *     a second one. If the head is already on the challan from the class structure, this
+         *     RESTATES that line -- deliberate, because the challan is still a draft being
+         *     assembled and the last word should win, with the audit row carrying both figures.
+         */
+        VoucherFeeChargeInput: {
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /**
+             * Amount
+             * @example 500.00
+             */
+            amount: number | string;
+            /**
+             * Note
+             * @description Appended to the printed line name, e.g. 'Breakage — lab window'.
+             */
+            note?: string | null;
+        };
+        /**
+         * VoucherGenerateRequest
+         * @description Bulk generation input.
+         *
+         *     `student_ids` and `section_id` narrow the run; omitting both targets every active
+         *     student in the structure's class. They compose -- passing both is "these students,
+         *     and only if they are in that section" -- which is what makes a re-run after a
+         *     correction safe to scope tightly.
+         */
+        VoucherGenerateRequest: {
+            /**
+             * Structure Id
+             * Format: uuid
+             */
+            structure_id: string;
+            /**
+             * Period Label
+             * @example 2026-08
+             */
+            period_label: string;
+            /**
+             * Issue Date
+             * Format: date
+             */
+            issue_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /**
+             * Section Id
+             * @description Restrict the run to one section of the class.
+             */
+            section_id?: string | null;
+            /**
+             * Student Ids
+             * @description Restrict the run to specific students.
+             */
+            student_ids?: string[] | null;
+            /**
+             * Issue Immediately
+             * @description Issue each generated voucher instead of leaving it as a draft.
+             * @default false
+             */
+            issue_immediately?: boolean;
+            /**
+             * Include Stationery
+             * @description Copy the structure's stationery lines onto each challan. Turn this OFF for the monthly runs of a structure whose book or uniform set is meant to be billed once a year -- otherwise every month re-bills the books.
+             * @default true
+             */
+            include_stationery?: boolean;
+            /**
+             * Carry Forward Dues
+             * @description Bill each family's unpaid earlier challans as a line ON this one, and cancel the challans that balance came from, so exactly one document is payable. A challan that has taken part payment is never absorbed -- its receipts point at it -- and its balance keeps being printed beside the total as before. The cancellation happens when this challan is ISSUED, not while it is a draft.
+             * @default false
+             */
+            carry_forward_dues?: boolean;
+            /**
+             * Carry Forward Head Id
+             * @description The fee head the carried balance is billed under, e.g. 'Previous dues'. Required when `carry_forward_dues` is set: arrears billed under no head would be a figure with no home in any collection report.
+             */
+            carry_forward_head_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** VoucherGenerateResult */
+        VoucherGenerateResult: {
+            /** Created */
+            created: number;
+            /** Skipped */
+            skipped: components["schemas"]["VoucherSkip"][];
+            /** Voucher Ids */
+            voucher_ids: string[];
+            /**
+             * Truncated
+             * @description True when the class held more eligible students than one run may bill. Filter by section and run again for the remainder.
+             * @default false
+             */
+            truncated?: boolean;
+            /**
+             * Absorbed Vouchers
+             * @description How many older challans this run reserved to absorb. They are cancelled when the new challan is issued, not before -- so a run that produced drafts has reserved this many and cancelled none.
+             * @default 0
+             */
+            absorbed_vouchers?: number;
+            /**
+             * Absorbed Total
+             * @description The arrears billed onto the new challans, in total.
+             * @default 0.00
+             */
+            absorbed_total?: string;
+        };
+        /**
+         * VoucherItemRead
+         * @description One snapshotted challan line, of either kind.
+         *
+         *     Every field here is what was FROZEN at generation, not what the catalog says
+         *     today. `head_id` / `stationery_item_id` are carried only so a report can group by
+         *     the live record; nothing rendered to a parent should read them.
+         */
+        VoucherItemRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            line_type: components["schemas"]["FeeLineType"];
+            /** Line Name */
+            line_name: string;
+            /** Head Id */
+            head_id: string | null;
+            /** Stationery Item Id */
+            stationery_item_id: string | null;
+            /** Unit Label */
+            unit_label: string | null;
+            /** Quantity */
+            quantity: string;
+            /** Unit Price */
+            unit_price: string;
+            /** Amount */
+            amount: string;
+            /** Discount Amount */
+            discount_amount: string;
+        };
+        /**
+         * VoucherOrigin
+         * @description What produced this challan.
+         *
+         *     A FINE IS ITS OWN CHALLAN, NOT AN EXTRA LINE ON THE LATE ONE. Rule 1 of this
+         *     module is that an issued bill is never rewritten, and a fine assessed three weeks
+         *     after issue would rewrite one. So the late-fee job MINTS a challan: its own
+         *     number, its own due date, payable, printable, and voidable through exactly the
+         *     machinery staff already use. `source_voucher_id` is what links it back.
+         * @enum {string}
+         */
+        VoucherOrigin: "regular" | "late_fee";
+        /**
+         * VoucherSkip
+         * @description One student the run did not bill, and why.
+         *
+         *     Returned rather than raised: a partial failure that rolls back 400 challans
+         *     because one student was already billed is not a usable product.
+         */
+        VoucherSkip: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * VoucherStationeryInput
+         * @description Charge a stationery article to ONE student's draft challan.
+         *
+         *     The ad-hoc path, as opposed to the structure's per-class defaults: a student who
+         *     took two extra copies in October is billed here, on their own draft, and nobody
+         *     else in the class is touched.
+         *
+         *     Idempotent by article -- sending the same item twice SETS the quantity rather
+         *     than adding a second line, which is what the partial unique index on
+         *     `(voucher_id, stationery_item_id)` guarantees at the storage layer too.
+         */
+        VoucherStationeryInput: {
+            /**
+             * Stationery Item Id
+             * Format: uuid
+             */
+            stationery_item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity?: number | string;
+            /**
+             * Unit Price
+             * @description Override the catalog price for this one line, e.g. a damaged copy sold at half price. Omit to charge the catalog price.
+             */
+            unit_price?: number | string | null;
+        };
+        /**
+         * VoucherStatus
+         * @description The challan lifecycle.
+         *
+         *     OVERDUE is stored like any other status but is also DERIVED on read: a voucher
+         *     past its due date with an outstanding balance reads as overdue whether or not a
+         *     job has stamped it yet. Slice 1 computes it; a maintenance job that materialises
+         *     it is additive and changes no behaviour.
+         * @enum {string}
+         */
+        VoucherStatus: "draft" | "issued" | "partly_paid" | "paid" | "overdue" | "void";
+        /** VoucherStatusCount */
+        VoucherStatusCount: {
+            status: components["schemas"]["VoucherStatus"];
+            /** Count */
+            count: number;
+            /** Total */
+            total: string;
+        };
+        /** VoucherVoidRequest */
+        VoucherVoidRequest: {
+            /**
+             * Reason
+             * @description Mandatory. Lands in the audit row, which is the point.
+             */
+            reason: string;
         };
     };
     responses: never;
@@ -3394,6 +8603,267 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    request_code_api_v1_guardian_auth_request_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OtpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OtpRequestResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    verify_code_api_v1_guardian_auth_verify_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Token-Transport"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OtpVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianLoginResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    select_context_api_v1_guardian_auth_context_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Token-Transport"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianContextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianLoginResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    refresh_api_v1_guardian_auth_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Token-Transport"?: string | null;
+                "X-Refresh-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianMessageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    logout_api_v1_guardian_auth_logout_post: {
+        parameters: {
+            query?: {
+                all_devices?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianMessageResponse"];
                 };
             };
             /** @description Bad Request */
@@ -5384,7 +10854,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SchoolCreateResponse"];
+                    "application/json": components["schemas"]["SchoolRead"];
                 };
             };
             /** @description Bad Request */
@@ -5935,6 +11405,165 @@ export interface operations {
             };
         };
     };
+    create_member_api_v1_schools__school_id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_teachers_api_v1_schools__school_id__teachers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeacherOption"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    assign_member_branches_api_v1_schools__school_id__members__membership_id__branches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberBranchAssign"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     remove_member_api_v1_schools__school_id__members__membership_id__delete: {
         parameters: {
             query?: never;
@@ -6316,6 +11945,305 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PermissionCategory"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    me_api_v1_portal_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianProfile"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    children_api_v1_portal_children_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianChildRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    child_api_v1_portal_children__student_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianChildRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    search_api_v1_search_get: {
+        parameters: {
+            query?: {
+                /** @description Search text. Supports `key:value` filters (`type:`, `status:`, `class:`, `section:`, `role:`, `year:`, `school:`, `after:`, `before:`), `"quoted phrases"`, and `-exclusions`. Unknown filters are searched as text. */
+                q?: string | null;
+                /** @description Results per entity type. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    suggest_api_v1_search_suggest_get: {
+        parameters: {
+            query?: {
+                /** @description Search text. Supports `key:value` filters (`type:`, `status:`, `class:`, `section:`, `role:`, `year:`, `school:`, `after:`, `before:`), `"quoted phrases"`, and `-exclusions`. Unknown filters are searched as text. */
+                q?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSuggestion"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    config_api_v1_search_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchConfigResponse"];
                 };
             };
             /** @description Bad Request */
@@ -6859,6 +12787,262 @@ export interface operations {
             };
         };
     };
+    remove_from_curriculum_api_v1_classes_curriculum__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_curriculum_entry_api_v1_classes_curriculum__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassSubjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassSubjectRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_curriculum_api_v1_classes__class_id__subjects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassSubjectRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_to_curriculum_api_v1_classes__class_id__subjects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassSubjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassSubjectRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    section_roster_api_v1_classes_sections__section_id__roster_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionRosterEntry"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     submit_admission_api_v1_students_admissions_post: {
         parameters: {
             query?: never;
@@ -6918,6 +13102,8 @@ export interface operations {
                 section_id?: string | null;
                 /** @description Filter by enrollment status, e.g. `pending` for the admissions queue. */
                 status?: components["schemas"]["StudentStatus"] | null;
+                /** @description Filter by what the family owes. `pending` is any live challan still carrying a balance, `overdue` only those past their due date, and `clear` those with nothing outstanding (including students never billed). */
+                fees?: components["schemas"]["FeeStandingFilter"] | null;
                 page?: number;
                 size?: number;
                 sort_by?: string | null;
@@ -6937,7 +13123,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_StudentRead_"];
+                    "application/json": components["schemas"]["Page_StudentListRow_"];
                 };
             };
             /** @description Bad Request */
@@ -7142,6 +13328,4793 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudentRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    promote_students_api_v1_students_promote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromotionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromotionResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    student_enrollments_api_v1_students__student_id__enrollments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    place_student_api_v1_students__student_id__enrollments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollmentPlacement"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    guardians_of_student_api_v1_guardians_students__student_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentGuardianRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_guardians_api_v1_guardians_get: {
+        parameters: {
+            query?: {
+                /** @description Only guardians linked to this student. */
+                student_id?: string | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+                /** @description Search term */
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_GuardianRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    register_guardian_api_v1_guardians_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_guardian_api_v1_guardians__guardian_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_guardian_api_v1_guardians__guardian_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_guardian_api_v1_guardians__guardian_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    change_guardian_phone_api_v1_guardians__guardian_id__phone_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianPhoneChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_portal_access_api_v1_guardians__guardian_id__portal_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianPortalToggle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    link_student_api_v1_guardians__guardian_id__students_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedStudentRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unlink_student_api_v1_guardians__guardian_id__students__student_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_link_api_v1_guardians__guardian_id__students__student_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guardian_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedStudentRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_academic_years_api_v1_academic_years_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AcademicYearRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_academic_year_api_v1_academic_years_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcademicYearCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcademicYearRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    current_academic_year_api_v1_academic_years_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcademicYearRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_academic_year_api_v1_academic_years__year_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcademicYearRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_academic_year_api_v1_academic_years__year_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_academic_year_api_v1_academic_years__year_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcademicYearUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcademicYearRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_current_academic_year_api_v1_academic_years__year_id__set_current_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcademicYearRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_terms_api_v1_academic_years__year_id__terms_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_term_api_v1_academic_years__year_id__terms_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TermCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_term_api_v1_academic_years_terms__term_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_term_api_v1_academic_years_terms__term_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TermUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    backfill_enrollments_api_v1_academic_years__year_id__enrollments_backfill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentBackfillResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_subjects_api_v1_subjects_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+                /** @description Search term */
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SubjectRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_subject_api_v1_subjects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_subject_api_v1_subjects__subject_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_subject_api_v1_subjects__subject_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_subject_api_v1_subjects__subject_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    daily_overview_api_v1_attendance_today_get: {
+        parameters: {
+            query?: {
+                /** @description Defaults to today. */
+                date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyOverview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_sessions_api_v1_attendance_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by section. */
+                section_id?: string | null;
+                /** @description Inclusive lower bound. */
+                from_date?: string | null;
+                /** @description Inclusive upper bound. */
+                to_date?: string | null;
+                /** @description Filter by register state, e.g. `draft` for what is still open. */
+                status?: components["schemas"]["AttendanceSessionStatus"] | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AttendanceSessionRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    open_session_api_v1_attendance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceSessionOpen"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSessionDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_session_api_v1_attendance__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSessionDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    discard_session_api_v1_attendance__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mark_attendance_api_v1_attendance__session_id__entries_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceMarkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSessionDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    submit_session_api_v1_attendance__session_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSessionDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reopen_session_api_v1_attendance__session_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_reopen_session_api_v1_attendance__session_id__reopen_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSessionDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    student_summary_api_v1_attendance_students__student_id__summary_get: {
+        parameters: {
+            query: {
+                /** @description Inclusive lower bound. */
+                from_date: string;
+                /** @description Inclusive upper bound. */
+                to_date: string;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentAttendanceSummary"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    section_report_api_v1_attendance_sections__section_id__report_get: {
+        parameters: {
+            query: {
+                /** @description Inclusive lower bound. */
+                from_date: string;
+                /** @description Inclusive upper bound. */
+                to_date: string;
+            };
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionAttendanceReport"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    fee_summary_api_v1_fees_summary_get: {
+        parameters: {
+            query: {
+                academic_year: string;
+                /** @description e.g. `2026-08`. */
+                period_label?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeSummary"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_fee_heads_api_v1_fees_heads_get: {
+        parameters: {
+            query?: {
+                /** @description Hide retired heads. */
+                active_only?: boolean;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FeeHeadRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_fee_head_api_v1_fees_heads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeHeadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeHeadRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_fee_head_api_v1_fees_heads__head_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                head_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeHeadRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_fee_head_api_v1_fees_heads__head_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                head_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_fee_head_api_v1_fees_heads__head_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                head_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeHeadUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeHeadRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_stationery_items_api_v1_fees_stationery_get: {
+        parameters: {
+            query?: {
+                /** @description Hide retired articles. */
+                active_only?: boolean;
+                /** @description Books, notebooks, uniform, ... */
+                category?: components["schemas"]["StationeryCategory"] | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_StationeryItemRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_stationery_item_api_v1_fees_stationery_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StationeryItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationeryItemRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_stationery_item_api_v1_fees_stationery__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationeryItemRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_stationery_item_api_v1_fees_stationery__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_stationery_item_api_v1_fees_stationery__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StationeryItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationeryItemRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_fee_structures_api_v1_fees_structures_get: {
+        parameters: {
+            query?: {
+                class_id?: string | null;
+                academic_year?: string | null;
+                status?: components["schemas"]["FeeStructureStatus"] | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FeeStructureRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_fee_structure_api_v1_fees_structures_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeStructureCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_fee_structure_api_v1_fees_structures__structure_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_fee_structure_api_v1_fees_structures__structure_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeStructureUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_fee_structure_item_api_v1_fees_structures__structure_id__items_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeStructureItemInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_fee_structure_item_api_v1_fees_structures__structure_id__items__head_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+                head_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_fee_structure_stationery_api_v1_fees_structures__structure_id__stationery_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeStructureStationeryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_fee_structure_stationery_api_v1_fees_structures__structure_id__stationery__stationery_item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+                stationery_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    activate_fee_structure_api_v1_fees_structures__structure_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    archive_fee_structure_api_v1_fees_structures__structure_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                structure_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeStructureDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_concessions_api_v1_fees_concessions_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by active state. */
+                is_active?: boolean | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FeeConcessionRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_concession_api_v1_fees_concessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeConcessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeConcessionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_concession_api_v1_fees_concessions__concession_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                concession_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_concession_api_v1_fees_concessions__concession_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                concession_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeConcessionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeConcessionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_late_fee_policies_api_v1_fees_late_fee_policies_get: {
+        parameters: {
+            query?: {
+                academic_year?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeePolicyRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_late_fee_policy_api_v1_fees_late_fee_policies_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LateFeePolicyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeePolicyRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_late_fee_policy_api_v1_fees_late_fee_policies__policy_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    run_late_fees_api_v1_fees_late_fee_policies_run_post: {
+        parameters: {
+            query: {
+                academic_year: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeRunResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_billing_schedule_api_v1_fees_billing_schedule_get: {
+        parameters: {
+            query: {
+                academic_year: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeBillingScheduleRead"] | null;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_billing_schedule_api_v1_fees_billing_schedule_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeBillingScheduleInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeBillingScheduleRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    run_billing_schedule_api_v1_fees_billing_schedule_run_post: {
+        parameters: {
+            query: {
+                academic_year: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRunResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    student_fee_profile_api_v1_fees_students__student_id__fee_profile_get: {
+        parameters: {
+            query: {
+                academic_year: string;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentFeeProfile"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_student_fee_assignment_api_v1_fees_students__student_id__fee_assignments_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentFeeAssignmentInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentFeeProfile"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_student_fee_assignment_api_v1_fees_students__student_id__fee_assignments__head_id__delete: {
+        parameters: {
+            query: {
+                academic_year: string;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+                head_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentFeeProfile"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    student_ledger_api_v1_fees_students__student_id__ledger_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentLedgerStatement"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    adjust_student_ledger_api_v1_fees_students__student_id__ledger_adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LedgerAdjustmentInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentLedgerStatement"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    generate_vouchers_api_v1_fees_vouchers_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoucherGenerateResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    export_vouchers_api_v1_fees_vouchers_export_get: {
+        parameters: {
+            query?: {
+                academic_year?: string | null;
+                period_label?: string | null;
+                status?: components["schemas"]["VoucherStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The voucher register. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_vouchers_api_v1_fees_vouchers_get: {
+        parameters: {
+            query?: {
+                student_id?: string | null;
+                status?: components["schemas"]["VoucherStatus"] | null;
+                academic_year?: string | null;
+                period_label?: string | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FeeVoucherRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reverse_payment_api_v1_fees_payments__payment_id__reverse_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentReverseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeePaymentRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_voucher_api_v1_fees_vouchers__voucher_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    download_challan_pdf_api_v1_fees_vouchers__voucher_id__pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    issue_voucher_api_v1_fees_vouchers__voucher_id__issue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    void_voucher_api_v1_fees_vouchers__voucher_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherVoidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_voucher_stationery_api_v1_fees_vouchers__voucher_id__stationery_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherStationeryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_voucher_fee_charge_api_v1_fees_vouchers__voucher_id__charges_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherFeeChargeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_voucher_fee_charge_api_v1_fees_vouchers__voucher_id__charges__head_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+                head_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_voucher_stationery_api_v1_fees_vouchers__voucher_id__stationery__stationery_item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+                stationery_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeVoucherDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_voucher_payments_api_v1_fees_vouchers__voucher_id__payments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeePaymentRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    record_payment_api_v1_fees_vouchers__voucher_id__payments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeePaymentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeePaymentRead"];
                 };
             };
             /** @description Bad Request */

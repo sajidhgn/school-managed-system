@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { OnboardingForm } from "./onboarding-form";
-import { PERMISSIONS } from "@/lib/api/types";
+import { serverGet } from "@/lib/api/server";
+import { PERMISSIONS, type SchoolRead } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 
@@ -11,25 +12,24 @@ export const metadata: Metadata = { title: "Create your first school" };
 /**
  * First-run onboarding (spec §4.3B step 5).
  *
- * A brand-new organization has an owner and no schools. The dashboard would render
- * empty with nothing to explain why, so signup lands here instead.
+ * A brand-new organization has a principal and no schools. The dashboard would
+ * render empty with nothing to explain why, so signup lands here instead.
  *
- * Creating the first school also grants the owner a PRINCIPAL membership on it —
- * spec decision D2's payoff, and the step that produces the behaviour requirement #6
- * describes: sign up, buy a plan, land in the admin panel as principal.
- *
- * Anyone who already has a school is redirected out: this page has no meaning for
- * them, and leaving it reachable invites a second "first" school.
+ * "Already has a school" is a question about the ORGANIZATION, not about the user's
+ * memberships. The principal holds a single org-level membership no matter how many
+ * campuses exist, so a membership test would answer "no schools" forever and pin
+ * them on this page — the school list is the only thing that actually knows.
  */
 export default async function OnboardingPage() {
   const [user, t] = await Promise.all([requireUser(), getTranslations()]);
 
-  const hasAnySchool = user.memberships.some((m) => !m.is_org_level);
-  if (hasAnySchool) redirect("/dashboard");
-
-  // Only an org-level role holds `school:create`. A principal who somehow reached
-  // this URL gets sent back rather than shown a form the server would refuse.
+  // Only an org-level role holds `school:create`. A school-scoped member who
+  // somehow reached this URL gets sent back rather than shown a form the server
+  // would refuse. Checked before the fetch — they have nothing to gain from it.
   if (!hasPermission(user, PERMISSIONS.schoolCreate)) redirect("/dashboard");
+
+  const schools = await serverGet<SchoolRead[]>("/schools", []);
+  if (schools.length > 0) redirect("/dashboard");
 
   return (
     <div className="mx-auto w-full max-w-lg py-8">

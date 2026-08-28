@@ -1,5 +1,3 @@
-import type { MeResponse } from "@/lib/api/types";
-
 /**
  * Permission checks for the UI.
  *
@@ -45,21 +43,9 @@ export function canAny(source: PermissionSource | null | undefined, ...codes: st
   return codes.some((code) => source.permissions.includes(code));
 }
 
-/** Where to send a user after sign-in, given what they can reach. */
-export function homeRouteFor(user: MeResponse): string {
-  // A brand-new owner has no school yet: onboarding is the only meaningful next
-  // step, and the dashboard would render empty with no explanation.
-  const hasSchoolMembership = user.memberships.some((m) => !m.is_org_level);
-  if (!hasSchoolMembership) return "/onboarding";
-  return "/dashboard";
-}
-
-/**
- * Whether the header should offer a context switcher.
- *
- * One membership means there is nothing to switch to, and a picker showing a single
- * disabled option is noise.
- */
-export function needsContextSwitcher(user: MeResponse): boolean {
-  return user.memberships.length > 1;
-}
+// `homeRouteFor()` used to live here, routing a user with no SCHOOL membership to
+// /onboarding. That test is unanswerable now: the principal holds one org-level
+// membership however many campuses exist, so it reported "no schools" forever. Only
+// the school list knows, so the decision moved to the two pages that already fetch
+// it -- `/onboarding` redirects out when schools exist, and `/dashboard` shows the
+// "create your first school" prompt when they do not.

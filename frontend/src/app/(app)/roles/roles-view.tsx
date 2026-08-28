@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
  *
  *   1. Cannot grant beyond own grant  -> checkboxes for permissions the actor does
  *                                        not hold are disabled with a reason.
- *   2. Locked roles                   -> owner/principal show a padlock and no
+ *   2. Locked roles                   -> `principal` shows a padlock and no
  *                                        editable matrix.
  *   3. Scope                          -> org-level roles are listed but read-only,
  *                                        since this page acts on one school.

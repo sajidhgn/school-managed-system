@@ -1,7 +1,8 @@
 "use client";
 
-import { LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { Building2, Check, LogOut, Monitor, Moon, School, Settings, Sun } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useState } from "react";
 
@@ -15,6 +16,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { authRequest } from "@/lib/api/client";
+import type { SchoolRead } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 
 /** Initials for the avatar. Two letters max — three starts to look like a word. */
 function initials(name: string): string {
@@ -26,11 +30,67 @@ function initials(name: string): string {
     .join("");
 }
 
-export function UserMenu() {
+/**
+ * Account menu: who you are, where you are, and how to change either.
+ *
+ * =============================================================================
+ * TWO KINDS OF MOVE, AND THEY ARE NOT THE SAME OPERATION
+ * =============================================================================
+ *   CAMPUS (`POST /auth/school`) — mints nothing. The principal is org-level and
+ *   already administers every campus, so choosing one narrows what the
+ *   school-scoped pages DISPLAY and touches nothing else.
+ *
+ *   MEMBERSHIP (`POST /auth/context`) — mints a new access token. The permission
+ *   set, the school scope and the RLS organization all change with it; the server
+ *   genuinely starts answering as that person in that place. This is how someone
+ *   who works at two organizations moves between them.
+ *
+ *   Both then `router.refresh()` rather than setting client state: the source of
+ *   truth is an httpOnly cookie, and a client that "remembered" something different
+ *   would show one school's chrome around another school's data.
+ *
+ * Both used to be a dropdown of their own in the header. They live here because for
+ * most people each has exactly one option, and a permanent control in the header
+ * advertising a choice nobody has is noise.
+ */
+export function UserMenu({
+  schools = [],
+  activeSchoolId = null,
+}: {
+  /** The organization's campuses. Only populated for an org-level user. */
+  schools?: SchoolRead[];
+  activeSchoolId?: string | null;
+}) {
   const user = useRequiredSession();
   const { t } = useTranslations();
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const activeSchool = schools.find((s) => s.id === activeSchoolId) ?? null;
+
+  async function viewSchool(schoolId: string) {
+    if (schoolId === activeSchoolId) return;
+    setBusy(true);
+    try {
+      await authRequest("/school", { school_id: schoolId });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function switchTo(membershipId: string) {
+    if (membershipId === user.active_membership_id) return;
+    setBusy(true);
+    try {
+      await authRequest("/context", { membership_id: membershipId });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function signOut(everywhere: boolean) {
     setSigningOut(true);
@@ -59,10 +119,82 @@ export function UserMenu() {
           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
           {user.role_code ? (
             <p className="mt-1 text-xs text-muted-foreground">
-              {user.role_code} · {user.school_name ?? user.organization_name}
+              {/* The campus, when one is selected — NOT `organization_name`. An
+                  org-level principal has no `school_name` on their membership, so
+                  falling back to the organization here would leave the one thing
+                  they actually chose invisible everywhere in the chrome. */}
+              {user.role_code} ·{" "}
+              {user.school_name ?? activeSchool?.name ?? user.organization_name}
             </p>
           ) : null}
         </DropdownMenuLabel>
+
+        {schools.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              {t.nav.schools}
+            </DropdownMenuLabel>
+            {schools.map((school) => (
+              <DropdownMenuItem
+                key={school.id}
+                onSelect={() => viewSchool(school.id)}
+                disabled={busy}
+                className="gap-2"
+              >
+                <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-sm">{school.name}</span>
+                <Check
+                  className={cn(
+                    "size-4 shrink-0",
+                    school.id === activeSchoolId ? "opacity-100" : "opacity-0",
+                  )}
+                  aria-hidden
+                />
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
+
+        {user.memberships.length > 1 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              Switch context
+            </DropdownMenuLabel>
+            {user.memberships.map((membership) => (
+              <DropdownMenuItem
+                key={membership.membership_id}
+                onSelect={() => switchTo(membership.membership_id)}
+                disabled={busy}
+                className="gap-2"
+              >
+                {membership.is_org_level ? (
+                  <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                ) : (
+                  <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">
+                    {membership.school_name ?? membership.organization_name}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {membership.role_name}
+                  </span>
+                </span>
+                <Check
+                  className={cn(
+                    "size-4 shrink-0",
+                    membership.membership_id === user.active_membership_id
+                      ? "opacity-100"
+                      : "opacity-0",
+                  )}
+                  aria-hidden
+                />
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
 
         <DropdownMenuSeparator />
 

@@ -13,6 +13,8 @@ from app.api.deps import AuthContext, CurrentAuth, DbSession, require
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.modules.rbac.models import Membership
 from app.modules.rbac.schemas import (
+    MemberBranchAssign,
+    MemberCreate,
     MemberRead,
     MemberUpdate,
     PermissionCategory,
@@ -22,6 +24,7 @@ from app.modules.rbac.schemas import (
     RolePermissionsUpdate,
     RoleRead,
     RoleUpdate,
+    TeacherOption,
 )
 from app.modules.rbac.service import RbacService
 
@@ -236,6 +239,83 @@ async def list_members(
     _assert_school_scope(ctx, school_id)
     members = await RbacService(session).list_members(school_id=school_id)
     return [_member_read(m) for m in members]
+
+
+@members_router.get("/{school_id}/teachers", response_model=list[TeacherOption])
+async def list_teachers(
+    school_id: UUID,
+    session: DbSession,
+    ctx: Annotated[AuthContext, Depends(require("teacher:read"))],
+) -> list[TeacherOption]:
+    """The branch's teaching staff, for the class-teacher and curriculum pickers.
+
+    Gated on `teacher:read` ("View teaching staff assignments") rather than on
+    `member:read`. They overlap today, but they answer different questions: this is
+    "who can I put in front of this class", not "show me the staff table". A school
+    that narrows its front-office role to the latter should not lose the former.
+
+    WHY THIS IS NOT A FILTER THE BROWSER APPLIES
+        Deciding who counts as a teacher means reading role permissions, and the only
+        way to do that client-side is to ship every role's permission set to the page
+        and re-implement `TEACHING_PERMISSIONS` in TypeScript. Two copies of one rule
+        drift, and the copy that drifts is the one on the machine we do not control.
+    """
+    _assert_school_scope(ctx, school_id)
+    members = await RbacService(session).list_teaching_staff(school_id=school_id)
+    return [
+        TeacherOption(
+            user_id=m.user_id,
+            full_name=m.user.full_name,
+            email=m.user.email,
+            role_name=m.role.name,
+        )
+        for m in members
+    ]
+
+
+@members_router.post(
+    "/{school_id}/members", response_model=MemberRead, status_code=status.HTTP_201_CREATED
+)
+async def create_member(
+    school_id: UUID,
+    payload: MemberCreate,
+    session: DbSession,
+    ctx: Annotated[AuthContext, Depends(require("member:invite"))],
+) -> MemberRead:
+    """Create a login-ready member in a branch without sending an invitation."""
+    _assert_school_scope(ctx, school_id)
+    membership = await RbacService(session).create_member(
+        ctx=ctx,
+        school_id=school_id,
+        email=str(payload.email),
+        full_name=payload.full_name,
+        password=payload.password,
+        role_id=payload.role_id,
+    )
+    await session.refresh(membership, ["user", "role"])
+    return _member_read(membership)
+
+
+@members_router.post(
+    "/{school_id}/members/{membership_id}/branches", response_model=list[MemberRead]
+)
+async def assign_member_branches(
+    school_id: UUID,
+    membership_id: UUID,
+    payload: MemberBranchAssign,
+    session: DbSession,
+    ctx: Annotated[AuthContext, Depends(require("member:update"))],
+) -> list[MemberRead]:
+    """Give one member memberships in multiple school branches."""
+    _assert_school_scope(ctx, school_id)
+    memberships = await RbacService(session).assign_member_branches(
+        ctx=ctx,
+        membership_id=membership_id,
+        school_ids=set(payload.school_ids),
+    )
+    for membership in memberships:
+        await session.refresh(membership, ["user", "role"])
+    return [_member_read(membership) for membership in memberships]
 
 
 @members_router.patch("/{school_id}/members/{membership_id}", response_model=MemberRead)

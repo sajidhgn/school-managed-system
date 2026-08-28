@@ -135,6 +135,22 @@ class BaseRepository[ModelT: Base]:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def list_by_ids(self, entity_ids: Sequence[UUID]) -> Sequence[ModelT]:
+        """Fetch many rows by primary key in ONE query.
+
+        The alternative -- a `get()` per id in a loop -- is the N+1 that bulk
+        operations reintroduce most often, because each individual call looks
+        harmless. Callers build a `{id: row}` dict from the result.
+
+        An empty input short-circuits: `IN ()` is a syntax error in PostgreSQL, and
+        SQLAlchemy's rendering of an empty `in_()` is a needless round-trip to learn
+        something the caller already knows.
+        """
+        if not entity_ids:
+            return []
+        stmt = self._base_select().where(self.model.id.in_(entity_ids))  # type: ignore[attr-defined]
+        return (await self.session.execute(stmt)).scalars().all()
+
     async def find_one(self, *conditions: ColumnElement[bool]) -> ModelT | None:
         """Fetch the first row matching arbitrary conditions."""
         stmt = self._base_select().where(*conditions).limit(1)

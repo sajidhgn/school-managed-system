@@ -71,7 +71,14 @@ function ClassesSkeleton() {
   );
 }
 
-export function ClassesView({ canManage }: { canManage: boolean }) {
+export function ClassesView({
+  canManage,
+  schoolId,
+}: {
+  canManage: boolean;
+  /** Active campus. Scopes the class-teacher picker to the staff who work there. */
+  schoolId: string | null;
+}) {
   const query = useClassSummary();
   const deleteClass = useDeleteClass();
   const deleteSection = useDeleteSection();
@@ -244,6 +251,7 @@ export function ClassesView({ canManage }: { canManage: boolean }) {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Section</TableHead>
+                          <TableHead>Class teacher</TableHead>
                           <TableHead>Enrolment</TableHead>
                           <TableHead>Capacity</TableHead>
                           {canManage ? (
@@ -262,6 +270,16 @@ export function ClassesView({ canManage }: { canManage: boolean }) {
                             <TableRow key={section.id}>
                               <TableCell className="font-medium text-foreground">
                                 {section.name}
+                              </TableCell>
+                              {/*
+                                An em dash, not an empty cell. "No class teacher yet"
+                                and "the name failed to load" look identical when the
+                                cell is blank, and only one of them is worth acting on.
+                              */}
+                              <TableCell className="text-muted-foreground">
+                                {section.class_teacher_name ?? (
+                                  <span aria-label="No class teacher assigned">—</span>
+                                )}
                               </TableCell>
                               <TableCell className="tabular-nums text-muted-foreground">
                                 {section.capacity === null
@@ -327,6 +345,7 @@ export function ClassesView({ canManage }: { canManage: boolean }) {
               classId={sectionTarget.cls.id}
               classLabel={sectionTarget.cls.name}
               section={sectionTarget.section}
+              schoolId={schoolId}
             />
           ) : null}
 

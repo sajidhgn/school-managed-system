@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import type { Route } from "next";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -36,18 +38,96 @@ import {
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useDeleteStudent, useStudents } from "@/hooks/use-students";
-import { STUDENT_STATUS_LABELS, type StudentRead, type StudentStatus } from "@/lib/api/types";
-import { formatDate } from "@/lib/utils";
+import {
+  STUDENT_STATUS_LABELS,
+  type FeeStandingFilter,
+  type StudentRead,
+  type StudentStatus,
+} from "@/lib/api/types";
+import { cn, formatDate } from "@/lib/utils";
 import { StudentFormDialog } from "./student-form-dialog";
 
 const ALL = "__all__";
+
+/**
+ * Labels for the fee filter.
+ *
+ * "No dues" rather than "Paid": the set includes children who have never been billed
+ * at all, and calling that "paid" would be actively wrong on a screen an accountant
+ * reads. The question the filter answers is whether the family owes the school
+ * anything -- see `FeeStandingFilter` on the backend.
+ */
+const FEE_STANDING_LABELS: Record<string, string> = {
+  pending: "Fees pending",
+  overdue: "Fees overdue",
+  clear: "No dues",
+};
+
+/** Column heading, so the number is never ambiguous about which money it is. */
+const DUES_COLUMN_LABELS: Record<string, string> = {
+  pending: "Pending dues",
+  overdue: "Overdue dues",
+};
+
+/**
+ * A billing period as a human reads it.
+ *
+ * `period_label` is FREE TEXT on the backend -- "2026-08" at a monthly school,
+ * "Term 1" or "Annual" elsewhere. Only the `YYYY-MM` shape is prettified into a
+ * month; everything else is printed exactly as the school typed it. Parsing the rest
+ * as a date is how "Term 1" becomes "Invalid Date" on a fee chase list.
+ */
+function formatPeriod(period: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(period);
+  if (!match) return period;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return period;
+  return new Date(Number(match[1]), month - 1, 1).toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
+}
 const PAGE_SIZE = 20;
 
-export function StudentsView({ canManage }: { canManage: boolean }) {
-  const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState<StudentStatus | "">("");
-  const [sectionId, setSectionId] = React.useState("");
-  const [page, setPage] = React.useState(1);
+/** Where the directory leaves its filters for the detail page's back link. */
+export const STUDENTS_LIST_QUERY_KEY = "students:list-query";
+
+export function StudentsView({
+  canManage,
+  canFilterByFees,
+}: {
+  canManage: boolean;
+  /** Whether the caller holds `fee:read`. See the page component. */
+  canFilterByFees: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // =========================================================================
+  // THE FILTERS LIVE IN THE URL, NOT IN THIS COMPONENT
+  // =========================================================================
+  // Someone searches "Fatima", opens the third result, then hits Back. With the
+  // filters held in component state that returns them to an unfiltered page one
+  // and they have to type the search again — which, on a counter with a parent
+  // waiting, is the difference between one interaction and three.
+  //
+  // Putting the state in the query string makes the browser do the remembering:
+  // Back restores `/students?q=fatima&page=3` and the table renders it. It also
+  // makes a filtered directory a link someone can send to a colleague.
+  //
+  // Every write is `replace`, not `push`. Typing six letters must leave ONE
+  // history entry, otherwise Back becomes a per-keystroke undo and never reaches
+  // the page the user came from.
+  const urlSearch = searchParams.get("q") ?? "";
+  const status = (searchParams.get("status") ?? "") as StudentStatus | "";
+  const sectionId = searchParams.get("section") ?? "";
+  const fees = (searchParams.get("fees") ?? "") as FeeStandingFilter | "";
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+
+  // The input keeps its own copy so typing stays instant; the URL catches up on
+  // the debounce. Everything else writes straight through.
+  const [search, setSearch] = React.useState(urlSearch);
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<StudentRead | null>(null);
@@ -57,30 +137,77 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
   const { data: classes } = useClassSummary();
   const deleteStudent = useDeleteStudent();
 
-  // Any filter change invalidates the current page number — page 7 of the old
-  // result set is meaningless against the new one.
-  React.useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, status, sectionId]);
+  const writeParams = React.useCallback(
+    (changes: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(changes)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
+      const qs = next.toString();
+      // `scroll: false` — changing a filter is not a navigation, and yanking the
+      // page to the top mid-typing is disorienting.
+      router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
+  // Tells our own writes apart from a Back/Forward, which changes the URL without
+  // touching the input. Without it the two effects below chase each other.
+  const lastWritten = React.useRef(urlSearch);
+
+  React.useEffect(() => {
+    if (urlSearch === lastWritten.current) return;
+    lastWritten.current = urlSearch;
+    setSearch(urlSearch);
+  }, [urlSearch]);
+
+  React.useEffect(() => {
+    // Only once the input has settled. A Back pressed mid-word rewinds the URL and
+    // the box together, but the in-flight debounce is still carrying the abandoned
+    // word — writing it would immediately undo the navigation.
+    if (debouncedSearch !== search || debouncedSearch === urlSearch) return;
+    lastWritten.current = debouncedSearch;
+    // Any filter change invalidates the current page number — page 7 of the old
+    // result set is meaningless against the new one.
+    writeParams({ q: debouncedSearch || null, page: null });
+  }, [debouncedSearch, search, urlSearch, writeParams]);
+
+  // Fetches off the URL, not off the debounced box: the debounce already gates
+  // when the URL is written, and querying the laggier of the two would fire a
+  // second, wrong request every time Back restores a search.
   const query = useStudents({
-    q: debouncedSearch || null,
+    q: urlSearch || null,
     status: status || null,
     section_id: sectionId || null,
+    fees: fees || null,
     page,
     size: PAGE_SIZE,
     sort_by: "last_name",
     sort_dir: "asc",
   });
 
+  // Remembered for the "All students" link on a student's page: Back already
+  // restores the filtered list, but people click the breadcrumb just as often and
+  // it should land in the same place. Keyed to the tab, so it can never leak into
+  // another session, and absent on a cold deep link — which falls back to the
+  // unfiltered directory.
+  React.useEffect(() => {
+    try {
+      sessionStorage.setItem(STUDENTS_LIST_QUERY_KEY, searchParams.toString());
+    } catch {
+      // Private-mode / disabled storage. The breadcrumb just forgets; nothing else
+      // on the page depends on it.
+    }
+  }, [searchParams]);
+
   const students = query.data?.items ?? [];
   const meta = query.data?.meta;
-  const hasFilters = Boolean(debouncedSearch || status || sectionId);
+  const hasFilters = Boolean(urlSearch || status || sectionId || fees);
 
   function clearFilters() {
     setSearch("");
-    setStatus("");
-    setSectionId("");
+    writeParams({ q: null, status: null, section: null, fees: null, page: null });
   }
 
   function openCreate() {
@@ -99,7 +226,25 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
     setDeleting(null);
   }
 
-  const columnCount = canManage ? 6 : 5;
+  // The dues column exists only while a fee filter is applied: without one the
+  // server sends no amounts at all (see `StudentListRow.dues`), so a permanently
+  // present column would be permanently empty.
+  const showDues = Boolean(fees) && fees !== "clear";
+  const columnCount = (canManage ? 7 : 6) + (showDues ? 1 : 0);
+
+  // Currency comes from the challans themselves rather than being assumed: the rows
+  // carry it, and a school billing in anything else would otherwise have its totals
+  // silently relabelled as rupees.
+  const duesCurrency = students.find((s) => s.dues)?.dues?.currency ?? "PKR";
+  const money = React.useMemo(
+    () =>
+      new Intl.NumberFormat("en-PK", {
+        style: "currency",
+        currency: duesCurrency,
+        maximumFractionDigits: 0,
+      }),
+    [duesCurrency],
+  );
 
   return (
     <>
@@ -132,7 +277,9 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={status || ALL}
-              onValueChange={(value) => setStatus(value === ALL ? "" : (value as StudentStatus))}
+              onValueChange={(value) =>
+                writeParams({ status: value === ALL ? null : value, page: null })
+              }
             >
               <SelectTrigger className="w-40" aria-label="Filter by status">
                 <SelectValue placeholder="All statuses" />
@@ -149,7 +296,9 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
 
             <Select
               value={sectionId || ALL}
-              onValueChange={(value) => setSectionId(value === ALL ? "" : value)}
+              onValueChange={(value) =>
+                writeParams({ section: value === ALL ? null : value, page: null })
+              }
             >
               <SelectTrigger className="w-48" aria-label="Filter by section">
                 <SelectValue placeholder="All sections" />
@@ -165,6 +314,32 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
                 )}
               </SelectContent>
             </Select>
+
+            {/*
+              Fee standing. Three states rather than a "Fees pending" checkbox,
+              because "who owes nothing" is a question people actually ask -- clearing
+              a child for a trip -- and a checkbox can only express two of the three.
+            */}
+            {canFilterByFees ? (
+              <Select
+                value={fees || ALL}
+                onValueChange={(value) =>
+                  writeParams({ fees: value === ALL ? null : value, page: null })
+                }
+              >
+                <SelectTrigger className="w-40" aria-label="Filter by fee standing">
+                  <SelectValue placeholder="All fees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All fees</SelectItem>
+                  {Object.entries(FEE_STANDING_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
 
             {hasFilters ? (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -184,6 +359,12 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Admission no.</TableHead>
+                  <TableHead>Class</TableHead>
+                  {showDues ? (
+                    <TableHead className="text-right">
+                      {DUES_COLUMN_LABELS[fees] ?? "Dues"}
+                    </TableHead>
+                  ) : null}
                   <TableHead>Status</TableHead>
                   <TableHead>Guardian</TableHead>
                   <TableHead>Enrolled</TableHead>
@@ -238,6 +419,80 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
                       <TableCell className="text-muted-foreground">
                         {student.admission_number}
                       </TableCell>
+                      {/*
+                        Class and section in ONE column, in the "Grade 9 · B" form the
+                        attendance screen already uses. Two columns would be mostly
+                        whitespace -- a section name is a single letter -- and the pair
+                        is read as one fact anyway: where this child sits.
+
+                        The dash is the ADMISSIONS case, not an error: an applicant is
+                        accepted before a seat is chosen, so a pending student having
+                        no class is the system working.
+                      */}
+                      <TableCell className="text-muted-foreground">
+                        {student.class_name ? (
+                          <>
+                            {student.class_name}
+                            {student.section_name ? ` · ${student.section_name}` : ""}
+                          </>
+                        ) : (
+                          <span aria-label="Not assigned to a class">—</span>
+                        )}
+                      </TableCell>
+                      {/*
+                        Amount over the periods it covers. The months are the half an
+                        office actually acts on -- "8,800" starts no conversation,
+                        "8,800, Term 1" tells the clerk which challan to pull up.
+
+                        `formatPeriod` leaves anything that is not `YYYY-MM` alone,
+                        because the label is free text and a termly school's "Term 1"
+                        is not a date.
+                      */}
+                      {showDues ? (
+                        <TableCell className="text-right">
+                          {student.dues ? (
+                            (() => {
+                              const owed = Number(student.dues.amount);
+                              const late = Number(student.dues.overdue_amount);
+                              return (
+                                <div className="flex flex-col items-end">
+                                  <span
+                                    className={cn(
+                                      "font-medium tabular-nums",
+                                      // RED MEANS LATE, not merely owed -- the palette
+                                      // reserves saturated colour for status and
+                                      // documents a red cell as "something is wrong".
+                                      // A bill issued this morning is not wrong.
+                                      late > 0
+                                        ? "text-destructive"
+                                        : "text-warning-foreground dark:text-warning",
+                                    )}
+                                  >
+                                    {money.format(owed)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {student.dues.periods.map(formatPeriod).join(", ")}
+                                  </span>
+                                  {/*
+                                    Only when PART of the balance is late. Colouring the
+                                    whole figure red already says "chase this"; without
+                                    this line it would also imply the whole figure is
+                                    overdue, and an office quoting the wrong number to a
+                                    parent loses the argument at the counter.
+                                  */}
+                                  {late > 0 && late < owed ? (
+                                    <span className="text-xs font-medium tabular-nums text-destructive">
+                                      {money.format(late)} overdue
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <StudentStatusBadge status={student.status} />
                       </TableCell>
@@ -280,7 +535,11 @@ export function StudentsView({ canManage }: { canManage: boolean }) {
             </Table>
 
             {meta ? (
-              <Pagination meta={meta} onPageChange={setPage} disabled={query.isFetching} />
+              <Pagination
+                meta={meta}
+                onPageChange={(next) => writeParams({ page: next > 1 ? String(next) : null })}
+                disabled={query.isFetching}
+              />
             ) : null}
           </>
         )}

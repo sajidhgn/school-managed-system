@@ -20,20 +20,25 @@ INTERACTIONS
     * `modules/tenancy/service.py::create_school` -> `provision_school`
 
 =============================================================================
-THE OWNER/PRINCIPAL SPLIT, IMPLEMENTED -- spec decision D2
+ONE HUMAN, ONE ROLE
 =============================================================================
-    On signup the user gets an ORG-LEVEL owner membership (`school_id IS NULL`).
-    That grants billing, school creation, and visibility across every school.
+    On signup the user gets an ORG-LEVEL `principal` membership (`school_id IS
+    NULL`) holding the entire catalog: billing, school creation, and every
+    school-scoped capability across every campus.
 
-    On creating their first school they ADDITIONALLY get a school-scoped principal
-    membership on it. That is what makes the flow in requirement #6 work -- log in,
-    buy a plan, land in the admin panel as principal -- without welding the two
-    concepts together.
+    Creating a school adds NOTHING to that membership. The principal already reaches
+    the new campus through the org-level row, so there is no second membership to
+    mint, no duplicate line in the members list, and no second entry in the context
+    switcher for the same person.
 
-    The result is one human holding two memberships with different scopes. Later,
-    they hand Principal to a real employee by reassigning that second membership,
-    and keep the first. If owner and principal were one role, that handover would
-    mean giving an employee the billing credentials.
+    This is what "one human, one role" costs and buys. It costs the ability to hand
+    someone full control of a single campus without also handing them billing --
+    there is no per-campus admin role. It buys an access model a customer can
+    actually read: a member holds exactly one role, and its scope is either the
+    organization or one school.
+
+    Handing the organization to someone else is `transfer_ownership`, which moves
+    this single org-level membership rather than juggling two.
 """
 
 from __future__ import annotations
@@ -108,26 +113,29 @@ async def provision_organization(
     organization_id: UUID,
     owner_user_id: UUID,
 ) -> tuple[Role, Membership]:
-    """Create the org-level `owner` role and grant it to the registering user.
+    """Create the org-level `principal` role and grant it to the registering user.
 
     Called inside the registration transaction, so a failure here rolls the whole
     signup back rather than leaving an organization nobody can administer.
 
+    This is the ONLY membership the registering user ever receives. Creating their
+    first school does not add a second one -- see the module docstring.
+
     Returns the role and membership so the caller can reference them in its audit
     row without a second query.
     """
-    owner_role = await _create_role(
+    principal_role = await _create_role(
         session,
         organization_id=organization_id,
         school_id=None,
-        system_role=SystemRole.OWNER,
+        system_role=SystemRole.PRINCIPAL,
     )
 
     membership = Membership(
         organization_id=organization_id,
         user_id=owner_user_id,
         school_id=None,  # org-level: spans every school in the organization
-        role_id=owner_role.id,
+        role_id=principal_role.id,
         status=MembershipStatus.ACTIVE,
         is_primary=True,
         joined_at=datetime.now(UTC),
@@ -135,7 +143,7 @@ async def provision_organization(
     session.add(membership)
     await session.flush()
 
-    return owner_role, membership
+    return principal_role, membership
 
 
 async def provision_school(
@@ -143,21 +151,18 @@ async def provision_school(
     *,
     organization_id: UUID,
     school_id: UUID,
-    grant_principal_to_user_id: UUID | None = None,
 ) -> dict[SystemRole, Role]:
-    """Create the school's system roles, optionally granting principal to a user.
+    """Create the school's system roles. Mints no memberships.
 
-    `grant_principal_to_user_id` is set for the owner's FIRST school (spec §4.3B
-    step 6), which is what lands them in the admin panel as principal. It is left
-    None for subsequent schools, where the owner is expected to appoint someone --
-    auto-granting principal on every school would silently accumulate memberships
-    the owner never asked for, and clutter their context switcher with one entry per
-    campus.
+    NOTHING is granted to the creating user here. They hold the org-level
+    `principal` membership, which already reaches this school and everything in it;
+    adding a school-scoped row would give them a second role that grants strictly
+    less than the one they have, and put their name in the members list twice.
 
     Returns the roles keyed by their system code, so the caller can pick out
     `SystemRole.TEACHER` to pre-select in an invitation form without re-querying.
     """
-    roles = {
+    return {
         system_role: await _create_role(
             session,
             organization_id=organization_id,
@@ -166,25 +171,6 @@ async def provision_school(
         )
         for system_role in SCHOOL_SYSTEM_ROLES
     }
-
-    if grant_principal_to_user_id is not None:
-        session.add(
-            Membership(
-                organization_id=organization_id,
-                user_id=grant_principal_to_user_id,
-                school_id=school_id,
-                role_id=roles[SystemRole.PRINCIPAL].id,
-                status=MembershipStatus.ACTIVE,
-                # NOT primary: the owner's org-level membership stays their default
-                # context, so they land on the organization dashboard rather than
-                # inside one campus. They can switch in explicitly.
-                is_primary=False,
-                joined_at=datetime.now(UTC),
-            )
-        )
-        await session.flush()
-
-    return roles
 
 
 async def get_system_role(

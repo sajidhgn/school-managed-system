@@ -128,7 +128,7 @@ async def test_downgrade_below_usage_keeps_data_readable_and_blocks_creates(
 
     second = await tenant.post(f"{API}/schools", json={"name": "Second Campus", "code": "SECOND"})
     assert second.status_code == 201, second.text
-    second_id = second.json()["school"]["id"]
+    second_id = second.json()["id"]
 
     downgraded = await tenant.post(
         f"{API}/billing/change-plan",
@@ -429,20 +429,11 @@ async def test_cancellation_is_at_period_end(tenant: Tenant) -> None:
 
 async def test_student_capacity_tracks_status_transitions_and_deletion(tenant: Tenant) -> None:
     """Only active students consume the plan; every transition releases/reserves once."""
-    me = await tenant.get(f"{API}/auth/me")
-    school_membership = next(
-        item for item in me.json()["memberships"] if item["school_id"] == tenant.school_id
-    )
-    switched = await tenant.client.post(
-        f"{API}/auth/context",
-        json={"membership_id": school_membership["membership_id"]},
-        headers={
-            **tenant.headers(),
-            "X-Token-Transport": "body",
-        },
-    )
-    assert switched.status_code == 200, switched.text
-    tenant.access_token = switched.headers["X-Access-Token"]
+    # Enrolling stamps the student with the ACTIVE campus, and the principal's token
+    # names none -- their one membership is org-level. Naming one is a view choice,
+    # not a re-scoping, so there is no context switch here: the header is what the
+    # frontend sends from its campus cookie.
+    tenant.active_school_id = tenant.school_id
 
     created = await tenant.post(
         f"{API}/students",

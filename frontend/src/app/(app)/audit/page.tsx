@@ -31,11 +31,11 @@ export default async function AuditPage({
   searchParams: Promise<{ before?: string }>;
 }) {
   const params = await searchParams;
-  const [user, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
+  const [{ schoolId }, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
   const query = new URLSearchParams({ limit: "51" });
   if (params.before) query.set("before", params.before);
   const entries = await serverGetRequired<AuditLogRead[]>(
-    `/schools/${user.school_id}/audit-logs?${query}`,
+    `/schools/${schoolId}/audit-logs?${query}`,
   );
   const page = entries.slice(0, 50);
 

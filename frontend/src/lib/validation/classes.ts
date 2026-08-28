@@ -36,10 +36,14 @@ export const sectionFormSchema = z.object({
     .trim()
     .refine((value) => value === "" || WHOLE_NUMBER.test(value), "Capacity must be a whole number")
     .refine((value) => value === "" || Number(value) >= 1, "Capacity must be at least 1"),
+  // Kept as a guard, not as a prompt. The field is a picker now, so the only values
+  // it can produce are a teacher's user id or "" -- but this schema is also what
+  // `toSectionPayload` is typed against, and a malformed id should fail here rather
+  // than travel to the API and come back as a foreign key error.
   class_teacher_id: z
     .string()
     .trim()
-    .refine((value) => value === "" || UUID.test(value), "Enter a valid teacher ID"),
+    .refine((value) => value === "" || UUID.test(value), "Select a teacher from the list"),
 });
 export type SectionFormValues = z.infer<typeof sectionFormSchema>;
 

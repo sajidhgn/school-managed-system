@@ -1,10 +1,11 @@
-import { api } from "@/lib/api/client";
+import { api, authRequest } from "@/lib/api/client";
 import type {
   AuditLogRead,
   InvitationCreate,
   InvitationRead,
   InvoiceRead,
   MemberRead,
+  MemberCreate,
   MemberUpdate,
   PlanAdminRead,
   PlanImpactResponse,
@@ -18,11 +19,11 @@ import type {
   RoleRead,
   RoleUpdate,
   SchoolCreate,
-  SchoolCreateResponse,
   SchoolRead,
   SchoolUpdate,
   SubscribeRequest,
   SubscriptionRead,
+  TeacherOption,
   UsageResponse,
 } from "@/lib/api/types";
 
@@ -53,9 +54,17 @@ export const organization = {
 export const schools = {
   list: () => api.get<SchoolRead[]>("/schools"),
   get: (id: string) => api.get<SchoolRead>(`/schools/${id}`),
-  create: (body: SchoolCreate) => api.post<SchoolCreateResponse>("/schools", body),
+  create: (body: SchoolCreate) => api.post<SchoolRead>("/schools", body),
   update: (id: string, body: SchoolUpdate) => api.patch<SchoolRead>(`/schools/${id}`, body),
   archive: (id: string) => api.post<SchoolRead>(`/schools/${id}/archive`),
+  /**
+   * Make this the campus the school-scoped pages act on.
+   *
+   * Not a BFF call: it writes an httpOnly cookie, so it goes to the dedicated
+   * route handler like the other session-shaped operations. Nothing is re-issued —
+   * an org-level user's authority is identical before and after.
+   */
+  setActive: (id: string) => authRequest<SchoolRead>("/school", { school_id: id }),
 };
 
 // --- Roles & permissions ---------------------------------------------------
@@ -78,8 +87,22 @@ export const roles = {
 // --- Members ---------------------------------------------------------------
 export const members = {
   list: (schoolId: string) => api.get<MemberRead[]>(`/schools/${schoolId}/members`),
+  /**
+   * The branch's teaching staff, for the class-teacher and curriculum pickers.
+   *
+   * Separate from `list` because it answers a different question and is gated on a
+   * different permission (`teacher:read`, not `member:read`). It also returns far
+   * less per row -- see `TeacherOption`.
+   */
+  teachers: (schoolId: string) => api.get<TeacherOption[]>(`/schools/${schoolId}/teachers`),
+  create: (schoolId: string, body: MemberCreate) =>
+    api.post<MemberRead>(`/schools/${schoolId}/members`, body),
   update: (schoolId: string, membershipId: string, body: MemberUpdate) =>
     api.patch<MemberRead>(`/schools/${schoolId}/members/${membershipId}`, body),
+  assignBranches: (schoolId: string, membershipId: string, schoolIds: string[]) =>
+    api.post<MemberRead[]>(`/schools/${schoolId}/members/${membershipId}/branches`, {
+      school_ids: schoolIds,
+    }),
   remove: (schoolId: string, membershipId: string) =>
     api.delete<void>(`/schools/${schoolId}/members/${membershipId}`),
 };

@@ -102,16 +102,3 @@ class SchoolUpdate(BaseSchema):
     academic_year_start_month: int | None = Field(default=None, ge=1, le=12)
     timezone: str | None = Field(default=None, max_length=64)
     locale: str | None = Field(default=None, max_length=10)
-
-
-class SchoolCreateResponse(BaseSchema):
-    """A created school, plus whether the caller was granted principal on it.
-
-    `principal_granted` tells the frontend where to send the user next: into the new
-    school's admin panel if they now hold principal there (their first school), or
-    back to the school list if they do not (subsequent schools, which need a
-    principal appointed).
-    """
-
-    school: SchoolRead
-    principal_granted: bool

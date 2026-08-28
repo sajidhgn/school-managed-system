@@ -8,6 +8,7 @@ import type {
   PageParams,
   SectionCreate,
   SectionRead,
+  SectionRosterEntry,
   SectionUpdate,
 } from "@/lib/api/types";
 
@@ -40,5 +41,14 @@ export const classesApi = {
 
     /** Also 409s while students are still assigned to the section. */
     remove: (sectionId: string) => api.delete<void>(`/classes/sections/${sectionId}`),
+
+    /**
+     * The class register, in roll order, read from the enrollment ledger.
+     *
+     * Gated on `student:read`, not `class:read` — it returns children with their
+     * guardian's phone number, which is student data reached through a section.
+     */
+    roster: (sectionId: string) =>
+      api.get<SectionRosterEntry[]>(`/classes/sections/${sectionId}/roster`),
   },
 };

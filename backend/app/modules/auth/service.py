@@ -53,7 +53,12 @@ from app.common.audit import (
 from app.common.email.sender import EmailSender
 from app.common.email.templates import ActionPurpose, render_action_email
 from app.core.config import Settings
-from app.core.context import set_organization_id, set_school_id
+from app.core.context import (
+    get_organization_id,
+    get_school_id,
+    set_organization_id,
+    set_school_id,
+)
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.passwords import validate_password
@@ -329,7 +334,7 @@ class AuthService:
                 select(Organization).where(Organization.owner_user_id == user.id)
             )
         ).scalar_one_or_none()
-        await bind_tenant(self.session, None)
+        await self._restore_tenant_binding()
 
         if organization is not None:
             await bind_tenant(self.session, organization.id)
@@ -463,6 +468,33 @@ class AuthService:
     # Memberships & context
     # -----------------------------------------------------------------------
 
+    async def _restore_tenant_binding(self) -> None:
+        """Re-bind the session to whatever THIS REQUEST is acting as.
+
+        =====================================================================
+        DISARMING IS NOT THE SAME AS UNBINDING
+        =====================================================================
+            The cross-tenant reads in this module arm the platform-admin GUC and
+            must disarm the instant they are done, or the rest of the transaction
+            silently becomes a platform-wide read.
+
+            Disarming used to mean `bind_tenant(session, None)` -- which threw away
+            the caller's ORGANIZATION as well as the admin flag. Every later query
+            in the same request then ran with no tenant bound, and RLS answered them
+            with zero rows.
+
+            That is the bug behind `GET /auth/me` reporting a null
+            `organization_name` and `school_name`: its membership lookup runs after
+            `list_memberships()`, so it was querying an unbound session and finding
+            nothing. `POST /auth/context` lost its school name the same way.
+
+            Restoring from the context vars is right in both situations. In the
+            PRE-authentication flows -- login, refresh, registration -- nothing is
+            bound yet and this restores None, exactly as before. Mid-request it puts
+            back the organization `get_db` bound at session start.
+        """
+        await bind_tenant(self.session, get_organization_id(), school_id=get_school_id())
+
     async def list_memberships(self, user_id: UUID) -> list[MembershipSummary]:
         """Every context this user may act in, across all organizations.
 
@@ -521,7 +553,7 @@ class AuthService:
             # Disarm immediately. Leaving the cross-tenant GUC set for the rest of
             # the request would silently turn every later query in this transaction
             # into a platform-wide read.
-            await bind_tenant(self.session, None)
+            await self._restore_tenant_binding()
 
     async def resolve_membership(self, *, user_id: UUID, membership_id: UUID) -> Membership:
         """Load one membership, verifying it belongs to `user_id` and is usable.
@@ -555,7 +587,7 @@ class AuthService:
                 )
             return membership
         finally:
-            await bind_tenant(self.session, None)
+            await self._restore_tenant_binding()
 
     def pick_default_membership(
         self, memberships: list[MembershipSummary]
@@ -745,6 +777,19 @@ class AuthService:
             if session_row.expires_at <= datetime.now(UTC):
                 raise AuthenticationError("Session has expired.", code="SESSION_EXPIRED")
 
+            if session_row.guardian_identity_id is not None:
+                # A PARENT-PORTAL session, presented at the STAFF refresh endpoint.
+                #
+                # Refused rather than rotated. Guardian rotation is owned by
+                # `guardians/auth_service.py` because it re-checks portal access and
+                # mints a token with a different principal type; honouring it here
+                # would re-issue a guardian a staff-shaped token. The generic message
+                # is deliberate -- a caller who cannot tell which surface a token
+                # belongs to is not a caller we should be explaining tokens to.
+                raise AuthenticationError(
+                    "Session is invalid or has expired.", code="INVALID_REFRESH_TOKEN"
+                )
+
             if session_row.user_id is None:
                 # A PLATFORM-ADMIN session. It shares this table and therefore this
                 # rotation logic -- including reuse detection, which matters most for
@@ -790,7 +835,7 @@ class AuthService:
                 family_id=session_row.family_id,
             )
         finally:
-            await bind_tenant(self.session, None)
+            await self._restore_tenant_binding()
 
     async def _rotate_platform_session(
         self,
@@ -1046,7 +1091,7 @@ class AuthService:
                 )
             ).scalar_one_or_none()
         finally:
-            await bind_tenant(self.session, None)
+            await self._restore_tenant_binding()
 
         if membership is None:
             return
@@ -1069,7 +1114,7 @@ class AuthService:
             )
             await self.session.flush()
         finally:
-            await bind_tenant(self.session, None)
+            await self._restore_tenant_binding()
 
     # -----------------------------------------------------------------------
     # Helpers
@@ -1115,7 +1160,7 @@ class AuthService:
                 code="SLUG_ALLOCATION_FAILED",
             )
         finally:
-            await bind_tenant(self.session, None)
+            await self._restore_tenant_binding()
 
 
 async def summarise_school(session: AsyncSession, school_id: UUID | None) -> School | None:

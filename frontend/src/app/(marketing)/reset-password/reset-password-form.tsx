@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { publicRequest } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { resetPasswordSchema, type ResetPasswordValues } from "@/lib/validation/auth";
@@ -81,7 +81,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
         hint="At least 10 characters. A phrase of unrelated words works best."
         required
       >
-        <Input type="password" autoComplete="new-password" autoFocus {...form.register("password")} />
+        <PasswordInput autoComplete="new-password" autoFocus {...form.register("password")} />
       </Field>
 
       <Field
@@ -90,11 +90,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
         error={form.formState.errors.confirm_password}
         required
       >
-        <Input
-          type="password"
-          autoComplete="new-password"
-          {...form.register("confirm_password")}
-        />
+        <PasswordInput autoComplete="new-password" {...form.register("confirm_password")} />
       </Field>
 
       {formError ? (

@@ -82,6 +82,7 @@ class AuditAction:
     ROLE_DELETED = "role.deleted"
     ROLE_PERMISSIONS_CHANGED = "role.permissions_changed"
     MEMBER_ROLE_CHANGED = "member.role_changed"
+    MEMBER_CREATED = "member.created"
     MEMBER_SUSPENDED = "member.suspended"
     MEMBER_REACTIVATED = "member.reactivated"
     MEMBER_REMOVED = "member.removed"
@@ -91,6 +92,26 @@ class AuditAction:
     INVITATION_RESENT = "invitation.resent"
     INVITATION_REVOKED = "invitation.revoked"
     INVITATION_ACCEPTED = "invitation.accepted"
+
+    # --- Guardians (parent registry and portal access) ----------------------
+    #
+    # `GUARDIAN_LINKED` / `GUARDIAN_UNLINKED` record against the STUDENT, not the
+    # link row: the question this trail answers is "who was given access to this
+    # child, and when", and an audit filtered by a join-table id cannot answer it.
+    #
+    # The phone change and the two portal toggles are separate actions rather than one
+    # `GUARDIAN_UPDATED`, because they are the three that change who can SIGN IN. An
+    # investigator asking "who gave this handset access to this family" must be able
+    # to filter for exactly those, not read every name correction in the school.
+    GUARDIAN_REGISTERED = "guardian.registered"
+    GUARDIAN_UPDATED = "guardian.updated"
+    GUARDIAN_REMOVED = "guardian.removed"
+    GUARDIAN_PHONE_CHANGED = "guardian.phone_changed"
+    GUARDIAN_PORTAL_ENABLED = "guardian.portal_enabled"
+    GUARDIAN_PORTAL_DISABLED = "guardian.portal_disabled"
+    GUARDIAN_LINKED = "guardian.linked"
+    GUARDIAN_UNLINKED = "guardian.unlinked"
+    GUARDIAN_LINK_UPDATED = "guardian.link_updated"
 
     # --- Billing ------------------------------------------------------------
     SUBSCRIPTION_CREATED = "subscription.created"
@@ -103,6 +124,110 @@ class AuditAction:
     PAYMENT_RECEIVED = "payment.received"
     PAYMENT_FAILED = "payment.failed"
     PLAN_LIMIT_EXCEEDED = "entitlement.limit_exceeded"
+
+    # --- Fees (what a school bills its students) ----------------------------
+    #
+    # Distinct from the billing actions above, which record what the school owes
+    # EduCloud. Two money flows between different parties; sharing an action name
+    # would make "show me every payment" answer the wrong question.
+    FEE_HEAD_CREATED = "fee_head.created"
+    FEE_HEAD_UPDATED = "fee_head.updated"
+    FEE_HEAD_DELETED = "fee_head.deleted"
+    FEE_STRUCTURE_CREATED = "fee_structure.created"
+    FEE_STRUCTURE_UPDATED = "fee_structure.updated"
+    FEE_STRUCTURE_ITEM_CHANGED = "fee_structure.item_changed"
+    FEE_STRUCTURE_ACTIVATED = "fee_structure.activated"
+    FEE_STRUCTURE_ARCHIVED = "fee_structure.archived"
+    FEE_VOUCHER_GENERATED = "fee_voucher.generated"
+    FEE_VOUCHER_ISSUED = "fee_voucher.issued"
+    FEE_VOUCHER_VOIDED = "fee_voucher.voided"
+    FEE_PAYMENT_RECORDED = "fee_payment.recorded"
+    FEE_PAYMENT_REVERSED = "fee_payment.reversed"
+
+    # --- Stationery (what a school SELLS its students) ----------------------
+    #
+    # Its own action names rather than reuse of the fee-head ones, even though the
+    # catalogs are structurally alike. "Who changed the price of a copy last term?"
+    # is a question a store keeper asks and a tuition rename would drown out.
+    STATIONERY_ITEM_CREATED = "stationery_item.created"
+    STATIONERY_ITEM_UPDATED = "stationery_item.updated"
+    STATIONERY_ITEM_DELETED = "stationery_item.deleted"
+    # A charge added to or removed from ONE student's draft challan, as opposed to
+    # the whole-class structure change `FEE_STRUCTURE_ITEM_CHANGED` records.
+    FEE_VOUCHER_CHARGE_ADDED = "fee_voucher.charge_added"
+    FEE_VOUCHER_CHARGE_REMOVED = "fee_voucher.charge_removed"
+
+    # --- Academic calendar and curriculum -----------------------------------
+    #
+    # The calendar is low-frequency and high-consequence: moving the boundary of a
+    # year silently restates every attendance percentage and every report card
+    # quoted against it. `before`/`after` on these rows is what lets someone answer
+    # "why did last term's figures change?" months later.
+    ACADEMIC_YEAR_CREATED = "academic_year.created"
+    ACADEMIC_YEAR_UPDATED = "academic_year.updated"
+    ACADEMIC_YEAR_DELETED = "academic_year.deleted"
+    ACADEMIC_YEAR_ACTIVATED = "academic_year.activated"
+    TERM_CREATED = "term.created"
+    TERM_UPDATED = "term.updated"
+    TERM_DELETED = "term.deleted"
+    SUBJECT_CREATED = "subject.created"
+    SUBJECT_UPDATED = "subject.updated"
+    SUBJECT_DELETED = "subject.deleted"
+    CLASS_SUBJECT_ADDED = "class_subject.added"
+    CLASS_SUBJECT_UPDATED = "class_subject.updated"
+    CLASS_SUBJECT_REMOVED = "class_subject.removed"
+
+    # --- Enrollment history --------------------------------------------------
+    #
+    # `entity_type` is `student` throughout, deliberately: the question this trail
+    # answers is "what happened to THIS CHILD's placement", and a trail filtered by
+    # an enrollment-row id cannot answer it.
+    STUDENT_ENROLLED = "student.enrolled"
+    STUDENT_TRANSFERRED = "student.transferred"
+    STUDENT_ENROLLMENT_CLOSED = "student.enrollment_closed"
+    STUDENT_PROMOTED = "student.promoted"
+    STUDENT_ADMISSION_ACCEPTED = "student.admission_accepted"
+    STUDENT_ADMISSION_REJECTED = "student.admission_rejected"
+
+    # --- Attendance ----------------------------------------------------------
+    #
+    # SUBMITTED and AMENDED are separate actions, not one "changed", because they
+    # answer different questions and are held by different permissions. "Who marked
+    # today's register?" is routine; "who rewrote a register that was already
+    # submitted?" is the one an investigation starts from, and it must not be
+    # buried among thousands of the former.
+    ATTENDANCE_SESSION_OPENED = "attendance_session.opened"
+    ATTENDANCE_SESSION_SUBMITTED = "attendance_session.submitted"
+    ATTENDANCE_SESSION_REOPENED = "attendance_session.reopened"
+    ATTENDANCE_SESSION_DISCARDED = "attendance_session.discarded"
+    ATTENDANCE_AMENDED = "attendance_record.amended"
+
+    # --- Per-student fee arrangements ---------------------------------------
+    #
+    # `entity_type` is `student` rather than `student_fee_assignment`, deliberately:
+    # the question this trail answers is "what changed about what THIS CHILD pays",
+    # and an audit filtered by a join-table id cannot answer it.
+    STUDENT_FEE_ASSIGNED = "student_fee.assigned"
+    STUDENT_FEE_UNASSIGNED = "student_fee.unassigned"
+
+    # Concessions, fines and the running ledger. `FEE_LATE_FEE_APPLIED` is the only
+    # action in this enum a JOB writes with no human actor -- `actor_user_id` is null
+    # on it, which is honest: "who fined us?" is answered by "the policy did".
+    FEE_CONCESSION_CREATED = "fee_concession.created"
+    FEE_CONCESSION_UPDATED = "fee_concession.updated"
+    FEE_CONCESSION_DELETED = "fee_concession.deleted"
+    # Unattended generation. The RUN is audited as well as the schedule, because
+    # "who billed the whole campus in August?" has the answer "nobody -- the schedule
+    # did", and that answer has to be visible rather than inferred from an empty
+    # actor column on four hundred vouchers.
+    FEE_BILLING_SCHEDULE_SET = "fee_billing_schedule.set"
+    FEE_BILLING_RUN_COMPLETED = "fee_billing_run.completed"
+    FEE_LATE_FEE_POLICY_SET = "fee_late_fee_policy.set"
+    FEE_LATE_FEE_POLICY_DELETED = "fee_late_fee_policy.deleted"
+    FEE_LATE_FEE_APPLIED = "fee_late_fee.applied"
+    # A manual balance movement with no voucher and no receipt behind it -- the one
+    # fee action that can make money disappear, which is why it is `fee:void`.
+    FEE_LEDGER_ADJUSTED = "fee_ledger.adjusted"
 
 
 class PlatformAuditAction:

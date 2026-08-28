@@ -1,3 +1,6 @@
+import type { StructureListParams, VoucherListParams } from "@/lib/api/resources/fees";
+import type { SessionListParams } from "@/lib/api/resources/attendance";
+import type { SubjectListParams } from "@/lib/api/resources/subjects";
 import type { StudentListParams } from "@/lib/api/resources/students";
 import type { SchoolListParams } from "@/lib/api/resources/schools";
 import type { PageParams } from "@/lib/api/types";
@@ -23,6 +26,70 @@ export const queryKeys = {
     detail: (id: string) => ["classes", "detail", id] as const,
     summary: ["classes", "summary"] as const,
     sections: (classId: string) => ["classes", classId, "sections"] as const,
+    roster: (sectionId: string) => ["classes", "sections", sectionId, "roster"] as const,
+    curriculum: (classId: string) => ["classes", classId, "curriculum"] as const,
+  },
+
+  members: {
+    all: ["members"] as const,
+    // Keyed by branch: a teacher list is only ever meaningful for one campus, and a
+    // shared key would serve South Campus's staff to North Campus on a context switch.
+    teachers: (schoolId: string) => ["members", schoolId, "teachers"] as const,
+  },
+
+  calendar: {
+    all: ["calendar"] as const,
+    years: (params: PageParams) => ["calendar", "years", params] as const,
+    year: (id: string) => ["calendar", "years", "detail", id] as const,
+    // Its own key rather than derived from the list: almost every screen needs the
+    // current year and nothing else, and making them all subscribe to a paginated
+    // list would refetch the whole calendar whenever any year changed.
+    current: ["calendar", "current"] as const,
+    terms: (yearId: string) => ["calendar", yearId, "terms"] as const,
+  },
+
+  subjects: {
+    all: ["subjects"] as const,
+    list: (params: SubjectListParams) => ["subjects", "list", params] as const,
+    detail: (id: string) => ["subjects", "detail", id] as const,
+  },
+
+  attendance: {
+    all: ["attendance"] as const,
+    // The date is part of the key so yesterday's overview stays cached while today's
+    // is refetched — a head teacher comparing the two should not evict either.
+    today: (date: string | null) => ["attendance", "today", date] as const,
+    list: (params: SessionListParams) => ["attendance", "list", params] as const,
+    session: (id: string) => ["attendance", "session", id] as const,
+    studentSummary: (studentId: string, from: string, to: string) =>
+      ["attendance", "student", studentId, from, to] as const,
+    sectionReport: (sectionId: string, from: string, to: string) =>
+      ["attendance", "section", sectionId, from, to] as const,
+  },
+
+  fees: {
+    all: ["fees"] as const,
+    summary: (year: string, period?: string) => ["fees", "summary", year, period ?? null] as const,
+    heads: (params: PageParams) => ["fees", "heads", params] as const,
+    structures: (params: StructureListParams) => ["fees", "structures", params] as const,
+    structure: (id: string) => ["fees", "structures", "detail", id] as const,
+    stationery: (params: PageParams) => ["fees", "stationery", params] as const,
+    studentProfile: (studentId: string, year: string) =>
+      ["fees", "student-profile", studentId, year] as const,
+    vouchers: (params: VoucherListParams) => ["fees", "vouchers", params] as const,
+    voucher: (id: string) => ["fees", "vouchers", "detail", id] as const,
+    billingSchedule: (year: string) => ["fees", "billing-schedule", year] as const,
+  },
+
+  search: {
+    all: ["search"] as const,
+    // The query string is the key. Two people typing the same thing want the same
+    // cached answer, and clearing the box must not evict the previous result — the
+    // omnibar re-opens onto what you last searched.
+    results: (q: string, limit: number) => ["search", "results", q, limit] as const,
+    // Config is per-caller and changes only when their role's permissions do, so it
+    // is fetched once per session rather than per keystroke.
+    config: ["search", "config"] as const,
   },
 
   schools: {

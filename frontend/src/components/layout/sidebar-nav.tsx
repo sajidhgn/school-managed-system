@@ -1,12 +1,16 @@
 "use client";
 
 import {
+  BookOpen,
   Building2,
+  CalendarCheck,
+  CalendarRange,
   CreditCard,
   GraduationCap,
   LayoutDashboard,
   Layers,
   Mail,
+  Receipt,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -52,11 +56,38 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   anyOf?: string[];
-  /** Hidden for org-level contexts, where the page has no school to act on. */
+  /** Hidden when there is no campus for the page to act on. */
   requiresSchool?: boolean;
 }
 
-export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarNav({
+  activeSchoolName = null,
+  onNavigate,
+}: {
+  /**
+   * The branch whose modules are open, or null when none is.
+   *
+   * =========================================================================
+   * THE CAMPUS MODULES BELONG TO A BRANCH, NOT TO THE APP
+   * =========================================================================
+   *   Members, Roles, Invitations, Students, Classes and Audit all act on ONE
+   *   campus. Showing them permanently would mean six links whose meaning depends
+   *   on a selection made elsewhere and displayed nowhere — you would click
+   *   "Members" and get whichever branch the app last happened to be pointed at.
+   *
+   *   So they are grouped under the branch's NAME and appear only once a branch is
+   *   open. Opening a different branch moves the whole group to it, which is what
+   *   makes the sidebar readable as "here is where I am, here is what I can do
+   *   here".
+   *
+   *   NOT derived from `user.school_id`: only a school-SCOPED member carries a
+   *   school on their session. The principal is org-level and never does, however
+   *   many campuses they run — testing that hid all six from the one person who
+   *   administers all of them.
+   */
+  activeSchoolName?: string | null;
+  onNavigate?: () => void;
+}) {
   const { t } = useTranslations();
   const user = useRequiredSession();
   const pathname = usePathname();
@@ -74,7 +105,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       ],
     },
     {
-      heading: t.nav.people,
+      // The open branch, named. Everything under it acts on that campus and nothing
+      // else, which is why they are one group rather than scattered through the nav.
+      heading: activeSchoolName ?? undefined,
       items: [
         {
           href: "/members",
@@ -97,11 +130,6 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           anyOf: [PERMISSIONS.invitationRead, PERMISSIONS.memberInvite],
           requiresSchool: true,
         },
-      ],
-    },
-    {
-      heading: "Academics",
-      items: [
         {
           href: "/students",
           label: t.nav.students,
@@ -116,6 +144,43 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           anyOf: [PERMISSIONS.classRead],
           requiresSchool: true,
         },
+        {
+          href: "/attendance",
+          label: t.nav.attendance,
+          icon: CalendarCheck,
+          // `attendance:read` alone, not `attendance:mark`: a head of year who
+          // chases missing registers without ever marking one still needs the board.
+          anyOf: [PERMISSIONS.attendanceRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/academic-years",
+          label: t.nav.calendar,
+          icon: CalendarRange,
+          anyOf: [PERMISSIONS.calendarRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/subjects",
+          label: t.nav.subjects,
+          icon: BookOpen,
+          anyOf: [PERMISSIONS.subjectRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/fees",
+          label: t.nav.fees,
+          icon: Receipt,
+          anyOf: [PERMISSIONS.feeRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/audit",
+          label: t.nav.audit,
+          icon: ScrollText,
+          anyOf: [PERMISSIONS.auditRead],
+          requiresSchool: true,
+        },
       ],
     },
     {
@@ -127,20 +192,13 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           icon: CreditCard,
           anyOf: [PERMISSIONS.billingRead, PERMISSIONS.billingManage],
         },
-        {
-          href: "/audit",
-          label: t.nav.audit,
-          icon: ScrollText,
-          anyOf: [PERMISSIONS.auditRead],
-          requiresSchool: true,
-        },
         { href: "/settings", label: t.nav.settings, icon: Settings },
       ],
     },
   ];
 
   const visible = (item: NavItem) => {
-    if (item.requiresSchool && !user.school_id) return false;
+    if (item.requiresSchool && !activeSchoolName) return false;
     if (!item.anyOf) return true;
     return canAny(user, ...item.anyOf);
   };
@@ -152,9 +210,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         if (items.length === 0) return null;
 
         return (
-          <div key={section.heading ?? index} className="mb-5">
+          <div key={index} className="mb-5">
             {section.heading ? (
-              <h2 className="px-2 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <h2 className="truncate px-2 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {section.heading}
               </h2>
             ) : null}

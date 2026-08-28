@@ -21,13 +21,22 @@ organization; the plan caps how many schools it may create. The billing boundary
 the isolation boundary have to be the same thing, or "which of these three campuses
 owns the invoice?" has no answer.
 
-**D2 — Owner and Principal are different roles.**
-*Owner* is org-level: billing, school creation, visibility across every school.
-*Principal* is school-level: runs one campus, no billing rights, cannot create
-schools. On signup the owner gets an org-level owner membership; on creating their
-**first** school they additionally get a school-scoped principal membership on it.
-Two memberships, two scopes, one human — which is what later lets them hand Principal
-to an employee while keeping owner rights.
+**D2 — One human, one role: `principal` is org-level and there is no `owner`.**
+The registering user gets a single ORG-LEVEL `principal` membership holding the whole
+permission catalog — billing, school creation, and every school-scoped capability
+across every campus. Creating a school adds no membership: the org-level row already
+reaches it, so a second one would put the same person in the members list twice with
+strictly less authority the second time.
+
+This *supersedes* the original owner/principal split, which minted an org-level
+`owner` at signup plus a school-scoped `principal` on the first school. It cost one
+capability: there is no way to hand someone full control of a single campus without
+also handing them billing. Customers who need that build it as a custom school role,
+which is what `make_campus_head` does in the tests.
+
+Which campus an org-level user is *looking at* is a separate, non-authorising thing:
+the frontend keeps it in a cookie and sends it as `X-Active-School`, which narrows the
+repository filter and nothing else. See `api/deps.py::_extract_active_school`.
 
 **D3 — Isolation is Postgres RLS keyed on `organization_id`; `school_id` is a scope
 filter inside it.**
@@ -177,14 +186,15 @@ all four have tests naming the escalation they prevent:
 
 1. **No self-elevation beyond own grant** — `granted ⊆ actor_permissions`. Applies to
    role edits *and* invitations, or invitation becomes an escalation backdoor.
-2. **No editing locked roles** — `owner` and `principal` are `is_editable = false`.
+2. **No editing locked roles** — `principal` is `is_editable = false`.
    Guard 1 alone does not cover this: editing your own role only grants what you
    already hold, so the subset check passes.
 3. **No scope crossing** — a school-scoped actor touches only its own school's roles,
    and no school role may hold an org-scoped permission (422, not 403 — the request
    is incoherent rather than forbidden).
-4. **The last owner is immovable** — an organization with no owner has nobody who can
-   pay for it or appoint a replacement, and there is no in-app recovery.
+4. **The last principal is immovable** — an organization with no org-level principal
+   has nobody who can pay for it or appoint a replacement, and there is no in-app
+   recovery.
 
 ---
 
@@ -248,7 +258,7 @@ Coverage of the release gates in spec §12:
 | Area | Gates |
 |---|---|
 | Isolation | cross-org reads 404 not 403; unbound session sees zero rows; `WITH CHECK` blocks cross-tenant writes; platform admin reads but cannot write; every `NOT NULL organization_id` table has forced RLS |
-| Authorization | escalation, locked roles, scope crossing, last owner, self-modification, role-in-use 409, permission change effective on the next request |
+| Authorization | escalation, locked roles, scope crossing, last principal, self-modification, role-in-use 409, permission change effective on the next request |
 | Invitations | single use (410), expiry (410), email mismatch (403), `max_staff` 402 *before* the email is sent, resend rotates the token |
 | Billing | free plan blocked at school #2 (402), downgrade keeps data readable, duplicate webhook processed once, bad signature rejected |
 | Auth | refresh reuse revokes the whole family, 6th failed login locks, unknown vs known email indistinguishable in body **and timing**, reset revokes all sessions |
@@ -264,6 +274,7 @@ Coverage of the release gates in spec §12:
 | `make migrate` / `make migration m="…"` | apply / generate migrations |
 | `make seed` / `make seed-demo` | baseline data / demo organization |
 | `make reconcile` | recompute usage counters from source tables |
+| `make maintenance` | **run daily from cron**: billing lifecycle, retention, scheduled challan generation, late fees |
 | `make openapi` | regenerate `openapi.json` (frontend types come from it) |
 | `make db-reset` | **destructive**: drop schema, re-migrate, re-seed |
 
@@ -283,6 +294,18 @@ lets two concurrent requests both pass a limit of one, which is what a double-cl
 button does. The cost is drift if a write path forgets its increment. `make reconcile`
 corrects it; a stale `recomputed_at` on a busy organization is the signal that
 something is missing an update.
+
+**`make maintenance` must run daily, and the schedule is not in the crontab.** The
+job wakes once a day and asks each campus whether today is its billing day — the day
+itself, the payment window, drafts-or-issued and whether arrears are carried forward
+all live in `fee_billing_schedules`, where the school's own owner can read and change
+them (`docs/modules/fees.md` §5.6b). A crontab per tenant would put a school's billing
+day in a file the school cannot see.
+
+Skipping a day does not double-bill the next: generation is idempotent twice over —
+by the schedule's own bookmark, and beneath it by the partial unique index on
+`(school_id, student_id, academic_year, period_label)`, which makes a repeat run skip
+the students it already billed even if the first pass crashed halfway.
 
 **Production configuration refuses to boot on:** the placeholder `SECRET_KEY`,
 `EMAIL_BACKEND=console` (logs OTPs in plaintext, sends nothing), `PAYMENT_GATEWAY=mock`

@@ -17,7 +17,6 @@ from app.modules.tenancy.schemas import (
     OrganizationRead,
     OrganizationUpdate,
     SchoolCreate,
-    SchoolCreateResponse,
     SchoolRead,
     SchoolUpdate,
     TransferOwnershipRequest,
@@ -121,28 +120,35 @@ async def list_schools(
 ) -> list[SchoolRead]:
     """Schools the caller can see.
 
-    An org-level owner (`ctx.school_id is None`) sees every school; a school-scoped
-    member sees only their own. That is spec §2.3's soft boundary, applied here
-    rather than by a policy.
+    The principal (`ctx.school_id is None`) sees every school; a school-scoped member
+    sees only their own. That is spec §2.3's soft boundary, applied here rather than
+    by a policy.
     """
-    schools = await TenancyService(session).list_schools(school_id_filter=ctx.school_id)
+    # `principal` is the only org-level system role, and it is the one that manages
+    # staffing across every branch. School-scoped roles stay confined to their own.
+    school_filter = None if ctx.is_org_level else ctx.school_id
+    schools = await TenancyService(session).list_schools(school_id_filter=school_filter)
     return [SchoolRead.model_validate(s) for s in schools]
 
 
-@schools_router.post("", response_model=SchoolCreateResponse, status_code=status.HTTP_201_CREATED)
+@schools_router.post("", response_model=SchoolRead, status_code=status.HTTP_201_CREATED)
 async def create_school(
     payload: SchoolCreate,
     session: DbSession,
     ctx: Annotated[AuthContext, Depends(require("school:create"))],
-) -> SchoolCreateResponse:
+) -> SchoolRead:
     """Create a school. Entitlement-checked; 402 when the plan's limit is reached.
 
     `school:create` is an ORG-scoped permission, so this route is reachable only by
-    an org-level role. A principal cannot manufacture campuses the organization has
-    not paid for.
+    the org-level principal. A school-scoped role cannot manufacture campuses the
+    organization has not paid for.
+
+    Returns the school and nothing else. The caller's access is unchanged by this
+    call -- their org-level principal membership already covers the new campus -- so
+    there is no membership grant for the response to report.
     """
     fields = payload.model_dump(exclude={"name", "code"}, exclude_unset=True)
-    school, principal_granted = await TenancyService(session).create_school(
+    school = await TenancyService(session).create_school(
         organization_id=ctx.organization_id,
         actor_user_id=ctx.user_id,
         actor_membership_id=ctx.membership_id,
@@ -150,10 +156,7 @@ async def create_school(
         code=payload.code,
         **fields,
     )
-    return SchoolCreateResponse(
-        school=SchoolRead.model_validate(school),
-        principal_granted=principal_granted,
-    )
+    return SchoolRead.model_validate(school)
 
 
 @schools_router.get("/{school_id}", response_model=SchoolRead)

@@ -7,7 +7,7 @@
 # same thing.
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo reconcile maintenance mfa-enroll openapi db-reset
+.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo seed-superadmin verify-user reconcile maintenance reconcile-ledger mfa-enroll openapi db-reset
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -73,15 +73,43 @@ seed:  ## Seed permissions, plans and the super admin (idempotent)
 seed-demo:  ## Seed + create a demo org with two schools, staff and invitations
 	uv run python -m app.cli seed --demo
 
+# Fills an EXISTING organization -- the one you already sign in as -- so the app has
+# something to render. Additive and safe to re-run: campuses, classes and staff are
+# topped up to the target, and anything you created by hand is left alone.
+seed-dummy:  ## Populate an org with demo data: make seed-dummy org=cambridge-int
+	@test -n "$(org)" || (echo "Usage: make seed-dummy org=<organization-slug>" && exit 1)
+	uv run python scripts/seed_dummy_data.py --org-slug "$(org)" \
+		--schools $${schools:-5} --classes $${classes:-10} \
+		--min-students $${min_students:-20} --max-students $${max_students:-30}
+
+# `seed` only CREATES the super admin -- it never rewrites an existing one, so a
+# changed .env password, a lockout after five bad guesses, or a deactivated account
+# all survive a re-run. There is no emailed reset for this role by design, so this
+# is the out-of-band recovery path: it converges the account onto .env.
+seed-superadmin:  ## Create or repair the platform super admin from .env
+	uv run python scripts/seed_super_admin.py
+
 reconcile:  ## Recompute organization usage counters from source tables
 	uv run python -m app.cli reconcile-usage
 
-maintenance:  ## Run billing lifecycle, anonymization and audit-retention jobs once
+maintenance:  ## Daily pass: billing lifecycle, retention, scheduled challan generation, late fees
 	uv run python -m app.cli run-maintenance
+
+reconcile-ledger:  ## Report students whose fee ledger disagrees with their vouchers
+	uv run python -m app.cli reconcile-ledger
 
 mfa-enroll:  ## Enroll/rotate platform TOTP: make mfa-enroll email=admin@example.com
 	@test -n "$(email)" || (echo "Usage: make mfa-enroll email=admin@example.com" && exit 1)
 	uv run python -m app.cli mfa-enroll --email "$(email)"
+
+# Signup leaves an account `pending` and emails a link; login refuses until it is
+# clicked. Locally that mail may bounce, land in spam, or go to a throwaway address,
+# leaving the account unreachable. This consumes a real token through the real
+# verification path -- so the subscription and audit row are created exactly as the
+# emailed link would create them.
+verify-user:  ## Verify a signup's email locally: make verify-user email=owner@example.com
+	@test -n "$(email)" || (echo "Usage: make verify-user email=owner@example.com" && exit 1)
+	uv run python -m app.cli verify-user --email "$(email)"
 
 openapi:  ## Regenerate openapi.json (the frontend generates its types from this)
 	uv run python scripts/dump_openapi.py

@@ -271,6 +271,44 @@ class Session(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
         identities from ever mixing.
     """
 
+    guardian_identity_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("guardian_identities.id", ondelete="CASCADE"),
+        index=True,
+    )
+    """The parent-portal identity this session belongs to. NULL for the other two.
+
+    =========================================================================
+    A THIRD PRINCIPAL IN THE SAME TABLE, FOR THE REASON THE SECOND ONE IS HERE
+    =========================================================================
+        Guardians authenticate by phone into their own identity table and hold no
+        membership -- but their sessions need EXACTLY the machinery this table
+        already implements: opaque refresh tokens, rotation, family-based reuse
+        detection, revocation, and a single place `logout everywhere` can read.
+
+        A separate `guardian_sessions` table would mean a second copy of the most
+        security-sensitive logic in the system, exercised by the least-tested surface.
+        One table, one implementation, and the CHECK below keeps the three identities
+        from ever mixing.
+    """
+
+    guardian_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("guardians.id", ondelete="CASCADE"),
+        index=True,
+    )
+    """Which organization's records this portal session is acting as (`grd`).
+
+    The exact analogue of `membership_id` below, and it exists for the same reason:
+    without it, rotating a refresh token would have to GUESS which of a parent's
+    school groups the session belonged to. Guessing wrong shows a father his other
+    child's school's fee balance, so the alternative to this column is forcing a
+    fresh SMS every fifteen minutes for every parent with children in two groups.
+
+    NULL for the window between verifying the code and choosing a group, and for the
+    other two principal types.
+    """
+
     membership_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("memberships.id", ondelete="CASCADE"),
@@ -305,12 +343,18 @@ class Session(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     user_agent: Mapped[str | None] = mapped_column(String(400))
 
     __table_args__ = (
-        # EXACTLY ONE principal per session. Without this, a row with both ids set
-        # would be a session that is simultaneously a tenant user and a platform
-        # operator -- and whichever branch of the refresh logic ran first would
-        # decide which. A row with neither would be an orphan nobody can revoke.
+        # EXACTLY ONE principal per session. Without this, a row with two ids set
+        # would be a session that is simultaneously a tenant user, a platform operator
+        # and a parent -- and whichever branch of the refresh logic ran first would
+        # decide which. A row with none would be an orphan nobody can revoke.
+        #
+        # Written as a SUM rather than as chained `<>` because `a <> b <> c` does not
+        # mean "exactly one" in SQL: with all three true it evaluates to true, which is
+        # precisely the row this constraint exists to reject.
         CheckConstraint(
-            "(user_id IS NOT NULL) <> (platform_admin_id IS NOT NULL)",
+            "(CASE WHEN user_id IS NOT NULL THEN 1 ELSE 0 END)"
+            " + (CASE WHEN platform_admin_id IS NOT NULL THEN 1 ELSE 0 END)"
+            " + (CASE WHEN guardian_identity_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="exactly_one_principal",
         ),
         # The refresh hot path: look the presented token up by digest. Unique because
@@ -320,6 +364,13 @@ class Session(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
         Index("ix_sessions_family_id_revoked_at", "family_id", "revoked_at"),
         # "Show me this user's active sessions" and `logout-all`.
         Index("ix_sessions_user_id_revoked_at", "user_id", "revoked_at"),
+        # The guardian equivalent: "log this parent out everywhere" and the portal's
+        # own session list.
+        Index(
+            "ix_sessions_guardian_identity_id_revoked_at",
+            "guardian_identity_id",
+            "revoked_at",
+        ),
         Index("ix_sessions_expires_at", "expires_at"),  # purge job
     )
 

@@ -9,6 +9,8 @@ into another tenant, or self-approve an application.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import EmailStr, Field
@@ -73,6 +75,32 @@ class StudentUpdate(BaseSchema):
     enrolled_on: date | None = None
 
 
+class FeeStandingFilter(StrEnum):
+    """How the students list may be narrowed by what a family owes.
+
+    A three-state filter rather than a `pending: bool`, because the third state is the
+    one an accountant actually asks for -- "who can I clear for the trip" is a real
+    question and `pending=false` does not express it in a way the URL survives.
+
+    OVERDUE is a strict subset of PENDING: money that is late is also money owed.
+    """
+
+    PENDING = "pending"
+    """Any live challan still carrying a balance, due or not."""
+
+    OVERDUE = "overdue"
+    """Only balances past their due date."""
+
+    CLEAR = "clear"
+    """Nothing outstanding -- INCLUDING students who have never been billed.
+
+    Deliberately not called "paid": a child enrolled last week with no challan yet
+    has paid nothing, and would be the most confusing possible entry in a list
+    labelled that way. The question this answers is "does this family owe us
+    anything", and for them the answer is no.
+    """
+
+
 class StudentRead(BaseSchema):
     id: UUID
     admission_number: str
@@ -89,10 +117,77 @@ class StudentRead(BaseSchema):
     emergency_contact_name: str | None
     emergency_contact_phone: str | None
     section_id: UUID | None
+    class_name: str | None
+    section_name: str | None
+    """Where this child actually sits, resolved for display.
+
+    `section_id` alone is unreadable, and a UUID in a table column is a lookup the
+    reader has to do by hand. Both are nullable because an APPLICANT has no seat yet
+    -- an admission is accepted before a section is chosen, and that gap is a real
+    state the list has to render rather than a missing value to hide.
+    """
     status: StudentStatus
     enrolled_on: date | None
     created_at: datetime
     updated_at: datetime
+
+
+class StudentDues(BaseSchema):
+    """What one student owes, under whichever fee filter was applied.
+
+    THE AMOUNT IS RELATIVE TO THE FILTER, and that is the point. Under
+    `fees=overdue` this is the LATE money only, not the full balance -- a family that
+    owes 13,000 of which 6,500 is past due appears as 6,500 on an overdue list.
+    Showing the full balance there would make every row look worse than it is, and an
+    office chasing a number the parent has not yet been asked for loses the argument.
+    """
+
+    amount: Decimal
+    currency: str
+
+    overdue_amount: Decimal
+    """How much of `amount` is past its due date. Zero means owed but not yet late.
+
+    Carried so the table can COLOUR the row: this project's palette reserves
+    saturated colour for status, and red is documented to mean something is wrong.
+    Owing money is not wrong -- being late is -- so red has to be driven by this
+    field and not merely by the presence of a balance.
+
+    It also earns its place under the `pending` filter, where the list is a MIXTURE
+    of late and not-yet-due families. Without the split, every row on that screen
+    would look identical and the colour would distinguish nothing.
+    """
+
+    periods: list[str]
+    """Which billing periods make up the amount, oldest debt first.
+
+    FREE TEXT, straight from `fee_vouchers.period_label` -- "2026-08", but equally
+    "Term 1" or "Annual", because monthly, termly and annual schools all exist. The
+    frontend prettifies the `YYYY-MM` shape into a month and prints anything else
+    verbatim; parsing it as a date here would turn a termly school's challan into a
+    crash or, worse, a wrong month.
+    """
+
+
+class StudentListRow(StudentRead):
+    """A student as the DIRECTORY shows them: the record plus what they owe.
+
+    Separate from `StudentRead` rather than two more nullable fields on it, because
+    `dues` cannot be populated anywhere else. `create`, `get` and `update` answer
+    "what is this record", have no fee filter to be relative to, and would carry the
+    field as a permanent null that every caller learns to ignore. Same split, and the
+    same reason, as `AttendanceSessionRead` and `AttendanceSessionDetail`.
+    """
+
+    dues: StudentDues | None
+    """Null unless the request applied a `fees` filter -- which requires `fee:read`.
+
+    That is deliberately the ONLY route by which an amount reaches this endpoint. A
+    student list that always carried balances would hand every holder of
+    `student:read` -- the seeded teacher role among them -- the money owed by each
+    child's family, which is a considerably larger disclosure than the one-bit filter
+    that is already gated.
+    """
 
 
 class AdmissionResponse(BaseSchema):
@@ -103,3 +198,127 @@ class AdmissionResponse(BaseSchema):
     admission_number: str
     status: StudentStatus
     detail: str = "Application received. The school will contact you."
+
+
+# ---------------------------------------------------------------------------
+# Enrollment history
+# ---------------------------------------------------------------------------
+
+
+class EnrollmentRead(BaseSchema):
+    id: UUID
+    student_id: UUID
+    academic_year_id: UUID
+    class_id: UUID
+    section_id: UUID | None
+    roll_number: str | None
+    enrolled_on: date
+    left_on: date | None
+    is_promotion: bool
+    notes: str | None
+    created_at: datetime
+
+
+class EnrollmentPlacement(BaseSchema):
+    """Seat a student in a section for a year, closing whatever came before.
+
+    `class_id` is absent on purpose: a section belongs to exactly one class, so
+    accepting both would let a caller submit a pair that disagree, and the service
+    would have to pick a winner. It is derived from the section.
+    """
+
+    section_id: UUID
+    academic_year_id: UUID | None = Field(
+        default=None,
+        description="Defaults to the school's current academic year.",
+    )
+    roll_number: str | None = Field(
+        default=None,
+        max_length=16,
+        description="Omit to take the next free number in the section.",
+    )
+    effective_date: date | None = Field(
+        default=None, description="Defaults to today. The day the new placement starts."
+    )
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class PromotionRequest(BaseSchema):
+    """Move a whole section up into the next year (PDF: end-of-year rollover)."""
+
+    from_section_id: UUID
+    to_section_id: UUID
+    to_academic_year_id: UUID
+    effective_date: date | None = Field(
+        default=None, description="Defaults to the target year's start date."
+    )
+    student_ids: list[UUID] | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Restrict the promotion to these students. Omit to promote everyone "
+            "currently seated in the source section -- the usual case. Supplying a "
+            "subset is how a school holds a student back a year."
+        ),
+    )
+    reset_roll_numbers: bool = Field(
+        default=True,
+        description=(
+            "Re-number the promoted students 1..N in the target section. Schools "
+            "re-number every year in register order; keeping last year's numbers "
+            "leaves gaps wherever a student was held back or left."
+        ),
+    )
+
+
+class PromotionSkip(BaseSchema):
+    """One student the promotion could not move, and why.
+
+    Returned rather than raised. A promotion is a bulk action over a whole section,
+    and aborting the entire run because one student is already seated in the target
+    would make the feature unusable exactly when it is retried after a partial
+    failure.
+    """
+
+    student_id: UUID
+    admission_number: str
+    full_name: str
+    reason: str
+
+
+class PromotionResult(BaseSchema):
+    promoted: int
+    skipped: list[PromotionSkip]
+    from_section_id: UUID
+    to_section_id: UUID
+    to_academic_year_id: UUID
+
+
+class EnrollmentBackfillResult(BaseSchema):
+    """What `POST /academic-years/{id}/enrollments/backfill` did.
+
+    Exists because the migration that created `student_enrollments` deliberately did
+    not populate it: an enrollment needs an academic year, and no school had one
+    until it created one. This is that catch-up, run once per school against an
+    explicit year.
+    """
+
+    academic_year_id: UUID
+    opened: int
+    already_enrolled: int
+    unplaced: int
+    """Active students with no section. They get no enrollment row -- a placement
+    that names no section is not a placement -- and are counted so the registrar
+    knows how many students still need seating."""
+
+
+class SectionRosterEntry(BaseSchema):
+    """One line of a class register, in roll order."""
+
+    student_id: UUID
+    admission_number: str
+    full_name: str
+    roll_number: str | None
+    status: StudentStatus
+    photo_url: str | None
+    guardian_phone: str | None

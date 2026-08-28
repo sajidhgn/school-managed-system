@@ -164,11 +164,13 @@ class InvitationService:
             raise ValidationError(
                 "That role does not belong to this school.", code="ROLE_SCOPE_MISMATCH"
             )
-        if role.code == "owner":
-            # Ownership is transferred, never invited. An owner invitation would
-            # create a second billing controller with no audit of a handover.
+        if role.code == "principal":
+            # The principal role is transferred, never invited. Inviting into it would
+            # create a second billing controller with no audit of a handover. It is
+            # org-level, so the scope check above already rejects it -- this is the
+            # explicit, named refusal so the API says why rather than "wrong school".
             raise ValidationError(
-                "Ownership cannot be granted by invitation. Use transfer ownership.",
+                "The principal role cannot be granted by invitation. Use transfer ownership.",
                 code="CANNOT_INVITE_OWNER",
             )
 

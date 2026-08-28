@@ -9,47 +9,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.integration.conftest import API, STRONG_PASSWORD, Tenant, latest_token
+from tests.integration.conftest import (
+    API,
+    STRONG_PASSWORD,
+    Tenant,
+    latest_token,
+    make_campus_head,
+)
 
-
-async def _make_principal(tenant: Tenant, mailbox: list[Any], email: str) -> str:
-    """Invite someone as principal of the tenant's school and return their token.
-
-    Goes through the real invitation flow rather than inserting a membership, so the
-    principal used by these tests is provisioned exactly as a real one would be.
-    """
-    roles = await tenant.get(f"{API}/schools/{tenant.school_id}/roles")
-    principal_role = next(r for r in roles.json() if r["code"] == "principal")
-
-    invited = await tenant.post(
-        f"{API}/schools/{tenant.school_id}/invitations",
-        json={"email": email, "full_name": "Test Principal", "role_id": principal_role["id"]},
-    )
-    assert invited.status_code == 201, invited.text
-
-    # Accept as an ANONYMOUS caller. The accept endpoint checks any session it finds
-    # against the invited address, so a lingering cookie from another account would
-    # (correctly) be refused with INVITATION_EMAIL_MISMATCH -- see
-    # `test_invitations.py` for the test that asserts that guard deliberately.
-    tenant.client.cookies.clear()
-    accepted = await tenant.client.post(
-        f"{API}/invitations/accept",
-        json={
-            "token": latest_token(mailbox),
-            "full_name": "Test Principal",
-            "password": STRONG_PASSWORD,
-        },
-    )
-    assert accepted.status_code == 200, accepted.text
-    tenant.client.cookies.clear()
-
-    login = await tenant.client.post(
-        f"{API}/auth/login",
-        json={"email": email, "password": STRONG_PASSWORD},
-        headers={"X-Token-Transport": "body"},
-    )
-    assert login.status_code == 200, login.text
-    return login.headers["X-Access-Token"]
+# The subject of most of these tests is a SCHOOL-SCOPED actor with broad powers --
+# the thing the seeded school `principal` role used to be. That role is gone: there
+# is one `principal` and it is org-level. `make_campus_head` builds the equivalent as
+# a custom role, which is how a customer would, and is what these invariants must
+# still hold against.
 
 
 # ---------------------------------------------------------------------------
@@ -62,23 +34,23 @@ async def test_principal_cannot_grant_a_permission_it_does_not_hold(
 ) -> None:
     """Spec §12: "Principal grants a permission it does not hold -> 403."
 
-    THE ESCALATION THIS STOPS: a principal creates a role holding `billing:manage`,
+    THE ESCALATION THIS STOPS: a campus head creates a role holding `billing:manage`,
     assigns it to themselves, and now controls the organization's money. Without the
     subset check, "you may configure roles" silently means "you may grant yourself
     anything".
     """
-    principal_token = await _make_principal(tenant, mailbox, "principal@test.example")
+    head_token = await make_campus_head(tenant, mailbox, "campus-head@test.example")
 
     response = await tenant.client.post(
         f"{API}/schools/{tenant.school_id}/roles",
         json={
             "code": "sneaky_role",
             "name": "Sneaky Role",
-            # The principal deliberately does NOT hold this -- it is org-scoped and
-            # belongs to the owner alone.
+            # A school-scoped actor deliberately does NOT hold this -- it is
+            # org-scoped and belongs to the principal alone.
             "permissions": ["billing:manage"],
         },
-        headers={"Authorization": f"Bearer {principal_token}"},
+        headers={"Authorization": f"Bearer {head_token}"},
     )
 
     assert response.status_code in (403, 422), response.text
@@ -91,30 +63,163 @@ async def test_principal_cannot_invite_into_a_role_it_could_not_grant(
 ) -> None:
     """Spec §7.1 step 2: the escalation guard applies to invitations too.
 
-    THE ESCALATION THIS STOPS: a principal who cannot grant `billing:manage`
+    THE ESCALATION THIS STOPS: a campus head who cannot grant `billing:manage`
     directly simply invites a fresh account into a role that already has it, then
     logs in as that account. Invitation would become an escalation backdoor -- the
     same privilege gain through a different door.
 
-    Here the principal attempts to invite someone into the ORG-LEVEL owner role.
+    Here they attempt to invite someone into the ORG-LEVEL principal role.
     """
-    principal_token = await _make_principal(tenant, mailbox, "principal@test.example")
+    head_token = await make_campus_head(tenant, mailbox, "campus-head@test.example")
 
     roles = await tenant.get(f"{API}/schools/{tenant.school_id}/roles")
-    owner_role = next((r for r in roles.json() if r["code"] == "owner"), None)
-    assert owner_role is not None, "owner role should be visible but unassignable"
+    principal_role = next((r for r in roles.json() if r["code"] == "principal"), None)
+    assert principal_role is not None, "the principal role should be visible but unassignable"
+    assert principal_role["school_id"] is None, "the principal role is org-level"
 
     response = await tenant.client.post(
         f"{API}/schools/{tenant.school_id}/invitations",
         json={
             "email": "accomplice@test.example",
             "full_name": "Accomplice",
-            "role_id": owner_role["id"],
+            "role_id": principal_role["id"],
         },
-        headers={"Authorization": f"Bearer {principal_token}"},
+        headers={"Authorization": f"Bearer {head_token}"},
     )
 
     assert response.status_code in (403, 422), response.text
+
+
+async def test_campus_head_can_create_member_with_password_in_own_school(
+    tenant: Tenant, mailbox: list[Any]
+) -> None:
+    head_token = await make_campus_head(tenant, mailbox, "manual-head@test.example")
+    headers = {"Authorization": f"Bearer {head_token}"}
+    roles = await tenant.client.get(f"{API}/schools/{tenant.school_id}/roles", headers=headers)
+    teacher = next(role for role in roles.json() if role["code"] == "teacher")
+
+    created = await tenant.client.post(
+        f"{API}/schools/{tenant.school_id}/members",
+        json={
+            "email": "manual-teacher@test.example",
+            "full_name": "Manual Teacher",
+            "password": STRONG_PASSWORD,
+            "role_id": teacher["id"],
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["school_id"] == str(tenant.school_id)
+    assert created.json()["role_code"] == "teacher"
+
+    tenant.client.cookies.clear()
+    login = await tenant.client.post(
+        f"{API}/auth/login",
+        json={"email": "manual-teacher@test.example", "password": STRONG_PASSWORD},
+        headers={"X-Token-Transport": "body"},
+    )
+    assert login.status_code == 200, login.text
+
+
+async def test_campus_head_cannot_create_member_in_another_branch(
+    tenant: Tenant, mailbox: list[Any]
+) -> None:
+    second = await tenant.post(f"{API}/schools", json={"name": "Other Branch", "code": "OTHER"})
+    assert second.status_code == 201, second.text
+    second_school_id = second.json()["id"]
+    second_roles = await tenant.get(f"{API}/schools/{second_school_id}/roles")
+    teacher = next(role for role in second_roles.json() if role["code"] == "teacher")
+    head_token = await make_campus_head(tenant, mailbox, "scoped-head@test.example")
+
+    response = await tenant.client.post(
+        f"{API}/schools/{second_school_id}/members",
+        json={
+            "email": "wrong-branch@test.example",
+            "full_name": "Wrong Branch",
+            "password": STRONG_PASSWORD,
+            "role_id": teacher["id"],
+        },
+        headers={"Authorization": f"Bearer {head_token}"},
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "SCHOOL_SCOPE_VIOLATION"
+
+
+async def test_principal_can_assign_teacher_to_multiple_branches(tenant: Tenant) -> None:
+    """Staffing across campuses is the ORG-LEVEL principal's job.
+
+    Placing someone at a campus other than your own is inherently a cross-campus
+    decision, so it needs a caller whose scope covers both. The principal is the only
+    system role that qualifies -- see `test_campus_head_cannot_assign_branches` for
+    the other half.
+    """
+    second = await tenant.post(f"{API}/schools", json={"name": "North Branch", "code": "NORTH"})
+    assert second.status_code == 201, second.text
+    second_school_id = second.json()["id"]
+
+    roles = await tenant.get(f"{API}/schools/{tenant.school_id}/roles")
+    teacher = next(role for role in roles.json() if role["code"] == "teacher")
+    created = await tenant.post(
+        f"{API}/schools/{tenant.school_id}/members",
+        json={
+            "email": "multi-branch-teacher@test.example",
+            "full_name": "Multi Branch Teacher",
+            "password": STRONG_PASSWORD,
+            "role_id": teacher["id"],
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    assigned = await tenant.post(
+        f"{API}/schools/{tenant.school_id}/members/{created.json()['membership_id']}/branches",
+        json={"school_ids": [second_school_id]},
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert len(assigned.json()) == 1
+    assert assigned.json()[0]["school_id"] == second_school_id
+    assert assigned.json()[0]["role_code"] == "teacher"
+
+    members = await tenant.get(f"{API}/schools/{second_school_id}/members")
+    assert members.status_code == 200, members.text
+    assert any(member["email"] == "multi-branch-teacher@test.example" for member in members.json())
+
+
+async def test_campus_head_cannot_assign_branches(tenant: Tenant, mailbox: list[Any]) -> None:
+    """A school-scoped actor cannot place staff at a campus it does not administer.
+
+    THE ESCALATION THIS STOPS: branch assignment CREATES a membership at the target
+    school. Left open to a school-scoped caller, the head of Campus A could staff
+    Campus B -- reaching into another campus's roster through a route whose own
+    school id looks innocuous.
+    """
+    second = await tenant.post(f"{API}/schools", json={"name": "East Branch", "code": "EAST"})
+    assert second.status_code == 201, second.text
+    second_school_id = second.json()["id"]
+
+    head_token = await make_campus_head(tenant, mailbox, "branch-head@test.example")
+    headers = {"Authorization": f"Bearer {head_token}"}
+
+    roles = await tenant.client.get(f"{API}/schools/{tenant.school_id}/roles", headers=headers)
+    teacher = next(role for role in roles.json() if role["code"] == "teacher")
+    created = await tenant.client.post(
+        f"{API}/schools/{tenant.school_id}/members",
+        json={
+            "email": "stuck-teacher@test.example",
+            "full_name": "Stuck Teacher",
+            "password": STRONG_PASSWORD,
+            "role_id": teacher["id"],
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+
+    response = await tenant.client.post(
+        f"{API}/schools/{tenant.school_id}/members/{created.json()['membership_id']}/branches",
+        json={"school_ids": [second_school_id]},
+        headers=headers,
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "PRINCIPAL_REQUIRED"
 
 
 # ---------------------------------------------------------------------------
@@ -122,24 +227,25 @@ async def test_principal_cannot_invite_into_a_role_it_could_not_grant(
 # ---------------------------------------------------------------------------
 
 
-async def test_principal_cannot_edit_its_own_role(tenant: Tenant, mailbox: list[Any]) -> None:
+async def test_principal_cannot_edit_its_own_role(tenant: Tenant) -> None:
     """Spec §12: "Principal edits its own role -> 403 (`is_editable = false`)."
 
-    THE ESCALATION THIS STOPS: invariant 1 alone does not cover this. A principal
+    THE ESCALATION THIS STOPS: invariant 1 alone does not cover this. The principal
     editing the PRINCIPAL role is only granting permissions it already holds, so the
     subset check passes -- but the edit still changes what every principal in the
-    organization can do, and locks in that power against a future revocation.
-    """
-    principal_token = await _make_principal(tenant, mailbox, "principal@test.example")
+    organization can do, and locks that in against a future revocation.
 
+    Driven by the principal itself, which is the only caller that could pass the
+    scope guard on an org-level role -- and therefore the only one this lock is for.
+    """
     roles = await tenant.get(f"{API}/schools/{tenant.school_id}/roles")
     principal_role = next(r for r in roles.json() if r["code"] == "principal")
     assert principal_role["is_editable"] is False
+    assert principal_role["school_id"] is None
 
-    response = await tenant.client.put(
+    response = await tenant.put(
         f"{API}/schools/{tenant.school_id}/roles/{principal_role['id']}/permissions",
         json={"codes": ["member:read"]},
-        headers={"Authorization": f"Bearer {principal_token}"},
     )
 
     assert response.status_code == 403, response.text
@@ -154,9 +260,9 @@ async def test_principal_cannot_edit_its_own_role(tenant: Tenant, mailbox: list[
 async def test_org_scoped_permission_on_a_school_role_is_422(tenant: Tenant) -> None:
     """Spec §12: "School role granted `school:create` (org-scoped) -> 422."
 
-    THE ESCALATION THIS STOPS: `school:create` on a school-scoped role lets a
-    principal manufacture campuses the organization has not paid for. `billing:*`
-    would let a teacher at one campus change the plan for the whole group.
+    THE ESCALATION THIS STOPS: `school:create` on a school-scoped role lets a campus
+    role manufacture campuses the organization has not paid for. `billing:*` would
+    let a teacher at one campus change the plan for the whole group.
 
     422, not 403: the request is not forbidden, it is incoherent. `billing:manage`
     scoped to a single campus has no meaning, whoever asks for it.
@@ -181,20 +287,20 @@ async def test_school_scoped_actor_cannot_touch_another_schools_roles(
 ) -> None:
     """Spec §12: "Teacher of School 1 requesting School 2 in the same org -> 403."
 
-    403 here, not 404, and the difference is deliberate: a principal already knows
-    their organization operates other campuses, so hiding School 2's existence would
-    be pointless obfuscation that only confuses someone who picked the wrong menu.
+    403 here, not 404, and the difference is deliberate: staff already know their
+    organization operates other campuses, so hiding School 2's existence would be
+    pointless obfuscation that only confuses someone who picked the wrong menu.
     Cross-ORGANIZATION access is the case that returns 404.
     """
     second = await tenant.post(f"{API}/schools", json={"name": "Second Campus", "code": "SECOND"})
     assert second.status_code == 201, second.text
-    second_school_id = second.json()["school"]["id"]
+    second_school_id = second.json()["id"]
 
-    principal_token = await _make_principal(tenant, mailbox, "principal@test.example")
+    head_token = await make_campus_head(tenant, mailbox, "campus-head@test.example")
 
     response = await tenant.client.get(
         f"{API}/schools/{second_school_id}/roles",
-        headers={"Authorization": f"Bearer {principal_token}"},
+        headers={"Authorization": f"Bearer {head_token}"},
     )
 
     assert response.status_code == 403, response.text
@@ -202,14 +308,14 @@ async def test_school_scoped_actor_cannot_touch_another_schools_roles(
 
 
 # ---------------------------------------------------------------------------
-# Invariant 4: the last owner
+# Invariant 4: the last principal
 # ---------------------------------------------------------------------------
 
 
 async def test_removing_the_last_owner_is_409(tenant: Tenant) -> None:
-    """Spec §12: "Removing the last owner -> 409."
+    """Spec §12: "Removing the last principal -> 409."
 
-    WHY THIS ONE MATTERS MOST OPERATIONALLY: an organization with no owner has
+    WHY THIS ONE MATTERS MOST OPERATIONALLY: an organization with no principal has
     nobody who can pay for it, create schools, or appoint a replacement. There is no
     in-app recovery -- it takes a database operator. Every other invariant here
     prevents someone gaining power; this one prevents an organization losing it
@@ -218,8 +324,8 @@ async def test_removing_the_last_owner_is_409(tenant: Tenant) -> None:
     members = await tenant.get(f"{API}/schools/{tenant.school_id}/members")
     assert members.status_code == 200
 
-    # The owner's ORG-LEVEL membership is not in a school list, so drive the guard
-    # through ownership transfer to a non-existent member instead: the same
+    # The principal's ORG-LEVEL membership is not in a school list, so drive the
+    # guard through ownership transfer to a non-existent member instead: the same
     # `_assert_not_last_owner` path, reached the way a UI would reach it.
     response = await tenant.post(
         f"{API}/org/transfer-ownership",
@@ -235,18 +341,18 @@ async def test_user_cannot_remove_their_own_membership(tenant: Tenant, mailbox: 
     locking themselves out of an organization they alone administer. Leaving is a
     separate operation with its own confirmation.
     """
-    principal_token = await _make_principal(tenant, mailbox, "principal@test.example")
+    head_token = await make_campus_head(tenant, mailbox, "campus-head@test.example")
 
     members = await tenant.client.get(
         f"{API}/schools/{tenant.school_id}/members",
-        headers={"Authorization": f"Bearer {principal_token}"},
+        headers={"Authorization": f"Bearer {head_token}"},
     )
     assert members.status_code == 200
-    own = next(m for m in members.json() if m["email"] == "principal@test.example")
+    own = next(m for m in members.json() if m["email"] == "campus-head@test.example")
 
     response = await tenant.client.delete(
         f"{API}/schools/{tenant.school_id}/members/{own['membership_id']}",
-        headers={"Authorization": f"Bearer {principal_token}"},
+        headers={"Authorization": f"Bearer {head_token}"},
     )
 
     assert response.status_code == 409, response.text
@@ -388,14 +494,14 @@ async def test_suspended_member_is_refused_immediately(tenant: Tenant, mailbox: 
     exactly why it does so rather than trusting the token's claims. This is the test
     that makes that cost worth paying.
     """
-    principal_token = await _make_principal(tenant, mailbox, "principal@test.example")
-    headers = {"Authorization": f"Bearer {principal_token}"}
+    head_token = await make_campus_head(tenant, mailbox, "campus-head@test.example")
+    headers = {"Authorization": f"Bearer {head_token}"}
 
     ok = await tenant.client.get(f"{API}/schools/{tenant.school_id}/members", headers=headers)
     assert ok.status_code == 200
 
     members = await tenant.get(f"{API}/schools/{tenant.school_id}/members")
-    target = next(m for m in members.json() if m["email"] == "principal@test.example")
+    target = next(m for m in members.json() if m["email"] == "campus-head@test.example")
 
     suspended = await tenant.patch(
         f"{API}/schools/{tenant.school_id}/members/{target['membership_id']}",

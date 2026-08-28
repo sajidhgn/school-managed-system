@@ -4,16 +4,28 @@ import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/misc";
-import { TableCell, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { ApiError, errorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/utils";
 
-/** Skeleton rows sized to the column count, so the layout does not jump. */
+/**
+ * Skeleton rows sized to the column count, so the layout does not jump.
+ *
+ * RETURNS BARE `<tr>` ELEMENTS, so it belongs INSIDE a `<TableBody>` and nowhere
+ * else. Dropped into a card or a plain div it produces `<tr>` under `<div>`, which
+ * React reports as a hydration error and the browser silently unwraps — the rows
+ * render, so it looks fine and is broken.
+ *
+ * When the table itself has not been rendered yet — the usual card-level "still
+ * loading" state, where the header row is inside the same branch as the data —
+ * reach for {@link TableCardSkeleton} instead. That is the shape this used to be
+ * misused as.
+ */
 export function TableSkeleton({ columns, rows = 6 }: { columns: number; rows?: number }) {
   return (
     <>
       {Array.from({ length: rows }).map((_, rowIndex) => (
-        <TableRow key={rowIndex}>
+        <TableRow key={rowIndex} aria-hidden>
           {Array.from({ length: columns }).map((__, colIndex) => (
             <TableCell key={colIndex}>
               <Skeleton className="h-4 w-full max-w-32" />
@@ -22,6 +34,27 @@ export function TableSkeleton({ columns, rows = 6 }: { columns: number; rows?: n
         </TableRow>
       ))}
     </>
+  );
+}
+
+/**
+ * The same skeleton rows, carrying their own table.
+ *
+ * For the common case where a card renders EITHER the loading state OR the whole
+ * table — there is no `<TableBody>` to put rows into yet, so the rows have to bring
+ * one. Sized to the column count for the same reason: the real table drops into the
+ * same space without the card resizing under the reader.
+ *
+ * `aria-hidden`, because a table of empty cells announced to a screen reader is
+ * worse than silence. The surrounding card is what says "loading".
+ */
+export function TableCardSkeleton({ columns, rows = 6 }: { columns: number; rows?: number }) {
+  return (
+    <Table aria-hidden>
+      <TableBody>
+        <TableSkeleton columns={columns} rows={rows} />
+      </TableBody>
+    </Table>
   );
 }
 

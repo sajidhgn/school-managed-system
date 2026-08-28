@@ -8,8 +8,7 @@ import { requireSchoolContext } from "@/lib/auth/session";
 export const metadata: Metadata = { title: "Roles" };
 
 export default async function RolesPage() {
-  const user = await requireSchoolContext();
-  const schoolId = user.school_id!;
+  const { user, schoolId } = await requireSchoolContext();
 
   const [roles, catalog] = await Promise.all([
     serverGetRequired<RoleRead[]>(`/schools/${schoolId}/roles`),

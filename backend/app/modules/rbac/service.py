@@ -17,7 +17,7 @@ RESPONSIBILITY
 INTERACTIONS
     * `catalog.py` for the permission catalog and scope rules.
     * `core/cache.py` to invalidate the permission cache on change.
-    * `tenancy/service.py::count_active_owners` for the last-owner guard.
+    * `tenancy/service.py::count_active_owners` for the last-principal guard.
 
 =============================================================================
 THE FOUR INVARIANTS, AND WHY EACH ONE IS NECESSARY
@@ -27,7 +27,7 @@ THE FOUR INVARIANTS, AND WHY EACH ONE IS NECESSARY
        themselves, and now controls the organization's money. The check is one line;
        its absence is total.
 
-    2. NO EDITING LOCKED ROLES.  `owner` and `principal` have `is_editable = false`.
+    2. NO EDITING LOCKED ROLES.  `principal` has `is_editable = false`.
        Invariant 1 alone does not cover this: a principal editing the PRINCIPAL role
        is granting permissions it already holds, so rule 1 passes -- but the edit
        still changes what every principal in the organization can do, including
@@ -38,10 +38,10 @@ THE FOUR INVARIANTS, AND WHY EACH ONE IS NECESSARY
        Otherwise a principal at one campus edits another campus's roles, or grants
        `school:create` to a teacher.
 
-    4. THE LAST OWNER IS IMMOVABLE. An organization with no owner has no one who can
-       pay for it, create schools, or appoint a replacement. There is no in-app
-       recovery -- it needs a database operator. So the last active owner membership
-       cannot be removed, suspended, or demoted.
+    4. THE LAST PRINCIPAL IS IMMOVABLE. An organization with no principal has no one
+       who can pay for it, create schools, or appoint a replacement. There is no
+       in-app recovery -- it needs a database operator. So the last active org-level
+       principal membership cannot be removed, suspended, or demoted.
 """
 
 from __future__ import annotations
@@ -63,8 +63,11 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
+from app.core.passwords import validate_password
+from app.core.security import hash_password
+from app.modules.auth.models import User, UserStatus
 from app.modules.billing.entitlements import EntitlementService
-from app.modules.rbac.catalog import scope_violations, unknown_codes
+from app.modules.rbac.catalog import TEACHING_PERMISSIONS, scope_violations, unknown_codes
 from app.modules.rbac.models import (
     Membership,
     MembershipStatus,
@@ -73,6 +76,7 @@ from app.modules.rbac.models import (
     RolePermission,
     SystemRole,
 )
+from app.modules.tenancy.models import School
 from app.modules.tenancy.service import count_active_owners
 
 logger = get_logger(__name__)
@@ -92,10 +96,10 @@ class RbacService:
     def _assert_scope(self, ctx: AuthContext, role: Role) -> None:
         """Invariant 3: an actor may only touch roles inside its own scope.
 
-        An org-level actor (the owner) may touch any role in the organization. A
+        An org-level actor (the principal) may touch any role in the organization. A
         school-scoped actor may touch only roles belonging to its own school -- and
-        specifically NOT org-level roles, which is what stops a principal from
-        editing the owner role.
+        specifically NOT org-level roles, which is what stops a campus role from
+        editing the principal role.
         """
         if ctx.is_org_level:
             return
@@ -162,10 +166,10 @@ class RbacService:
     async def list_roles(self, *, school_id: UUID | None) -> list[Role]:
         """Roles for one school, plus the organization's org-level roles.
 
-        Org-level roles are included so the role picker can show `owner` -- greyed
-        out and unassignable, but visible, because a principal who cannot see that
-        the owner role exists cannot understand why they are unable to grant billing
-        access.
+        Org-level roles are included so the role picker can show `principal` --
+        greyed out and unassignable, but visible, because someone who cannot see that
+        the principal role exists cannot understand why they are unable to grant
+        billing access.
         """
         stmt = select(Role).where(
             (Role.school_id == school_id) | (Role.school_id.is_(None))
@@ -428,6 +432,122 @@ class RbacService:
             stmt = stmt.where(Membership.school_id == school_id)
         return list((await self.session.execute(stmt)).scalars().all())
 
+    async def list_teaching_staff(self, *, school_id: UUID) -> list[Membership]:
+        """Active staff of one branch who run a classroom, for the teacher pickers.
+
+        SCOPED TO ONE BRANCH ON PURPOSE. A section belongs to a class, which belongs
+        to a campus; offering a teacher from another campus would produce a section
+        nobody on site can take the register for. Note this filters `school_id`
+        strictly, so ORG-LEVEL memberships are excluded -- which is also what keeps
+        the principal (whose role holds every permission, including the teaching ones)
+        out of a list of teachers.
+
+        SUSPENDED MEMBERS ARE EXCLUDED, but a suspended teacher already named on a
+        section stays named: this endpoint feeds the picker, it does not audit
+        existing assignments. Clearing them is a separate decision, and making it a
+        side effect of suspending someone mid-term would silently strip the register
+        from a class that still meets tomorrow.
+        """
+        teaching_roles = select(RolePermission.role_id).where(
+            RolePermission.permission_code.in_(TEACHING_PERMISSIONS)
+        )
+        stmt = (
+            select(Membership)
+            .options(joinedload(Membership.user), joinedload(Membership.role))
+            .join(User, Membership.user_id == User.id)
+            .where(
+                Membership.deleted_at.is_(None),
+                Membership.school_id == school_id,
+                Membership.status == MembershipStatus.ACTIVE,
+                Membership.role_id.in_(teaching_roles),
+            )
+            # Ordered here rather than in the browser: the dropdown is rendered from
+            # whatever arrives, and two clients sorting differently is a bug report
+            # nobody can reproduce.
+            .order_by(User.full_name)
+        )
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def create_member(
+        self,
+        *,
+        ctx: AuthContext,
+        school_id: UUID,
+        email: str,
+        full_name: str,
+        password: str,
+        role_id: UUID,
+    ) -> Membership:
+        """Provision a new account and school membership in one transaction."""
+        if ctx.school_id is not None and ctx.school_id != school_id:
+            raise AuthorizationError(
+                "You can only add members to your own school.", code="SCHOOL_SCOPE_VIOLATION"
+            )
+
+        role = await self.get_role(role_id)
+        if role.school_id != school_id:
+            raise ValidationError(
+                "That role does not belong to this school.", code="ROLE_SCOPE_MISMATCH"
+            )
+        if role.code == SystemRole.PRINCIPAL.value:
+            raise ValidationError(
+                "The principal role must be transferred, not assigned to a member.",
+                code="CANNOT_ASSIGN_OWNER",
+            )
+        self._assert_can_grant(ctx, await self.role_permission_codes(role_id))
+
+        existing_user = (
+            await self.session.execute(
+                select(User).where(User.email == email, User.deleted_at.is_(None))
+            )
+        ).scalar_one_or_none()
+        if existing_user is not None:
+            raise ConflictError(
+                "An account already exists for this email. Send an invitation instead.",
+                code="ACCOUNT_EXISTS_USE_INVITATION",
+                details={"field": "email"},
+            )
+
+        validate_password(password, user_inputs=[full_name, email])
+        await self.entitlements.check_and_consume(ctx.organization_id, "max_staff")
+
+        now = datetime.now(UTC)
+        user = User(
+            email=email,
+            full_name=full_name,
+            password_hash=hash_password(password),
+            status=UserStatus.ACTIVE,
+            email_verified_at=now,
+        )
+        self.session.add(user)
+        await self.session.flush()
+
+        membership = Membership(
+            organization_id=ctx.organization_id,
+            user_id=user.id,
+            school_id=school_id,
+            role_id=role_id,
+            status=MembershipStatus.ACTIVE,
+            is_primary=True,
+            invited_by_user_id=ctx.user_id,
+            joined_at=now,
+        )
+        self.session.add(membership)
+        await self.session.flush()
+
+        await record_audit(
+            self.session,
+            organization_id=ctx.organization_id,
+            school_id=school_id,
+            action=AuditAction.MEMBER_CREATED,
+            actor_user_id=ctx.user_id,
+            actor_membership_id=ctx.membership_id,
+            entity_type="membership",
+            entity_id=membership.id,
+            after={"email": email, "role": role.code, "method": "manual"},
+        )
+        return membership
+
     async def _get_member(self, ctx: AuthContext, membership_id: UUID) -> Membership:
         membership = (
             await self.session.execute(
@@ -445,13 +565,135 @@ class RbacService:
             )
         return membership
 
+    async def assign_member_branches(
+        self,
+        *,
+        ctx: AuthContext,
+        membership_id: UUID,
+        school_ids: set[UUID],
+    ) -> list[Membership]:
+        """Add branch memberships while preserving the member's current branches."""
+        # `principal` is the only org-level system role, so this reads as "only the
+        # principal, or a custom org-level role, may move staff between campuses".
+        # A school-scoped actor has no standing to place someone at another campus.
+        if not ctx.is_org_level:
+            raise AuthorizationError(
+                "Only a principal can assign members to school branches.",
+                code="PRINCIPAL_REQUIRED",
+            )
+        if not school_ids:
+            raise ValidationError("Choose at least one school branch.", code="BRANCH_REQUIRED")
+
+        source = await self._get_member(ctx, membership_id)
+        if source.school_id is None:
+            raise ValidationError(
+                "Organization-level members cannot be assigned as school staff.",
+                code="MEMBER_SCOPE_MISMATCH",
+            )
+
+        target_schools = set(
+            (
+                await self.session.execute(
+                    select(School.id).where(School.id.in_(school_ids), School.deleted_at.is_(None))
+                )
+            ).scalars()
+        )
+        missing = school_ids - target_schools
+        if missing:
+            raise NotFoundError("One or more school branches were not found.")
+
+        existing_school_ids = set(
+            (
+                await self.session.execute(
+                    select(Membership.school_id).where(
+                        Membership.user_id == source.user_id,
+                        Membership.school_id.in_(school_ids),
+                        Membership.deleted_at.is_(None),
+                    )
+                )
+            ).scalars()
+        )
+        new_school_ids = school_ids - existing_school_ids
+        if not new_school_ids:
+            raise ConflictError(
+                "This member already belongs to every selected branch.",
+                code="ALREADY_ASSIGNED_TO_BRANCHES",
+            )
+
+        roles = list(
+            (
+                await self.session.execute(
+                    select(Role).where(
+                        Role.school_id.in_(new_school_ids),
+                        Role.code == source.role.code,
+                    )
+                )
+            ).scalars()
+        )
+        role_by_school = {role.school_id: role for role in roles}
+        unavailable = new_school_ids - set(role_by_school)
+        if unavailable:
+            raise ValidationError(
+                "The member's role is not available in every selected branch.",
+                code="ROLE_NOT_AVAILABLE_IN_BRANCH",
+                details={"school_ids": sorted(str(value) for value in unavailable)},
+            )
+
+        for role in roles:
+            self._assert_can_grant(ctx, await self.role_permission_codes(role.id))
+        await self.entitlements.check_and_consume(
+            ctx.organization_id, "max_staff", delta=len(new_school_ids)
+        )
+
+        now = datetime.now(UTC)
+        created = [
+            Membership(
+                organization_id=ctx.organization_id,
+                user_id=source.user_id,
+                school_id=target_school_id,
+                role_id=role_by_school[target_school_id].id,
+                status=MembershipStatus.ACTIVE,
+                is_primary=False,
+                invited_by_user_id=ctx.user_id,
+                joined_at=now,
+            )
+            for target_school_id in sorted(new_school_ids, key=str)
+        ]
+        self.session.add_all(created)
+        await self.session.flush()
+
+        for membership in created:
+            await record_audit(
+                self.session,
+                organization_id=ctx.organization_id,
+                school_id=membership.school_id,
+                action=AuditAction.MEMBER_CREATED,
+                actor_user_id=ctx.user_id,
+                actor_membership_id=ctx.membership_id,
+                entity_type="membership",
+                entity_id=membership.id,
+                after={
+                    "user_id": str(source.user_id),
+                    "role": source.role.code,
+                    "method": "branch_assignment",
+                },
+            )
+        return created
+
     async def _assert_not_last_owner(self, membership: Membership) -> None:
-        """Invariant 4. Raises 409 when this is the organization's only owner."""
-        if membership.role.code != SystemRole.OWNER.value:
+        """Invariant 4. Raises 409 when this is the organization's only principal.
+
+        Scoped to ORG-LEVEL principal memberships. A school-scoped role, whatever it
+        is called, never carries billing and so can never be the organization's last
+        administrator.
+        """
+        if membership.school_id is not None:
+            return
+        if membership.role.code != SystemRole.PRINCIPAL.value:
             return
         if await count_active_owners(self.session, membership.organization_id) <= 1:
             raise ConflictError(
-                "This is the organization's only owner. Transfer ownership first.",
+                "This is the organization's only principal. Transfer ownership first.",
                 code="LAST_OWNER",
             )
 

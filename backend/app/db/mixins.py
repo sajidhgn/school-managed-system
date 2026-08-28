@@ -154,11 +154,11 @@ class SchoolScopedMixin:
     """Adds a nullable `school_id` -- the SOFT scope filter inside the tenant.
 
     NULLABLE, AND THAT IS THE POINT (spec §2.3)
-        `school_id IS NULL` means "org-level": the owner's membership, an org-level
-        role, an invitation to the organization rather than to one campus. A
-        NOT NULL column here would make the owner unrepresentable, which is exactly
-        the conflation between "owner" and "principal" that spec decision D2 exists
-        to prevent.
+        `school_id IS NULL` means "org-level": the principal's membership, an
+        org-level role, an invitation to the organization rather than to one campus.
+        A NOT NULL column here would make the principal unrepresentable, forcing them
+        to hold one membership per campus -- the same person listed once per school,
+        with no row that means "runs the organization".
 
     NOT AN RLS KEY
         No policy compares against this column. It is enforced by the permission

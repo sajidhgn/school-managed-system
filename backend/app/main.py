@@ -1,27 +1,3 @@
-"""Application entry point and composition root.
-
-WHY THIS FILE EXISTS
-    Every application needs one place where all the independent pieces -- settings,
-    logging, middleware, routers, error handlers, database -- are wired together.
-    This is the Composition Root pattern: dependencies are assembled here and
-    nowhere else, so no module has to reach out and construct its own collaborators.
-
-RESPONSIBILITY
-    Build and configure the `FastAPI` instance. It contains no business logic and
-    no route handlers -- if you find yourself adding an endpoint here, it belongs
-    in a module router instead.
-
-INTERACTIONS
-    Imports from every layer, and is imported by nobody except the ASGI server
-    (`uvicorn app.main:app`) and the test suite.
-
-WHY A FACTORY FUNCTION (`create_app`) RATHER THAN A MODULE-LEVEL `app`
-    A factory lets tests build a fresh, independently-configured app per test
-    session (different settings, overridden dependencies) without import-time side
-    effects leaking between tests. The module-level `app` at the bottom exists only
-    because ASGI servers need an importable attribute.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

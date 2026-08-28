@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { PasswordInput } from "@/components/ui/password-input";
+
 import { ApiError, toProblem } from "@/lib/api/errors";
 import { platformLoginSchema, type PlatformLoginValues } from "@/lib/validation/auth";
 
@@ -23,7 +25,16 @@ export function PlatformLoginForm() {
       const response = await fetch("/api/platform/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          email: values.email,
+          password: values.password,
+          // OMITTED when blank, never sent as "". `PlatformLoginRequest.totp_code`
+          // is constrained to `^\d{6}$` when the key is PRESENT, so an empty string
+          // is a 422 before authentication is even attempted -- which made signing
+          // in impossible for an operator who has not enrolled MFA, the exact state
+          // the seed CLI leaves a fresh account in.
+          ...(values.totp_code ? { totp_code: values.totp_code } : {}),
+        }),
       });
       if (!response.ok) throw new ApiError(await toProblem(response));
 
@@ -79,11 +90,11 @@ export function PlatformLoginForm() {
         <label htmlFor="password" className="text-sm font-medium text-slate-300">
           Password
         </label>
-        <input
+        <PasswordInput
           id="password"
-          type="password"
           autoComplete="current-password"
-          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-slate-500"
+          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 shadow-none focus-visible:ring-slate-500 focus-visible:ring-offset-0"
+          toggleClassName="text-slate-400 hover:text-slate-100 focus-visible:ring-slate-500"
           {...form.register("password")}
         />
         {form.formState.errors.password ? (

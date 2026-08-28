@@ -1,10 +1,9 @@
 """Organization and school operations.
 
 WHY THIS FILE EXISTS
-    School creation is where three subsystems meet: entitlements (does the plan
-    allow another school?), provisioning (create its roles), and the owner/principal
-    split (grant principal on the first one). Ownership transfer is where the
-    system's most dangerous invariant lives. Both belong in one reviewed place.
+    School creation is where two subsystems meet: entitlements (does the plan allow
+    another school?) and provisioning (create its roles). Ownership transfer is where
+    the system's most dangerous invariant lives. Both belong in one reviewed place.
 
 RESPONSIBILITY
     Mutate organizations and schools, enforcing the invariants that go with them.
@@ -16,18 +15,18 @@ INTERACTIONS
 =============================================================================
 OWNERSHIP TRANSFER IS THE MOST DANGEROUS OPERATION IN THE SYSTEM
 =============================================================================
-    Spec §5.3: "The last active owner membership of an organization cannot be
+    Spec §5.3: "The last active principal membership of an organization cannot be
     removed, suspended, or demoted. Ownership transfer is a single atomic operation
-    that promotes the new owner before demoting the old one."
+    that promotes the new principal before demoting the old one."
 
     The ordering is not stylistic. Demote-then-promote has a window in which the
-    organization has NO owner. If anything fails in that window -- a constraint
+    organization has NO principal. If anything fails in that window -- a constraint
     violation, a lost connection, a deploy -- nobody can access billing, create
-    schools, or appoint a new owner. There is no in-app recovery from that state;
+    schools, or appoint a successor. There is no in-app recovery from that state;
     it requires a database operator.
 
     Promote-then-demote has no such window. At every instant there is at least one
-    owner, and a failure leaves two, which is recoverable through the UI.
+    principal, and a failure leaves two, which is recoverable through the UI.
 """
 
 from __future__ import annotations
@@ -106,11 +105,11 @@ class TenancyService:
         See the module docstring for why that order is load-bearing.
         """
         organization = await self.get_organization(organization_id)
-        owner_role = await get_system_role(
+        principal_role = await get_system_role(
             self.session,
             organization_id=organization_id,
             school_id=None,
-            code=SystemRole.OWNER,
+            code=SystemRole.PRINCIPAL,
         )
 
         new_membership = await self.session.get(Membership, new_owner_membership_id)
@@ -137,12 +136,13 @@ class TenancyService:
             )
         ).scalar_one_or_none()
 
-        # --- STEP 1: PROMOTE. There are now two owners, briefly. ---
+        # --- STEP 1: PROMOTE. There are now two principals, briefly. ---
         #
-        # The new owner may hold a school-scoped membership (a principal being
-        # promoted), which cannot simply be repointed at the org-level owner role --
-        # the unique index is on (user, org, school), so an org-level membership is a
-        # different row. Reuse an existing org-level one if present, else create it.
+        # The new principal normally holds a school-scoped membership (a teacher or
+        # accountant being promoted), which cannot simply be repointed at the
+        # org-level principal role -- the unique index is on (user, org, school), so
+        # an org-level membership is a different row. Reuse an existing org-level one
+        # if present, else create it.
         promoted = (
             await self.session.execute(
                 select(Membership).where(
@@ -159,25 +159,25 @@ class TenancyService:
                 organization_id=organization_id,
                 user_id=new_membership.user_id,
                 school_id=None,
-                role_id=owner_role.id,
+                role_id=principal_role.id,
                 status=MembershipStatus.ACTIVE,
                 is_primary=True,
                 joined_at=datetime.now(UTC),
             )
             self.session.add(promoted)
         else:
-            promoted.role_id = owner_role.id
+            promoted.role_id = principal_role.id
             promoted.status = MembershipStatus.ACTIVE
 
         organization.owner_user_id = new_membership.user_id
         await self.session.flush()
 
-        # --- STEP 2: DEMOTE. Only now, with the new owner already in place. ---
+        # --- STEP 2: DEMOTE. Only now, with the new principal already in place. ---
         #
-        # The outgoing owner is removed from the org-level scope rather than
+        # The outgoing principal is removed from the org-level scope rather than
         # downgraded to some lesser org role -- there is no such role. Their
-        # school-scoped memberships are untouched, so a founder who hands over
-        # billing but stays principal of a campus keeps that access.
+        # school-scoped memberships are untouched, so a founder who hands over the
+        # organization but stays on staff at a campus keeps that access.
         if outgoing is not None and outgoing.id != promoted.id:
             outgoing.deleted_at = datetime.now(UTC)
 
@@ -248,8 +248,13 @@ class TenancyService:
         name: str,
         code: str,
         **fields: object,
-    ) -> tuple[School, bool]:
-        """Create a school, its system roles, and possibly a principal membership.
+    ) -> School:
+        """Create a school and its system roles. Grants the caller nothing new.
+
+        The caller reaches this route through `school:create`, an ORG-scoped
+        permission, so they already hold the org-level `principal` membership -- and
+        that membership already spans every school in the organization, including
+        this one. There is no membership to mint and no seat to consume.
 
         =====================================================================
         THE ENTITLEMENT CHECK COMES FIRST, AND IT RESERVES CAPACITY
@@ -261,8 +266,6 @@ class TenancyService:
 
             Because it shares the transaction, a failure below rolls the reservation
             back too -- capacity is never consumed by a school that was not created.
-
-        Returns the school and whether the caller was granted principal on it.
         """
         await self.entitlements.check_and_consume(organization_id, "max_schools")
 
@@ -278,15 +281,6 @@ class TenancyService:
                 details={"field": "code"},
             )
 
-        # Is this the organization's FIRST school? Decided before the insert, so the
-        # new row does not count itself.
-        school_count = (
-            await self.session.execute(
-                select(func.count()).select_from(School).where(School.deleted_at.is_(None))
-            )
-        ).scalar_one()
-        is_first_school = school_count == 0
-
         school = School(
             organization_id=organization_id,
             name=name,
@@ -298,17 +292,17 @@ class TenancyService:
         self.session.add(school)
         await self.session.flush()
 
-        # Spec §4.3B step 6: the owner is auto-granted principal on their FIRST
-        # school, which is what lands them in the admin panel. Not on later ones --
-        # see `provision_school` for why.
+        # Roles only -- no membership. The creator already administers this school
+        # through their org-level principal membership, so granting them a second,
+        # school-scoped role here would duplicate them in the members list without
+        # adding any authority. `max_staff` is untouched for the same reason: no new
+        # person joined, and the reconciler counts staff excluding the organization's
+        # own principal.
         await provision_school(
             self.session,
             organization_id=organization_id,
             school_id=school.id,
-            grant_principal_to_user_id=actor_user_id if is_first_school else None,
         )
-        if is_first_school:
-            await self.entitlements.check_and_consume(organization_id, "max_staff")
 
         await record_audit(
             self.session,
@@ -321,7 +315,7 @@ class TenancyService:
             entity_id=school.id,
             after={"name": name, "code": school.code},
         )
-        return school, is_first_school
+        return school
 
     async def update_school(
         self,
@@ -395,18 +389,21 @@ def _slugify(value: str) -> str:
 
 
 async def count_active_owners(session: AsyncSession, organization_id: UUID) -> int:
-    """How many live org-level owner memberships an organization has.
+    """How many live org-level principal memberships an organization has.
 
-    Used by the RBAC service to enforce "the last owner cannot be removed" (spec
+    Used by the RBAC service to enforce "the last principal cannot be removed" (spec
     §5.3). Lives here rather than there because it is a question about the
     organization's structure, and both modules ask it.
+
+    Deliberately keyed on the ORG-LEVEL principal role. School-scoped roles never
+    carry billing, so they cannot stand in for the organization's last administrator.
     """
     owner_role_id = (
         await session.execute(
             select(Role.id).where(
                 Role.organization_id == organization_id,
                 Role.school_id.is_(None),
-                Role.code == SystemRole.OWNER.value,
+                Role.code == SystemRole.PRINCIPAL.value,
             )
         )
     ).scalar_one_or_none()

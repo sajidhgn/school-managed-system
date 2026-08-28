@@ -50,6 +50,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db.registry  # noqa: F401  (side effect: registers every mapper)
 from app.core.config import Environment, Settings, get_settings
+from app.core.context import (
+    get_organization_id,
+    get_school_id,
+    set_organization_id,
+    set_school_id,
+)
 from app.core.logging import configure_logging, get_logger
 from app.core.totp import encrypt_totp_secret, generate_totp_secret, provisioning_uri
 from app.db.session import dispose_engine, init_engine, session_scope
@@ -376,7 +382,7 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
 
     schools = []
     for name, code in (("Demo Central Campus", "CENTRAL"), ("Demo North Campus", "NORTH")):
-        school, _ = await tenancy.create_school(
+        school = await tenancy.create_school(
             organization_id=organization.id,
             actor_user_id=owner.id,
             actor_membership_id=owner_membership.id,
@@ -387,8 +393,8 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
         schools.append(school)
     await session.flush()
 
-    # An AuthContext for the owner, so invitations go through the real service with
-    # its real escalation guard rather than around it.
+    # An AuthContext for the principal, so invitations go through the real service
+    # with its real escalation guard rather than around it.
     owner_permissions = frozenset(
         (
             await session.execute(
@@ -406,7 +412,7 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
         organization_id=organization.id,
         membership_id=owner_membership.id,
         role_id=owner_membership.role_id,
-        role_code=SystemRole.OWNER.value,
+        role_code=SystemRole.PRINCIPAL.value,
         permissions=owner_permissions,
         school_id=None,
         organization_status=organization.status.value,
@@ -605,8 +611,12 @@ async def _run_reconcile() -> None:
 
 
 async def _run_maintenance() -> None:
-    """Advance billing lifecycle and apply each plan's audit retention."""
+    """Advance billing lifecycle, apply retention, generate due challans, fine late ones."""
     from app.modules.billing.jobs import process_billing_lifecycle, purge_expired_audit_logs
+    from app.modules.fees.jobs import (
+        apply_late_fees_for_organization,
+        generate_scheduled_challans_for_organization,
+    )
     from app.modules.invitations.service import expire_pending_invitations
 
     settings = get_settings()
@@ -615,6 +625,8 @@ async def _run_maintenance() -> None:
     lifecycle_events = 0
     audit_rows_purged = 0
     invitations_expired = 0
+    challans_generated = 0
+    late_fees_raised = 0
     try:
         async with session_scope(None, platform_admin=True) as session:
             organization_ids = list(
@@ -629,13 +641,171 @@ async def _run_maintenance() -> None:
                 lifecycle_events += len(await process_billing_lifecycle(session, organization_id))
                 audit_rows_purged += await purge_expired_audit_logs(session, organization_id)
                 invitations_expired += await expire_pending_invitations(session, organization_id)
+                # BEFORE the late-fee pass, and that order is deliberate. A challan
+                # generated today is not yet due, so it cannot be fined by the run
+                # that follows it -- but a school whose billing day and grace period
+                # happen to coincide would, in the other order, have this month's
+                # challan fined by next month's pass a day earlier than its own
+                # settings say. Generating first keeps the two passes independent.
+                created, _ = await generate_scheduled_challans_for_organization(
+                    session, organization_id
+                )
+                challans_generated += created
+                # Last in the sequence on purpose: it is the only step that CHARGES a
+                # customer's customer, so it runs after the tenant's own subscription
+                # state has been settled. A suspended organization should not be
+                # fining parents on the same pass that suspended it.
+                raised, _ = await apply_late_fees_for_organization(session, organization_id)
+                late_fees_raised += raised
         logger.info(
             "maintenance_complete",
             organizations=len(organization_ids),
             lifecycle_events=lifecycle_events,
             audit_rows_purged=audit_rows_purged,
             invitations_expired=invitations_expired,
+            challans_generated=challans_generated,
+            late_fees_raised=late_fees_raised,
         )
+    finally:
+        await dispose_engine()
+
+
+async def _run_reconcile_ledger() -> None:
+    """Report every student whose ledger balance disagrees with their vouchers.
+
+    REPORTS, NEVER REPAIRS. `fee_vouchers` and `fee_payments` are authoritative; the
+    ledger is a materialised record of them. A job that silently rewrote the ledger
+    to match would hide whatever caused the drift, and the cause is the thing worth
+    finding -- a balance that corrects itself every night is indistinguishable from
+    one that was right all along.
+
+    A manual ADJUSTMENT is the expected legitimate difference: writing off a hardship
+    balance moves the ledger and touches no voucher. So a non-empty report is a
+    prompt to read the statements, not an alarm.
+    """
+    from app.modules.fees.service import FeeService
+
+    settings = get_settings()
+    configure_logging(settings)
+    init_engine(settings)
+    drifted = 0
+    try:
+        async with session_scope(None, platform_admin=True) as session:
+            organization_ids = list(
+                (
+                    await session.execute(
+                        select(Organization.id).where(Organization.deleted_at.is_(None))
+                    )
+                ).scalars()
+            )
+        for organization_id in organization_ids:
+            async with session_scope(organization_id) as session:
+                school_ids = list(
+                    (
+                        await session.execute(
+                            select(School.id).where(
+                                School.organization_id == organization_id,
+                                School.deleted_at.is_(None),
+                            )
+                        )
+                    ).scalars()
+                )
+                for school_id in school_ids:
+                    previous_org = get_organization_id()
+                    previous_school = get_school_id()
+                    set_organization_id(organization_id)
+                    set_school_id(school_id)
+                    try:
+                        drift = await FeeService(session).reconcile_ledger()
+                    finally:
+                        set_school_id(previous_school)
+                        set_organization_id(previous_org)
+                    for student_id, (ledger_total, voucher_total) in drift.items():
+                        drifted += 1
+                        logger.warning(
+                            "fee_ledger_drift",
+                            organization_id=str(organization_id),
+                            school_id=str(school_id),
+                            student_id=str(student_id),
+                            ledger_balance=str(ledger_total),
+                            voucher_balance=str(voucher_total),
+                            difference=str(ledger_total - voucher_total),
+                        )
+        logger.info(
+            "fee_ledger_reconciled",
+            organizations=len(organization_ids),
+            students_with_drift=drifted,
+        )
+    finally:
+        await dispose_engine()
+
+
+async def _run_verify_user(*, email: str, print_link: bool, force: bool) -> None:
+    """Verify a tenant account's email address without the mail round-trip.
+
+    WHY THIS COMMAND EXISTS
+        `register` leaves the account `pending` and emails a link; `authenticate`
+        refuses to sign in until it is clicked. That is correct in production and a
+        dead end in local development, where the mail may go to spam, bounce off a
+        throwaway address, or simply never be checked -- and the account is then
+        unreachable with no way in.
+
+    IT DOES NOT HAND-EDIT THE COLUMNS. `verify_email` also starts the free
+    subscription on the requested plan and writes the audit row, so flipping
+    `status` and `email_verified_at` directly would leave an ACTIVE-looking
+    organization with no subscription -- and every entitlement check then fails on
+    an organization that looks perfectly healthy. Minting a real token and consuming
+    it through the real path is the only version of this that produces the same
+    state the emailed link produces.
+    """
+    # Deferred, mirroring `seed_demo`: the module-level cycle
+    # auth -> billing -> tenancy -> auth is easier to break at the call site.
+    from app.core.security import generate_opaque_token, hash_token
+    from app.modules.auth.models import EmailVerificationToken, User
+    from app.modules.auth.service import VERIFICATION_TTL, AuthService
+
+    settings = get_settings()
+    configure_logging(settings)
+
+    if settings.is_production and not force:
+        raise SystemExit(
+            "REFUSING: verifying an address out-of-band skips the proof that the "
+            "user controls that mailbox, which is the entire point of the step. "
+            "Re-run with --force only if you are deliberately overriding it."
+        )
+
+    init_engine(settings)
+    try:
+        async with session_scope(None, platform_admin=True) as session:
+            user = (
+                await session.execute(select(User).where(User.email == email))
+            ).scalar_one_or_none()
+            if user is None:
+                raise SystemExit(f"No account exists for '{email}'.")
+
+            if user.email_verified_at is not None and not print_link:
+                print(f"{user.email} is already verified (status={user.status.value}).")
+                return
+
+            raw = generate_opaque_token()
+            session.add(
+                EmailVerificationToken(
+                    user_id=user.id,
+                    token_hash=hash_token(raw),
+                    expires_at=datetime.now(UTC) + VERIFICATION_TTL,
+                )
+            )
+            await session.flush()
+
+            if print_link:
+                # For testing the real page rather than bypassing it.
+                print(f"{settings.FRONTEND_URL}/verify-email?token={raw}")
+                return
+
+            # No email sender passed, so nothing is dispatched.
+            verified = await AuthService(session, settings).verify_email(raw)
+            print(f"Verified {verified.email} (status={verified.status.value}).")
+            print(f"Sign in at {settings.FRONTEND_URL}/login")
     finally:
         await dispose_engine()
 
@@ -678,12 +848,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub.add_parser(
         "run-maintenance",
-        help="Advance billing lifecycle, anonymize expired accounts, and purge audit logs.",
+        help=(
+            "Advance billing lifecycle, anonymize expired accounts, purge audit logs, "
+            "generate challans for every campus due to bill today, and raise due late "
+            "fees. Run DAILY: the schedule that decides which campuses bill today "
+            "lives in each school's own settings, not in the cron line."
+        ),
+    )
+    sub.add_parser(
+        "reconcile-ledger",
+        help="Report students whose fee ledger balance disagrees with their vouchers.",
     )
     mfa_parser = sub.add_parser(
         "mfa-enroll", help="Enroll or rotate TOTP for a platform administrator."
     )
     mfa_parser.add_argument("--email", required=True, help="Platform administrator email.")
+
+    verify_parser = sub.add_parser(
+        "verify-user", help="Mark a tenant account's email verified (local dev)."
+    )
+    verify_parser.add_argument("--email", required=True, help="The account's email address.")
+    verify_parser.add_argument(
+        "--print-link",
+        action="store_true",
+        help="Print a fresh verification URL instead of consuming it.",
+    )
+    verify_parser.add_argument("--force", action="store_true", help="Allow this in production.")
 
     args = parser.parse_args(argv)
 
@@ -693,8 +883,14 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(_run_reconcile())
     elif args.command == "run-maintenance":
         asyncio.run(_run_maintenance())
+    elif args.command == "reconcile-ledger":
+        asyncio.run(_run_reconcile_ledger())
     elif args.command == "mfa-enroll":
         asyncio.run(_run_mfa_enroll(email=args.email))
+    elif args.command == "verify-user":
+        asyncio.run(
+            _run_verify_user(email=args.email, print_link=args.print_link, force=args.force)
+        )
     return 0
 
 

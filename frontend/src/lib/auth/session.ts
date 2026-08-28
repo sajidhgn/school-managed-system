@@ -1,11 +1,11 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { API_BASE_URL, API_V1_PREFIX, COOKIE_SECURE } from "@/lib/api/config";
-import type { MeResponse, PlatformAdminRead } from "@/lib/api/types";
+import type { MeResponse, PlatformAdminRead, SchoolRead } from "@/lib/api/types";
 
 /**
  * Server-only session handling.
@@ -41,6 +41,34 @@ import type { MeResponse, PlatformAdminRead } from "@/lib/api/types";
 // --- Tenant session --------------------------------------------------------
 export const ACCESS_COOKIE = "educloud_access";
 export const REFRESH_COOKIE = "educloud_refresh";
+
+/**
+ * Which campus an ORG-LEVEL user is currently looking at.
+ *
+ * Not part of the session, and deliberately not a token claim. The principal is
+ * org-level: their membership spans every school, and the backend authorises the
+ * school-scoped routes from the `{school_id}` in the path plus that org-level scope.
+ * So "which campus am I viewing" is a view preference, not an authorisation fact,
+ * and putting it in the token would mean re-minting a session to change a heading.
+ *
+ * Forging this cookie gains nothing: it only selects which school id the page asks
+ * for, and the backend still refuses any school outside the caller's organisation.
+ */
+export const ACTIVE_SCHOOL_COOKIE = "educloud_active_school";
+
+/**
+ * Set for a few seconds while a dead session is being recovered.
+ *
+ * The loop breaker. `/api/auth/recover` refreshes and sends the user back; if that
+ * page STILL cannot resolve a session it bounces to recover again, and without a
+ * marker the two would trade redirects forever. Seeing this cookie on entry means
+ * "we already tried" — so recover stops trying and signs the user out instead.
+ */
+const RECOVERY_COOKIES = {
+  tenant: "educloud_recovering",
+  platform: "educloud_platform_recovering",
+} as const;
+const RECOVERY_MAX_AGE = 10;
 
 // --- Platform session ------------------------------------------------------
 export const PLATFORM_ACCESS_COOKIE = "educloud_platform_access";
@@ -103,6 +131,49 @@ export async function clearSession(kind: SessionKind = "tenant"): Promise<void> 
   const [access, refresh] = cookieNames(kind);
   store.delete(access);
   store.delete(refresh);
+  // The next person to sign in on this browser must not inherit the last one's
+  // campus selection — they may not even be in the same organisation.
+  if (kind === "tenant") store.delete(ACTIVE_SCHOOL_COOKIE);
+}
+
+export async function isRecovering(kind: SessionKind = "tenant"): Promise<boolean> {
+  return (await cookies()).has(RECOVERY_COOKIES[kind]);
+}
+
+export async function beginRecovery(kind: SessionKind = "tenant"): Promise<void> {
+  const store = await cookies();
+  store.set(RECOVERY_COOKIES[kind], "1", { ...BASE_COOKIE, maxAge: RECOVERY_MAX_AGE });
+}
+
+export async function endRecovery(kind: SessionKind = "tenant"): Promise<void> {
+  (await cookies()).delete(RECOVERY_COOKIES[kind]);
+}
+
+/**
+ * A same-origin path from untrusted input, or null.
+ *
+ * `//evil.example` and `/\evil.example` are both read as protocol-relative URLs by
+ * browsers, so a leading-slash test alone is an open redirect. This is the only
+ * validation between a query string and a `Location` header.
+ */
+export function safePath(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith("/")) return null;
+  if (value.startsWith("//") || value.startsWith("/\\")) return null;
+  return value;
+}
+
+/** The path currently being rendered, published by middleware. */
+async function currentPath(): Promise<string> {
+  return safePath((await headers()).get("x-pathname")) ?? "/dashboard";
+}
+
+export async function getActiveSchoolId(): Promise<string | null> {
+  return (await cookies()).get(ACTIVE_SCHOOL_COOKIE)?.value ?? null;
+}
+
+export async function setActiveSchoolId(schoolId: string): Promise<void> {
+  const store = await cookies();
+  store.set(ACTIVE_SCHOOL_COOKIE, schoolId, { ...BASE_COOKIE, maxAge: REFRESH_MAX_AGE });
 }
 
 export type SessionKind = "tenant" | "platform";
@@ -201,6 +272,11 @@ export async function fetchWithSession(
     token = refreshed.accessToken;
   }
 
+  // The campus an org-level user has selected, forwarded so the backend's
+  // school-scoped repositories filter to it. The server reads it from the httpOnly
+  // cookie rather than trusting a client header — see the BFF's stripped list.
+  const activeSchoolId = kind === "tenant" ? await getActiveSchoolId() : null;
+
   const send = (bearer: string) => {
     // `new Headers(init.headers)` — NOT `{ ...init.headers }`.
     //
@@ -213,6 +289,7 @@ export async function fetchWithSession(
     // The constructor accepts both shapes, which is why it is the right thing here.
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${bearer}`);
+    if (activeSchoolId) headers.set("x-active-school", activeSchoolId);
 
     return fetch(`${API_BASE_URL}${API_V1_PREFIX}${path}`, {
       ...init,
@@ -256,25 +333,86 @@ export async function getCurrentUser(): Promise<MeResponse | null> {
  *
  * `redirect()` throws, so control never returns on the failure path — which is why
  * the return type is non-nullable and callers need no null check.
+ *
+ * =============================================================================
+ * WHY THIS DOES NOT REDIRECT STRAIGHT TO /login
+ * =============================================================================
+ *   It used to, and that was an infinite redirect loop. Middleware bounces a
+ *   request holding a session cookie AWAY from /login; this guard bounces a request
+ *   whose session does not resolve TOWARDS it. A cookie that exists but no longer
+ *   works satisfies both at once, and the two trade 307s until the browser gives up.
+ *
+ *   The state is not rare. `getCurrentUser()` deliberately does not refresh — a
+ *   Server Component cannot write cookies in Next 15, so it has no way to persist a
+ *   rotated pair — which means an access token that expired while the refresh token
+ *   is still perfectly good lands here. That is every session left idle past
+ *   ACCESS_MAX_AGE.
+ *
+ *   So the failure path goes through a ROUTE HANDLER, which can write cookies: it
+ *   refreshes and puts the user back where they were, or clears the cookies and
+ *   sends them to a /login that middleware will now leave alone. Either way the
+ *   loop cannot form, because the cookie never survives the bounce unusable.
  */
 export async function requireUser(): Promise<MeResponse> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(`/api/auth/recover?next=${encodeURIComponent(await currentPath())}`);
   return user;
+}
+
+export interface SchoolScopedSession {
+  user: MeResponse;
+  /** The campus these pages should render. Never null — the guard redirects instead. */
+  schoolId: string;
 }
 
 /**
  * Guard for pages that need an ACTIVE SCHOOL, not merely a signed-in user.
  *
- * An organization owner's default context is org-level (`school_id` is null), and
- * pages like members, roles and invitations are school-scoped — they have no
- * meaning without a campus. Rather than erroring, this sends the owner to pick one.
- * A brand-new organization with no schools at all goes to onboarding instead.
+ * There are two ways to have one, and the difference matters:
+ *
+ *   * A school-scoped member (teacher, accountant) carries `school_id` in the
+ *     session itself. It is fixed — it IS their authorisation scope, and they have
+ *     no say in it.
+ *
+ *   * The principal is org-level, so their session carries no school. They pick a
+ *     campus, and the choice lives in a cookie. It narrows what these pages DISPLAY
+ *     without narrowing what they may do, which is exactly right: the principal
+ *     administers every campus, and looking at one of them is not a demotion.
+ *
+ * WHY NOTHING IS GUESSED WHEN NO CAMPUS IS CHOSEN
+ *   Picking one implicitly — the organization's first, say — would mean these pages
+ *   always render SOME campus, and the sidebar would always offer them. The campus
+ *   modules are meant to open for the branch you opened, and stay shut until you
+ *   open one. Guessing makes "which branch am I looking at?" a question the
+ *   interface answers silently and sometimes wrongly.
+ *
+ *   `SidebarNav` gates the same items on the same fact, so the nav and this guard
+ *   cannot drift into offering pages that bounce, or hiding pages that work.
  */
-export async function requireSchoolContext(): Promise<MeResponse> {
+export async function requireSchoolContext(): Promise<SchoolScopedSession> {
   const user = await requireUser();
-  if (!user.school_id) redirect("/select-school");
-  return user;
+  if (user.school_id) return { user, schoolId: user.school_id };
+
+  const activeSchoolId = await getActiveSchoolId();
+  if (activeSchoolId) return { user, schoolId: activeSchoolId };
+
+  redirect("/select-school");
+}
+
+/**
+ * The campuses this session can see, or an empty list.
+ *
+ * Fetched through `fetchWithSession` rather than `serverGet` to keep this module
+ * free of an import cycle: `lib/api/server` is built on top of this file.
+ */
+export async function listSchools(): Promise<SchoolRead[]> {
+  try {
+    const response = await fetchWithSession("/schools", { method: "GET" });
+    if (!response || !response.ok) return [];
+    return (await response.json()) as SchoolRead[];
+  } catch {
+    return [];
+  }
 }
 
 /** Whether the user holds every one of `codes`. Mirrors the server's `AuthContext.has`. */
@@ -293,8 +431,9 @@ export async function getCurrentPlatformAdmin(): Promise<PlatformAdminRead | nul
   return (await response.json()) as PlatformAdminRead;
 }
 
+/** The platform half of `requireUser()`, with the same loop and the same fix. */
 export async function requirePlatformAdmin(): Promise<PlatformAdminRead> {
   const admin = await getCurrentPlatformAdmin();
-  if (!admin) redirect("/platform/login");
+  if (!admin) redirect(`/api/platform/recover?next=${encodeURIComponent(await currentPath())}`);
   return admin;
 }

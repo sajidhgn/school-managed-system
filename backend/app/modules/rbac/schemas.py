@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import EmailStr, Field
 
 from app.common.schemas import BaseSchema
 
@@ -105,6 +105,44 @@ class MemberRead(BaseSchema):
     is_primary: bool
     joined_at: datetime | None
     created_at: datetime
+
+
+class TeacherOption(BaseSchema):
+    """One selectable teacher, for the class-teacher and curriculum pickers.
+
+    Deliberately NOT `MemberRead`. A picker needs a value, a label and enough to tell
+    two same-named people apart -- nothing else. Reusing `MemberRead` would ship
+    `membership_id`, `status`, `is_primary` and `joined_at` to a dropdown that cannot
+    act on any of them, and would tie the shape of a UI control to the shape of the
+    staff table, so a change to one would silently churn the other.
+
+    `user_id` is the value because that is what `sections.class_teacher_id` and
+    `class_subjects.teacher_id` reference -- NOT `membership_id`. The distinction
+    matters for someone who teaches at two branches: one human, one user row, two
+    memberships.
+    """
+
+    user_id: UUID
+    full_name: str
+    email: str
+    role_name: str
+    """Shown beside the name so "Sana Malik (Senior Teacher)" is distinguishable from
+    a second Sana Malik on a different role."""
+
+
+class MemberCreate(BaseSchema):
+    """Create a login-ready member without the invitation flow."""
+
+    email: EmailStr
+    full_name: str = Field(min_length=2, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+    role_id: UUID
+
+
+class MemberBranchAssign(BaseSchema):
+    """Additional branches to attach to an existing member."""
+
+    school_ids: list[UUID] = Field(min_length=1, max_length=100)
 
 
 class MemberUpdate(BaseSchema):

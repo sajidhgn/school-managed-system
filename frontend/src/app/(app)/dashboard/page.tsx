@@ -21,8 +21,8 @@ export const metadata: Metadata = { title: "Dashboard" };
 /**
  * The landing screen after sign-in.
  *
- * Built from what the CURRENT context can see. An org-level owner gets the
- * organization's shape — schools, plan usage; a school-scoped principal gets their
+ * Built from what the CURRENT context can see. The org-level principal gets the
+ * organization's shape — schools, plan usage; a school-scoped member gets their
  * campus — staff, pending invitations. Rendering the same cards to both and letting
  * half of them 403 would be worse than showing fewer, truthful ones.
  *
@@ -92,9 +92,9 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      {/* Shown only when there is genuinely nothing else to do. An owner who has just
-          verified their email and has no school yet needs one obvious next step, not
-          a grid of zeroes. */}
+      {/* Shown only when there is genuinely nothing else to do. A principal who has
+          just verified their email and has no school yet needs one obvious next step,
+          not a grid of zeroes. */}
       {schools.length === 0 && hasPermission(user, PERMISSIONS.schoolCreate) ? (
         <section className="mt-8 rounded-xl border border-dashed border-border p-8 text-center">
           <h2 className="font-medium">{t.dashboard.firstSchoolTitle}</h2>

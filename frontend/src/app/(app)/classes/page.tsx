@@ -17,6 +17,8 @@ export const dynamic = "force-dynamic";
  * least-privilege quietly stops being practised.
  */
 export default async function ClassesPage() {
-  const user = await requireSchoolContext();
-  return <ClassesView canManage={hasPermission(user, PERMISSIONS.classCreate)} />;
+  const { user, schoolId } = await requireSchoolContext();
+  return (
+    <ClassesView canManage={hasPermission(user, PERMISSIONS.classCreate)} schoolId={schoolId} />
+  );
 }

@@ -14,17 +14,20 @@ These four calls shape every table and endpoint below. If you disagree with any,
 **D1 — The tenant is the ORGANIZATION, not the school.**
 Your requirement #2 says an owner can create multiple schools. Your requirement #6 says a client buys a plan and enters as principal. Those two only reconcile cleanly if the billing + isolation boundary sits *above* the school. So: `Organization` (the client account) → owns many `Schools`. One subscription per organization; the plan caps how many schools it may create. If you instead want **one subscription per school** (each school billed separately), that is a legitimate alternative — say so and I'll move `subscription.organization_id` to `subscription.school_id` and change the entitlement checks. Everything else survives.
 
-**D2 — "Owner" and "Principal" are different things, and you conflated them.**
-Your requirement #3 calls the principal "owner of school." Keep them separate:
-- **Owner** = organization-level. Owns billing, creates schools, appoints principals, can see every school in the org. Cannot be removed by anyone below.
-- **Principal** = school-level role. Runs one school, manages its roles/permissions, invites teachers and accountants. Has no billing rights and cannot create schools.
-On signup, the owner is **auto-granted a Principal membership on the first school they create**, which gives you the behaviour you described in #6 (log in → buy plan → land in the admin panel as principal) without welding the two concepts together. Later, the owner hands Principal to a real employee and keeps owner rights. This is the single most important structural fix in this rewrite.
+**D2 — One human, one role. `principal` is organization-level; there is no `owner`.** *(Amended — see the note below.)*
+The registering user gets a single **org-level `principal` membership** (`school_id = NULL`) holding the entire permission catalog: billing, school creation, and every school-scoped capability across every campus. Creating a school mints **no** membership — the org-level row already reaches it.
+
+> **Amendment.** This replaces the original D2, which split the top of an organization into an org-level `owner` and a school-level `principal`, auto-granting the founder both. That produced one human holding two memberships: listed twice in Members, two entries in the context switcher, and the second one strictly weaker than the first. The split is gone.
+>
+> **What the merge costs:** there is no longer a way to give someone full control of a single campus without also giving them billing and the whole organization. A customer who needs a campus administrator builds it as a **custom school role** — the role editor can express exactly what the seeded school `principal` used to hold.
+>
+> **Requirement #6 still holds** (log in → buy plan → land in the admin panel): the principal administers the first school through their org-level membership, and the frontend selects that campus for them. Which campus an org-level user is *looking at* is a view preference carried in `X-Active-School`, not an authorisation scope — it narrows the repository filter and nothing else.
 
 **D3 — Isolation is Postgres Row-Level Security keyed on `organization_id`, with `school_id` as a scope filter inside it.**
-Hard boundary = org (RLS, enforced by the database). Soft boundary = school (enforced by membership + query filter). Rationale: the owner legitimately needs cross-school reads inside their org; a teacher must never escape their school. Two different problems, two different mechanisms. App-layer `WHERE org_id = ?` discipline alone is rejected — one forgotten filter leaks minors' records.
+Hard boundary = org (RLS, enforced by the database). Soft boundary = school (enforced by membership + query filter). Rationale: the principal legitimately needs cross-school reads inside their org; a teacher must never escape their school. Two different problems, two different mechanisms. App-layer `WHERE org_id = ?` discipline alone is rejected — one forgotten filter leaks minors' records.
 
 **D4 — Identity is global, membership is scoped.**
-One `users` row per human, globally unique email. A human can hold several memberships (teacher at School A, accountant at School B, owner of a different org). The JWT carries **one active membership** at a time; switching context re-issues the token. This is the only sane way to handle a person who works at two client schools, and you *will* hit that case in Pakistan/Gulf private-school groups.
+One `users` row per human, globally unique email. A human can hold several memberships (teacher at School A, accountant at School B, principal of a different org). The JWT carries **one active membership** at a time; switching context re-issues the token. This is the only sane way to handle a person who works at two client schools, and you *will* hit that case in Pakistan/Gulf private-school groups.
 
 ---
 
@@ -33,11 +36,10 @@ One `users` row per human, globally unique email. A human can hold several membe
 | Actor | Created by | Lives where | Can do |
 |---|---|---|---|
 | **Platform Super Admin** | Database seed only. No signup route exists. | Platform tables, outside tenant RLS | Manage plans, view/suspend organizations, impersonate (audited), platform-wide analytics, feature flags |
-| **Organization Owner (Client)** | Self-signup from marketing site | Tenant | Buy/change/cancel plan, create schools (up to plan limit), appoint principals, view all schools in org, transfer ownership |
-| **Principal** | Auto-assigned to owner on first school; thereafter invited/appointed per school | Tenant, school-scoped | Run the school, create custom roles, assign permissions to roles, invite staff, all school data |
+| **Principal (Client)** | Self-signup from marketing site | Tenant, **org-level** | Everything: buy/change/cancel plan, create schools (up to plan limit), run every campus, create custom roles, invite staff, all school data, transfer ownership |
 | **Teacher** | Invited by principal | Tenant, school-scoped | Whatever the principal's role config grants |
 | **Accountant** | Invited by principal | Tenant, school-scoped | Whatever the principal's role config grants |
-| **Custom roles** | Created by principal | Tenant, school-scoped | Any subset of the permission catalog the principal itself holds |
+| **Custom roles** | Created by principal | Tenant, school-scoped | Any subset of the permission catalog the principal itself holds — this is how a per-campus administrator is built |
 
 **Explicitly deferred:** Student and Parent portals. They are a different auth surface (often no email, phone-OTP based, guardians linked to multiple children). Do not model them in this phase — you will get it wrong without the student registry existing first.
 
@@ -54,7 +56,7 @@ Platform (no tenant)
     │   ├── Roles (school-scoped)
     │   └── Memberships (user × school × role)
     ├── School B
-    └── Org-level Membership (owner: school_id = NULL)
+    └── Org-level Membership (principal: school_id = NULL)
 ```
 
 ### 2.2 RLS implementation
@@ -90,7 +92,7 @@ Rules the agent must follow:
 - Add a test that runs the full CRUD suite as Org A while Org B data exists, asserting zero rows of B ever appear. This test is a release gate.
 
 ### 2.3 School scoping
-`school_id` is **not** an RLS key. It is enforced in the permission dependency: a request carrying a school-scoped membership gets `WHERE school_id = :active_school_id` injected by a repository-level base query. Owner tokens with `school_id = NULL` skip that filter but remain inside org RLS.
+`school_id` is **not** an RLS key. It is enforced in the permission dependency: a request carrying a school-scoped membership gets `WHERE school_id = :active_school_id` injected by a repository-level base query. The principal's org-level token (`school_id = NULL`) skips that filter but remains inside org RLS — unless it sends `X-Active-School`, which narrows the same filter to one campus without changing the permission set or the scope guards.
 
 ---
 
@@ -196,11 +198,11 @@ schools(
 
 roles(
   id, organization_id,
-  school_id NULL,                   -- NULL = org-level role (owner)
-  code text,                        -- 'owner' | 'principal' | 'teacher' | 'accountant' | custom
+  school_id NULL,                   -- NULL = org-level role (principal)
+  code text,                        -- 'principal' (org-level) | 'teacher' | 'accountant' | custom
   name, description,
   is_system bool DEFAULT false,     -- system roles cannot be deleted
-  is_editable bool DEFAULT true,    -- owner/principal permission sets are locked
+  is_editable bool DEFAULT true,    -- the principal permission set is locked
   permissions_version int DEFAULT 1,
   created_at, updated_at,
   UNIQUE(organization_id, school_id, code)
@@ -217,7 +219,7 @@ role_permissions(role_id, permission_code, PRIMARY KEY(role_id, permission_code)
 
 memberships(
   id, organization_id, user_id,
-  school_id NULL,                   -- NULL = org-level (owner)
+  school_id NULL,                   -- NULL = org-level (the principal)
   role_id NOT NULL,
   status text DEFAULT 'active',     -- active | suspended
   is_primary bool DEFAULT false,
@@ -277,13 +279,13 @@ audit_logs(
 
 **A. Platform super admin login** — `POST /api/v1/platform/auth/login`. Seeded credentials only; no registration, no password reset by email link (rotate via CLI). MFA required in production. Rate-limited 5/15min per IP+email.
 
-**B. Client signup (marketing → owner)**
+**B. Client signup (marketing → principal)**
 1. `POST /api/v1/auth/register` → `{ full_name, email, password, organization_name, country }`
-2. Creates `users` (status `pending`) + `organizations` + org-level `roles.owner` + `memberships(school_id=NULL, role=owner)` in **one transaction**.
+2. Creates `users` (status `pending`) + `organizations` + org-level `roles.principal` + `memberships(school_id=NULL, role=principal)` in **one transaction**.
 3. Sends verification email. Login is blocked until `email_verified_at` is set.
 4. On verify → user `active`, subscription created on the **free** plan (or `trialing` on the chosen plan for `trial_days`).
 5. Redirect to onboarding: **create your first school**.
-6. On first school creation → auto-create school-scoped system roles (principal, teacher, accountant) and grant the owner a `principal` membership on that school. Owner lands in the school admin panel. ← this is your requirement #6.
+6. On school creation → auto-create school-scoped system roles (teacher, accountant). **No membership is granted**: the creator's org-level `principal` membership already covers the new campus. The frontend selects it as their active campus and they land in the school admin panel. ← this is your requirement #6.
 
 **C. Invite staff (requirement #7)** — see §7.
 
@@ -341,11 +343,11 @@ student:*, teacher:*, attendance:*, grade:*, fee:*, timetable:*
 Requirement #3 lets a principal assign permissions to roles. Three invariants must be enforced server-side, not in the UI:
 
 1. **No self-elevation beyond own grant.** A principal may only grant permissions it currently holds. `granted ⊆ actor_permissions`. Violation → `403 PERMISSION_ESCALATION`.
-2. **No editing locked roles.** `is_editable = false` on `owner` and `principal`. A principal cannot widen its own role or the owner's.
-3. **No scope crossing.** A school-scoped actor may only touch roles where `role.school_id = actor.school_id`. An owner may touch any role inside their org but still cannot grant an org-scoped permission to a school role.
+2. **No editing locked roles.** `is_editable = false` on `principal`. The principal cannot rewrite the role that defines its own authority, in either direction.
+3. **No scope crossing.** A school-scoped actor may only touch roles where `role.school_id = actor.school_id`. The principal may touch any role inside their org but still cannot grant an org-scoped permission to a school role.
 
 Additional invariants:
-- The last active `owner` membership of an organization cannot be removed, suspended, or demoted. Ownership transfer is a single atomic operation that promotes the new owner before demoting the old one.
+- The last active **org-level `principal`** membership of an organization cannot be removed, suspended, or demoted. Ownership transfer is a single atomic operation that promotes the new principal before demoting the old one.
 - A user cannot suspend/remove their own membership.
 - Deleting a role requires reassigning its members first (`409` with the blocking member count).
 
@@ -598,7 +600,7 @@ Ship each phase behind passing tests before starting the next. Do not build phas
 - Principal grants a permission it does not hold → 403.
 - Principal edits its own role → 403 (`is_editable = false`).
 - School role granted `school:create` (org-scoped) → 422.
-- Removing the last owner → 409.
+- Removing the last org-level principal → 409.
 - Role permission change → next request by an affected member uses the new set (no token wait).
 
 **Invitations**

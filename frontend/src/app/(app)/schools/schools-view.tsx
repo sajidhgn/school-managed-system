@@ -2,6 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Archive, Building2, Pencil, Plus } from "lucide-react";
+import type { Route } from "next";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -50,9 +52,17 @@ import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/sc
 export function SchoolsView({
   schools,
   schoolSeats,
+  canSelectCampus = false,
 }: {
   schools: SchoolRead[];
   schoolSeats: UsageItem | null;
+  /**
+   * Whether opening a branch should also make it the active one.
+   *
+   * True for an org-level user, who moves between campuses. A school-scoped member
+   * is permanently inside their own and has nothing to select.
+   */
+  canSelectCampus?: boolean;
 }) {
   const router = useRouter();
   const { t } = useTranslations();
@@ -71,6 +81,39 @@ export function SchoolsView({
     defaultValues: { name: "", code: "", city: "" },
   });
 
+  /**
+   * Open a branch: make it the active campus, then show it.
+   *
+   * The selection is the point. The sidebar's campus modules — Members, Roles,
+   * Invitations, Students, Classes, Audit — belong to whichever branch is open, so
+   * clicking a card has to move them, not just navigate. Without this the reader
+   * lands on Burewala's page with the sidebar still wired to Gaggoo Mandi.
+   *
+   * `preventDefault` on a real anchor rather than a button: the href keeps the card
+   * a genuine link (focusable, says where it goes, opens in a new tab on
+   * middle-click), and only ordinary activation takes the selecting path.
+   */
+  async function openBranch(event: React.MouseEvent, school: SchoolRead) {
+    // Modified clicks are the browser's to handle: ctrl/cmd/middle-click opens the
+    // card in a new tab, and hijacking that would be worse than not selecting.
+    if (!canSelectCampus || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await schoolsApi.setActive(school.id);
+    } catch {
+      // Selecting is a convenience; the page itself works regardless. Navigate
+      // anyway rather than swallowing the click and leaving the reader on a list
+      // that appears not to respond.
+    } finally {
+      setBusy(false);
+      router.refresh();
+      router.push(`/schools/${school.id}` as Route);
+    }
+  }
+
   async function create(values: SchoolCreateValues) {
     setFormError(null);
     try {
@@ -80,10 +123,8 @@ export function SchoolsView({
         city: values.city || undefined,
       });
       toast({
-        title: `${result.school.name} created.`,
-        description: result.principal_granted
-          ? t.schools.createdPrincipal
-          : t.schools.createdNoPrincipal,
+        title: `${result.name} created.`,
+        description: t.schools.rolesCreated,
       });
       form.reset();
       setCreating(false);
@@ -185,13 +226,29 @@ export function SchoolsView({
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
           {schools.map((school) => (
+            // The whole card opens the campus, but Edit and Archive still have to
+            // work. So the LINK is the real anchor around the title — keyboard
+            // focus lands on something that says where it goes — and it stretches
+            // over the card with a pseudo-element. The action row then sits above
+            // that overlay on its own stacking context. Wrapping the entire card in
+            // an <a> instead would nest buttons inside a link, which is invalid and
+            // leaves the buttons unreachable by keyboard.
             <li
               key={school.id}
-              className="rounded-xl border border-border bg-card p-5"
+              className="relative rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60 focus-within:border-primary/60"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="truncate font-medium">{school.name}</h2>
+                  <h2 className="truncate font-medium">
+                    <Link
+                      href={`/schools/${school.id}`}
+                      onClick={(event) => openBranch(event, school)}
+                      aria-disabled={busy || undefined}
+                      className="outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                    >
+                      {school.name}
+                    </Link>
+                  </h2>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {school.code}
                     {school.city ? ` · ${school.city}` : ""}
@@ -201,7 +258,7 @@ export function SchoolsView({
                   {label(SCHOOL_STATUS_LABELS, school.status)}
                 </Badge>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
+              <div className="relative z-10 mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                 <Can permission={PERMISSIONS.schoolUpdate}>
                   <Button variant="outline" size="sm" onClick={() => beginEdit(school)}>
                     <Pencil className="size-4" aria-hidden />

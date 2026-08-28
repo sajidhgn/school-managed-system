@@ -72,6 +72,10 @@ const en = {
     schools: "Schools",
     students: "Students",
     classes: "Classes",
+    attendance: "Attendance",
+    calendar: "Academic year",
+    subjects: "Subjects",
+    fees: "Fees",
     academics: "Academics",
     people: "People & access",
     organization: "Organization",
@@ -115,6 +119,8 @@ const en = {
     password: "Password",
     confirmPassword: "Confirm password",
     passwordHint: "At least 10 characters. A phrase of unrelated words works best.",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     fullName: "Full name",
     organizationName: "Organization name",
     organizationHint: "The trust, group or school company that owns your campuses.",
@@ -149,7 +155,7 @@ const en = {
   },
   onboarding: {
     title: "Create your first school",
-    subtitle: "You can add more campuses later. You'll be set up as principal of this one.",
+    subtitle: "You can add more campuses later. As principal you run all of them.",
     schoolName: "School name",
     schoolCode: "Short code",
     schoolCodeHint: "Appears on ID cards and reports, e.g. MAIN",
@@ -161,7 +167,7 @@ const en = {
     organizationView: "organization view",
     planUsage: "Plan usage",
     firstSchoolTitle: "Create your first school",
-    firstSchoolBody: "You'll be set up as its principal, and can invite staff straight away.",
+    firstSchoolBody: "Its roles are set up for you, and you can invite staff straight away.",
     getStarted: "Get started",
   },
   schools: {
@@ -171,9 +177,6 @@ const en = {
     emptyTitle: "No schools yet",
     emptyBody: "Create your first campus to start adding staff and students.",
     seatsExhausted: "You are using all the schools on your plan. Upgrade to add another.",
-    createdPrincipal: "You are its principal.",
-    createdNoPrincipal:
-      "Invite someone to run it, or assign a principal from the members page.",
     rolesCreated: "Its roles are created automatically. You can invite staff straight after.",
   },
   members: {
@@ -206,7 +209,7 @@ const en = {
     organizationBadge: "Organization",
     // REVIEW: nuanced — explains why a role is locked, not merely that it is.
     lockedExplain:
-      "This role is managed by the platform and cannot be edited — including by someone who holds it. That is what stops a principal from widening their own access or the owner's.",
+      "This role is managed by the platform and cannot be edited — including by someone who holds it. That is what stops a principal from rewriting the role that defines their own authority.",
     orgLevelExplain:
       "This is an organization-level role. Edit it from the organization settings, not from a single school.",
     cannotGrant: "You cannot grant a permission you do not hold yourself.",
@@ -284,7 +287,7 @@ const en = {
     identifier: "Identifier",
     currency: "Currency",
     timezone: "Timezone",
-    ownerOnly: "Only an organization owner can change these.",
+    ownerOnly: "Only the organization's principal can change these.",
     saveChanges: "Save changes",
     organizationUpdated: "Organization updated.",
   },
@@ -302,6 +305,26 @@ const en = {
   selectSchool: {
     title: "Choose a school",
     body: "That page is scoped to a single campus. Pick the one you want to work in — you can switch again from the header at any time.",
+  },
+  search: {
+    open: "Search",
+    title: "Search everything",
+    // Deliberately names the syntax in the placeholder. A power feature nobody is
+    // told about is a power feature nobody uses.
+    placeholder: "Search or type a filter…",
+    clear: "Clear search",
+    allScopes: "Everything",
+    recent: "Recent",
+    clearRecent: "Clear",
+    tryThis: "Try",
+    noResults: "Nothing matched. Check your spelling, or remove a filter.",
+    matchedElsewhere: "matched elsewhere",
+    searching: "Searching…",
+    seeAll: "See all {count}",
+    resultCount: "{count} results",
+    allCampuses: "all campuses",
+    syntaxHint:
+      'Use type: status: class: after: to filter, "quotes" for a phrase, and - to exclude.',
   },
   errors: {
     generic: "Something went wrong. Please try again.",
@@ -356,6 +379,10 @@ const ur: Messages = {
     schools: "اسکول",
     students: "طلبہ",
     classes: "جماعتیں",
+    attendance: "حاضری",
+    calendar: "تعلیمی سال",
+    subjects: "مضامین",
+    fees: "فیس",
     academics: "تعلیمی امور",
     people: "عملہ اور رسائی",
     organization: "ادارہ",
@@ -399,6 +426,8 @@ const ur: Messages = {
     password: "پاس ورڈ",
     confirmPassword: "پاس ورڈ کی تصدیق کریں",
     passwordHint: "کم از کم 10 حروف۔ غیر متعلق الفاظ کا جملہ بہترین رہتا ہے۔",
+    showPassword: "پاس ورڈ دکھائیں",
+    hidePassword: "پاس ورڈ چھپائیں",
     fullName: "پورا نام",
     organizationName: "ادارے کا نام",
     organizationHint: "وہ ٹرسٹ، گروپ یا کمپنی جو آپ کے کیمپسز کی مالک ہے۔",
@@ -433,7 +462,7 @@ const ur: Messages = {
   },
   onboarding: {
     title: "اپنا پہلا اسکول بنائیں",
-    subtitle: "آپ بعد میں مزید کیمپس شامل کر سکتے ہیں۔ آپ اس کے پرنسپل ہوں گے۔",
+    subtitle: "آپ بعد میں مزید کیمپس شامل کر سکتے ہیں۔ بطور پرنسپل آپ ان سب کو چلاتے ہیں۔",
     schoolName: "اسکول کا نام",
     schoolCode: "مختصر کوڈ",
     schoolCodeHint: "شناختی کارڈ اور رپورٹس پر ظاہر ہوتا ہے، مثلاً MAIN",
@@ -445,7 +474,7 @@ const ur: Messages = {
     organizationView: "ادارہ جاتی منظر",
     planUsage: "منصوبے کا استعمال",
     firstSchoolTitle: "اپنا پہلا اسکول بنائیں",
-    firstSchoolBody: "آپ اس کے پرنسپل ہوں گے، اور فوراً عملے کو مدعو کر سکیں گے۔",
+    firstSchoolBody: "اس کے کردار آپ کے لیے بنا دیے جاتے ہیں، اور آپ فوراً عملے کو مدعو کر سکتے ہیں۔",
     getStarted: "شروع کریں",
   },
   schools: {
@@ -456,9 +485,6 @@ const ur: Messages = {
     emptyBody: "عملہ اور طلبہ شامل کرنے کے لیے اپنا پہلا کیمپس بنائیں۔",
     seatsExhausted:
       "آپ اپنے منصوبے کے تمام اسکول استعمال کر چکے ہیں۔ ایک اور شامل کرنے کے لیے اپ گریڈ کریں۔",
-    createdPrincipal: "آپ اس کے پرنسپل ہیں۔",
-    createdNoPrincipal:
-      "اسے چلانے کے لیے کسی کو مدعو کریں، یا اراکین کے صفحے سے پرنسپل مقرر کریں۔",
     rolesCreated: "اس کے کردار خودکار طور پر بن جاتے ہیں۔ آپ فوراً عملے کو مدعو کر سکتے ہیں۔",
   },
   members: {
@@ -491,7 +517,7 @@ const ur: Messages = {
     organizationBadge: "ادارہ",
     // REVIEW: nuanced — explains why a role is locked, not merely that it is.
     lockedExplain:
-      "یہ کردار پلیٹ فارم کے زیرِ انتظام ہے اور اس میں ترمیم نہیں کی جا سکتی — اُس شخص کے ذریعے بھی نہیں جو یہ کردار رکھتا ہو۔ یہی چیز کسی پرنسپل کو اپنی یا مالک کی رسائی بڑھانے سے روکتی ہے۔",
+      "یہ کردار پلیٹ فارم کے زیرِ انتظام ہے اور اس میں ترمیم نہیں کی جا سکتی — اُس شخص کے ذریعے بھی نہیں جو یہ کردار رکھتا ہو۔ یہی چیز پرنسپل کو اُس کردار کو دوبارہ لکھنے سے روکتی ہے جو خود اُس کے اختیار کی تعریف کرتا ہے۔",
     orgLevelExplain:
       "یہ ادارہ سطح کا کردار ہے۔ اسے کسی ایک اسکول سے نہیں بلکہ ادارے کی ترتیبات سے تبدیل کریں۔",
     cannotGrant: "آپ ایسی اجازت نہیں دے سکتے جو خود آپ کے پاس نہ ہو۔",
@@ -568,7 +594,7 @@ const ur: Messages = {
     identifier: "شناخت کنندہ",
     currency: "کرنسی",
     timezone: "ٹائم زون",
-    ownerOnly: "صرف ادارے کا مالک ان میں تبدیلی کر سکتا ہے۔",
+    ownerOnly: "صرف ادارے کا پرنسپل ان میں تبدیلی کر سکتا ہے۔",
     saveChanges: "تبدیلیاں محفوظ کریں",
     organizationUpdated: "ادارہ اپ ڈیٹ ہو گیا۔",
   },
@@ -586,6 +612,27 @@ const ur: Messages = {
   selectSchool: {
     title: "اسکول منتخب کریں",
     body: "وہ صفحہ صرف ایک کیمپس کے لیے ہے۔ جس میں کام کرنا چاہتے ہیں اسے منتخب کریں — آپ کسی بھی وقت ہیڈر سے دوبارہ تبدیل کر سکتے ہیں۔",
+  },
+  search: {
+    open: "تلاش",
+    title: "ہر چیز میں تلاش کریں",
+    placeholder: "تلاش کریں یا فلٹر لکھیں…",
+    clear: "تلاش صاف کریں",
+    allScopes: "سب کچھ",
+    recent: "حالیہ",
+    clearRecent: "صاف کریں",
+    tryThis: "آزمائیں",
+    // REVIEW: needs a native reviewer before an Urdu-market launch.
+    noResults: "کچھ نہیں ملا۔ ہجے دیکھ لیں، یا کوئی فلٹر ہٹا دیں۔",
+    matchedElsewhere: "کہیں اور مماثل",
+    searching: "تلاش جاری ہے…",
+    seeAll: "تمام {count} دیکھیں",
+    resultCount: "{count} نتائج",
+    allCampuses: "تمام کیمپس",
+    // REVIEW: the filter keywords stay in English on purpose — they are literal
+    // query syntax the server parses, not prose.
+    syntaxHint:
+      'فلٹر کے لیے type: status: class: after: استعمال کریں، فقرے کے لیے "کوٹس"، اور خارج کرنے کے لیے - لگائیں۔',
   },
   errors: {
     generic: "کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔",

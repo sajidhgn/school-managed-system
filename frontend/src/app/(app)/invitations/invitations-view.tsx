@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Mail, RotateCw, X } from "lucide-react";
+import { KeyRound, Mail, RotateCw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -13,12 +13,13 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
-import { invitations as invitationsApi } from "@/lib/api/resources";
+import { invitations as invitationsApi, members as membersApi } from "@/lib/api/resources";
 import {
   INVITATION_STATUS_LABELS,
   PERMISSIONS,
@@ -28,6 +29,7 @@ import {
   type UsageItem,
 } from "@/lib/api/types";
 import { invitationCreateSchema, type InvitationCreateValues } from "@/lib/validation/rbac";
+import { memberCreateSchema, type MemberCreateValues } from "@/lib/validation/rbac";
 
 /**
  * Send and manage staff invitations (spec §7).
@@ -48,11 +50,13 @@ import { invitationCreateSchema, type InvitationCreateValues } from "@/lib/valid
  */
 export function InvitationsView({
   schoolId,
+  schoolName,
   invitations,
   roles,
   staffSeats,
 }: {
   schoolId: string;
+  schoolName: string;
   invitations: InvitationRead[];
   roles: RoleRead[];
   staffSeats: UsageItem | null;
@@ -60,10 +64,15 @@ export function InvitationsView({
   const router = useRouter();
   const { t } = useTranslations();
   const [busy, setBusy] = useState<string | null>(null);
+  const [creationMode, setCreationMode] = useState<"invite" | "manual">("invite");
 
   const form = useForm<InvitationCreateValues>({
     resolver: zodResolver(invitationCreateSchema),
     defaultValues: { email: "", full_name: "", role_id: roles[0]?.id ?? "" },
+  });
+  const manualForm = useForm<MemberCreateValues>({
+    resolver: zodResolver(memberCreateSchema),
+    defaultValues: { email: "", full_name: "", password: "", role_id: roles[0]?.id ?? "" },
   });
 
   const seatsExhausted = staffSeats?.is_exhausted ?? false;
@@ -90,6 +99,33 @@ export function InvitationsView({
         }
         if (error.code === "ALREADY_MEMBER" || error.code === "INVITATION_PENDING") {
           form.setError("email", { message: error.message });
+          return;
+        }
+        toast({ variant: "destructive", title: t.common.somethingWrong, description: error.message });
+        return;
+      }
+      toast({ variant: "destructive", title: t.common.somethingWrong });
+    }
+  }
+
+  async function createManually(values: MemberCreateValues) {
+    try {
+      await membersApi.create(schoolId, values);
+      toast({ title: `${values.full_name} was added to ${schoolName}.` });
+      manualForm.reset({ email: "", full_name: "", password: "", role_id: values.role_id });
+      router.refresh();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.code === "plan_limit_exceeded") {
+          toast({ variant: "destructive", title: t.invitations.noSeatsTitle, description: error.message });
+          return;
+        }
+        if (error.code === "ACCOUNT_EXISTS_USE_INVITATION") {
+          manualForm.setError("email", { message: error.message });
+          return;
+        }
+        if (error.code === "WEAK_PASSWORD") {
+          manualForm.setError("password", { message: error.message });
           return;
         }
         toast({ variant: "destructive", title: t.common.somethingWrong, description: error.message });
@@ -134,7 +170,18 @@ export function InvitationsView({
           </p>
         }
       >
-        <form
+        <div className="mb-3 flex gap-2" role="group" aria-label="Member creation method">
+          <Button type="button" variant={creationMode === "invite" ? "default" : "outline"} onClick={() => setCreationMode("invite")}>
+            <Mail className="size-4" aria-hidden /> Send invite
+          </Button>
+          <Button type="button" variant={creationMode === "manual" ? "default" : "outline"} onClick={() => setCreationMode("manual")}>
+            <KeyRound className="size-4" aria-hidden /> Create with password
+          </Button>
+        </div>
+        <p className="mb-3 text-sm text-muted-foreground">
+          School branch: <span className="font-medium text-foreground">{schoolName}</span>
+        </p>
+        {creationMode === "invite" ? <form
           onSubmit={form.handleSubmit(send)}
           className="mb-8 grid gap-4 rounded-xl border border-border bg-card p-5"
           noValidate
@@ -174,7 +221,28 @@ export function InvitationsView({
               {t.invitations.sendInvitation}
             </Button>
           </div>
-        </form>
+        </form> : (
+          <form onSubmit={manualForm.handleSubmit(createManually)} className="mb-8 grid gap-4 rounded-xl border border-border bg-card p-5" noValidate>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t.common.email} htmlFor="manual-email" error={manualForm.formState.errors.email} required>
+                <Input id="manual-email" type="email" {...manualForm.register("email")} />
+              </Field>
+              <Field label={t.common.name} htmlFor="manual-name" error={manualForm.formState.errors.full_name} required>
+                <Input id="manual-name" {...manualForm.register("full_name")} />
+              </Field>
+              <Field label="Temporary password" htmlFor="manual-password" error={manualForm.formState.errors.password} required>
+                <PasswordInput id="manual-password" autoComplete="new-password" {...manualForm.register("password")} />
+              </Field>
+              <Field label={t.common.role} htmlFor="manual-role" error={manualForm.formState.errors.role_id} required>
+                <NativeSelect id="manual-role" {...manualForm.register("role_id")}>
+                  {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                </NativeSelect>
+              </Field>
+            </div>
+            {seatsExhausted ? <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">No staff seats remain on the current plan.</p> : null}
+            <div><Button type="submit" disabled={manualForm.formState.isSubmitting || seatsExhausted}><KeyRound className="size-4" aria-hidden />Create member</Button></div>
+          </form>
+        )}
       </Can>
 
       {invitations.length === 0 ? (

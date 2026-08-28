@@ -36,7 +36,6 @@ export type TransferOwnershipRequest = S["TransferOwnershipRequest"];
 export type SchoolRead = S["SchoolRead"];
 export type SchoolCreate = S["SchoolCreate"];
 export type SchoolUpdate = S["SchoolUpdate"];
-export type SchoolCreateResponse = S["SchoolCreateResponse"];
 
 // --- RBAC ------------------------------------------------------------------
 export type PermissionRead = S["PermissionRead"];
@@ -47,6 +46,8 @@ export type RoleCreate = S["RoleCreate"];
 export type RoleUpdate = S["RoleUpdate"];
 export type RolePermissionsUpdate = S["RolePermissionsUpdate"];
 export type MemberRead = S["MemberRead"];
+export type MemberCreate = S["MemberCreate"];
+export type TeacherOption = S["TeacherOption"];
 export type MemberUpdate = S["MemberUpdate"];
 export type AuditLogRead = S["AuditLogRead"];
 
@@ -86,8 +87,23 @@ export type PlatformAuditRead = S["PlatformAuditRead"];
 export type ImpersonateRequest = S["ImpersonateRequest"];
 export type ImpersonationGrant = S["ImpersonationGrant"];
 
+// --- Global search ---------------------------------------------------------
+// Every field on these is derived server-side from the caller's permissions, which
+// is why the omnibar has no permission logic of its own.
+export type SearchEntity = S["SearchEntity"];
+export type SearchHit = S["SearchHit"];
+export type SearchGroup = S["SearchGroup"];
+export type SearchResponse = S["SearchResponse"];
+export type SearchSuggestion = S["SearchSuggestion"];
+export type SearchScopeRead = S["SearchScopeRead"];
+export type SearchConfigResponse = S["SearchConfigResponse"];
+export type ParsedQueryRead = S["ParsedQueryRead"];
+
 // --- Academic modules ------------------------------------------------------
 export type StudentRead = S["StudentRead"];
+export type StudentListRow = S["StudentListRow"];
+export type StudentDues = S["StudentDues"];
+export type FeeStandingFilter = S["FeeStandingFilter"];
 export type StudentCreate = S["StudentCreate"];
 export type StudentUpdate = S["StudentUpdate"];
 export type StudentStatus = S["StudentStatus"];
@@ -102,6 +118,47 @@ export type SectionRead = S["SectionRead"];
 export type SectionCreate = S["SectionCreate"];
 export type SectionUpdate = S["SectionUpdate"];
 export type SectionSummary = S["SectionSummary"];
+
+// --- Academic calendar -----------------------------------------------------
+export type AcademicYearRead = S["AcademicYearRead"];
+export type AcademicYearCreate = S["AcademicYearCreate"];
+export type AcademicYearUpdate = S["AcademicYearUpdate"];
+export type TermRead = S["TermRead"];
+export type TermCreate = S["TermCreate"];
+export type TermUpdate = S["TermUpdate"];
+
+// --- Curriculum ------------------------------------------------------------
+export type SubjectRead = S["SubjectRead"];
+export type SubjectCreate = S["SubjectCreate"];
+export type SubjectUpdate = S["SubjectUpdate"];
+export type SubjectKind = S["SubjectKind"];
+export type ClassSubjectRead = S["ClassSubjectRead"];
+export type ClassSubjectCreate = S["ClassSubjectCreate"];
+export type ClassSubjectUpdate = S["ClassSubjectUpdate"];
+
+// --- Enrollment ledger -----------------------------------------------------
+export type EnrollmentRead = S["EnrollmentRead"];
+export type EnrollmentPlacement = S["EnrollmentPlacement"];
+export type PromotionRequest = S["PromotionRequest"];
+export type PromotionResult = S["PromotionResult"];
+export type PromotionSkip = S["PromotionSkip"];
+export type EnrollmentBackfillResult = S["EnrollmentBackfillResult"];
+export type SectionRosterEntry = S["SectionRosterEntry"];
+
+// --- Attendance ------------------------------------------------------------
+export type AttendanceStatus = S["AttendanceStatus"];
+export type AttendanceSessionStatus = S["AttendanceSessionStatus"];
+export type AttendanceSessionRead = S["AttendanceSessionRead"];
+export type AttendanceSessionDetail = S["AttendanceSessionDetail"];
+export type AttendanceSessionOpen = S["AttendanceSessionOpen"];
+export type AttendanceEntryRead = S["AttendanceEntryRead"];
+export type AttendanceEntryInput = S["AttendanceEntryInput"];
+export type AttendanceMarkRequest = S["AttendanceMarkRequest"];
+export type DailyOverview = S["DailyOverview"];
+export type SectionDayStatus = S["SectionDayStatus"];
+export type StudentAttendanceSummary = S["StudentAttendanceSummary"];
+export type SectionAttendanceReport = S["SectionAttendanceReport"];
+export type SectionAttendanceDay = S["SectionAttendanceDay"];
 
 // --- Pagination ------------------------------------------------------------
 export type PageMeta = S["PageMeta"];
@@ -176,9 +233,73 @@ export const PERMISSIONS = {
   classCreate: "class:create",
   classUpdate: "class:update",
   classDelete: "class:delete",
+  feeRead: "fee:read",
+  feeManage: "fee:manage",
+  feeIssue: "fee:issue",
+  feeCollect: "fee:collect",
+  // Separate from `fee:collect` on purpose, and absent from the accountant default:
+  // whoever records money arriving must not be the one who can erase the record.
+  feeVoid: "fee:void",
+  studentPromote: "student:promote",
+  guardianRead: "guardian:read",
+  guardianCreate: "guardian:create",
+  guardianUpdate: "guardian:update",
+  guardianDelete: "guardian:delete",
+  calendarRead: "calendar:read",
+  calendarManage: "calendar:manage",
+  subjectRead: "subject:read",
+  subjectManage: "subject:manage",
+  attendanceRead: "attendance:read",
+  attendanceMark: "attendance:mark",
+  // Separate from `attendance:mark` on purpose, and absent from the teacher default:
+  // whoever records absences must not be the one who can rewrite the record. Same
+  // control as `feeVoid` above, applied to the register a truancy referral is built on.
+  attendanceAmend: "attendance:amend",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+// --- Fees ------------------------------------------------------------------
+export type FeeHeadRead = S["FeeHeadRead"];
+export type FeeHeadCreate = S["FeeHeadCreate"];
+export type FeeHeadUpdate = S["FeeHeadUpdate"];
+export type FeeStructureRead = S["FeeStructureRead"];
+export type FeeStructureDetail = S["FeeStructureDetail"];
+export type FeeStructureCreate = S["FeeStructureCreate"];
+export type FeeStructureItemRead = S["FeeStructureItemRead"];
+export type FeeStructureItemInput = S["FeeStructureItemInput"];
+export type FeeVoucherRead = S["FeeVoucherRead"];
+export type FeeVoucherDetail = S["FeeVoucherDetail"];
+export type FeePaymentRead = S["FeePaymentRead"];
+export type FeePaymentCreate = S["FeePaymentCreate"];
+export type FeeSummary = S["FeeSummary"];
+export type VoucherGenerateRequest = S["VoucherGenerateRequest"];
+export type VoucherGenerateResult = S["VoucherGenerateResult"];
+export type VoucherStatus = S["VoucherStatus"];
+export type VoucherItemRead = S["VoucherItemRead"];
+export type FeeLineType = S["FeeLineType"];
+
+// --- Unattended monthly generation -----------------------------------------
+export type FeeBillingScheduleRead = S["FeeBillingScheduleRead"];
+export type FeeBillingScheduleInput = S["FeeBillingScheduleInput"];
+export type BillingRunResult = S["BillingRunResult"];
+
+// --- Stationery (what the school sells, priced per unit) --------------------
+export type StationeryItemRead = S["StationeryItemRead"];
+export type StationeryItemCreate = S["StationeryItemCreate"];
+export type StationeryItemUpdate = S["StationeryItemUpdate"];
+export type StationeryCategory = S["StationeryCategory"];
+export type StationeryUnit = S["StationeryUnit"];
+export type FeeStructureStationeryInput = S["FeeStructureStationeryInput"];
+export type VoucherStationeryInput = S["VoucherStationeryInput"];
+
+// --- Per-student fee arrangements ------------------------------------------
+export type StudentFeeProfile = S["StudentFeeProfile"];
+export type StudentFeeLine = S["StudentFeeLine"];
+export type StudentFeeAssignmentRead = S["StudentFeeAssignmentRead"];
+export type StudentFeeAssignmentInput = S["StudentFeeAssignmentInput"];
+export type StudentFeeAssignmentMode = S["StudentFeeAssignmentMode"];
+export type PaymentMethod = S["PaymentMethod"];
 
 // ---------------------------------------------------------------------------
 // Display labels
@@ -255,6 +376,64 @@ export const USAGE_LABELS: Record<string, string> = {
 };
 
 /** Human label for a value, falling back to the raw value rather than blank. */
+export const VOUCHER_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  issued: "Issued",
+  partly_paid: "Part paid",
+  paid: "Paid",
+  overdue: "Overdue",
+  void: "Void",
+};
+
+export const FEE_RECURRENCE_LABELS: Record<string, string> = {
+  monthly: "Monthly",
+  term: "Per term",
+  annual: "Annual",
+  one_time: "One time",
+};
+
+export const FEE_STRUCTURE_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  active: "Active",
+  archived: "Archived",
+};
+
+export const STATIONERY_CATEGORY_LABELS: Record<string, string> = {
+  book: "Books",
+  notebook: "Copies & notebooks",
+  stationery: "Stationery",
+  uniform: "Uniform",
+  sports: "Sports",
+  other: "Other",
+};
+
+/**
+ * Singular and plural, because a quantity always sits next to the unit and
+ * "1 pieces" reads as a bug to the person holding the challan.
+ */
+export const STATIONERY_UNIT_LABELS: Record<string, string> = {
+  piece: "piece",
+  dozen: "dozen",
+  pack: "pack",
+  set: "set",
+  pair: "pair",
+  ream: "ream",
+};
+
+export function unitLabel(unit: string | null | undefined, quantity: number): string {
+  const singular = unit ? (STATIONERY_UNIT_LABELS[unit] ?? unit) : "unit";
+  return quantity === 1 ? singular : `${singular}s`;
+}
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  cheque: "Cheque",
+  card: "Card",
+  online: "Online",
+  other: "Other",
+};
+
 export function label(map: Record<string, string>, value: string | null | undefined): string {
   if (!value) return "—";
   return map[value] ?? value;

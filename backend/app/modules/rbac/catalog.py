@@ -27,8 +27,8 @@ INTERACTIONS
 `min_scope` IS THE PART THAT MATTERS
 =============================================================================
     A permission marked ORG may only ever be attached to an org-level role. The
-    reason is concrete: `school:create` on a school-scoped role would let a principal
-    manufacture campuses the organization has not paid for, and `billing:manage`
+    reason is concrete: `school:create` on a school-scoped role would let a campus
+    role manufacture campuses the organization has not paid for, and `billing:manage`
     would let a teacher at one campus change the plan for the whole group. Both are
     privilege escalations that look like ordinary role configuration in a UI.
 
@@ -127,6 +127,34 @@ PEOPLE_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("invitation:revoke", "People & access", "Revoke a pending invitation."),
 )
 
+# Guardians are PEOPLE DATA, not academic data, and get their own category so a
+# principal configuring "who may see parent phone numbers" finds one checkbox list
+# rather than hunting through the students section.
+#
+# NOT FOLDED INTO `student:*`. A guardian record is contact data about an ADULT, and
+# the receptionist who updates a phone number is not necessarily the registrar who may
+# edit a child's record. The split is also what lets a school give the parent-portal
+# support desk read access to families without exposing student academic data.
+#
+# FIVE CODES, and the split that matters is the last one. `guardian:portal` guards the
+# two actions that hand out or take away a LOGIN -- changing the number a parent signs
+# in with, and enabling or disabling portal access. Folding those into
+# `guardian:update` would mean the clerk who fixes a misspelt name can also re-point a
+# father's login at their own handset, which is an account takeover that looks like
+# ordinary data entry in every log.
+GUARDIAN_PERMISSIONS: tuple[PermissionDef, ...] = (
+    _school("guardian:read", "Guardians", "View guardians and their linked students."),
+    _school("guardian:create", "Guardians", "Register guardians."),
+    _school("guardian:update", "Guardians", "Edit guardians and their student links."),
+    _school("guardian:delete", "Guardians", "Remove a guardian record.", dangerous=True),
+    _school(
+        "guardian:portal",
+        "Guardians",
+        "Change a guardian's sign-in number or portal access.",
+        dangerous=True,
+    ),
+)
+
 AUDIT_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("audit:read", "Audit", "View the audit log."),
 )
@@ -143,6 +171,16 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("student:create", "Students", "Enrol new students."),
     _school("student:update", "Students", "Edit student records."),
     _school("student:delete", "Students", "Remove student records.", dangerous=True),
+    # Bulk promotion moves an entire cohort up a grade for a new year. It is separate
+    # from `student:update` because it is whole-school, once-a-year and looks
+    # irreversible from the UI -- exactly the shape of action that should require an
+    # explicit grant rather than riding along with "edit a student".
+    _school(
+        "student:promote",
+        "Students",
+        "Promote a class or section to the next academic year.",
+        dangerous=True,
+    ),
     _school("class:read", "Academics", "View classes and sections."),
     _school("class:create", "Academics", "Create classes and sections."),
     _school("class:update", "Academics", "Edit classes and sections."),
@@ -151,10 +189,41 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("teacher:manage", "Academics", "Assign teachers to classes."),
     _school("attendance:read", "Academics", "View attendance records."),
     _school("attendance:mark", "Academics", "Mark attendance."),
+    # The counterpart of `fee:void`, and separate for the same reason. `attendance:mark`
+    # lets a teacher assert today's register; `attendance:amend` lets someone rewrite a
+    # register that was already submitted. A system where the person who records
+    # absences can quietly erase them has no attendance record, only an attendance
+    # opinion.
+    _school(
+        "attendance:amend",
+        "Academics",
+        "Reopen and correct a submitted attendance register.",
+        dangerous=True,
+    ),
+    # The academic calendar and the subject list. Two codes, not eight: these are
+    # setup screens a registrar touches a few times a year, and a permission matrix
+    # that distinguishes "create a term" from "rename a term" is a matrix nobody
+    # configures correctly.
+    _school("calendar:read", "Academics", "View academic years and terms."),
+    _school("calendar:manage", "Academics", "Define academic years and terms."),
+    _school("subject:read", "Academics", "View subjects and class curricula."),
+    _school("subject:manage", "Academics", "Define subjects and assign them to classes."),
     _school("grade:read", "Academics", "View grades."),
     _school("grade:manage", "Academics", "Enter and edit grades."),
-    _school("fee:read", "Finance", "View fee records."),
-    _school("fee:manage", "Finance", "Create and adjust fees.", dangerous=True),
+    # FIVE fee codes, not one. `fee:collect` and `fee:void` are separate because the
+    # person who records money coming in must not be the person who can make a record
+    # of money disappear -- the oldest control in bookkeeping. See
+    # docs/modules/fees.md §4.
+    _school("fee:read", "Finance", "View fee heads, structures, vouchers and payments."),
+    _school("fee:manage", "Finance", "Define fee heads and fee structures.", dangerous=True),
+    _school("fee:issue", "Finance", "Generate and issue fee vouchers."),
+    _school("fee:collect", "Finance", "Record fee payments and issue receipts."),
+    _school(
+        "fee:void",
+        "Finance",
+        "Void a fee voucher or reverse a recorded payment.",
+        dangerous=True,
+    ),
     _school("timetable:read", "Academics", "View the timetable."),
     _school("timetable:manage", "Academics", "Edit the timetable."),
 )
@@ -164,6 +233,7 @@ CATALOG: tuple[PermissionDef, ...] = (
     *BILLING_PERMISSIONS,
     *SCHOOL_PERMISSIONS,
     *PEOPLE_PERMISSIONS,
+    *GUARDIAN_PERMISSIONS,
     *AUDIT_PERMISSIONS,
     *ACADEMIC_PERMISSIONS,
 )
@@ -183,19 +253,15 @@ SCHOOL_SCOPED_CODES: frozenset[str] = ALL_CODES - ORG_SCOPED_CODES
 # Default permission sets for the seeded system roles (spec §5.2)
 # ---------------------------------------------------------------------------
 
-# The owner holds everything. This is the only role for which that is true, and it
-# is why `org:transfer_ownership` and `billing:manage` exist as separate codes at
-# all -- so that no other role can be given them by accident.
-_OWNER_PERMISSIONS: frozenset[str] = ALL_CODES
-
-# The principal runs one school: every school-scoped permission, plus full control
-# of roles, members, invitations and the audit log for that school.
+# The principal runs the organization: billing, campuses, staff, roles and every
+# school-scoped capability across all of them. It is the ONLY role that holds
+# everything, and it is org-level -- there is no school-scoped variant of it.
 #
-# EXPLICITLY WITHOUT `billing:*` AND `school:create`. Those are org-level codes, so
-# the scope rule would reject them anyway -- but stating the exclusion here means a
-# reader does not have to reconstruct it from `min_scope` metadata, and a future
-# change that re-scopes a billing permission cannot silently widen the principal.
-_PRINCIPAL_PERMISSIONS: frozenset[str] = SCHOOL_SCOPED_CODES
+# This is why `org:transfer_ownership` and `billing:manage` exist as separate codes
+# at all: so that no OTHER role can be given them by accident. A custom role built
+# by a principal is still bounded by the escalation guard, but these two are the
+# ones that would be catastrophic to hand out, so they stay individually named.
+_PRINCIPAL_PERMISSIONS: frozenset[str] = ALL_CODES
 
 # Deliberately minimal. Spec §5.2 gives the teacher `member:read` plus academic
 # access; the academic reads are included because a teacher who cannot see the class
@@ -206,7 +272,13 @@ _TEACHER_PERMISSIONS: frozenset[str] = frozenset(
         "member:read",
         "school:read",
         "student:read",
+        # A teacher phoning a parent about an absence needs the number. Read only:
+        # correcting family records is a front-office job, and `attendance:amend` is
+        # absent for the same separation reason.
+        "guardian:read",
         "class:read",
+        "calendar:read",
+        "subject:read",
         "teacher:read",
         "attendance:read",
         "attendance:mark",
@@ -221,14 +293,22 @@ _ACCOUNTANT_PERMISSIONS: frozenset[str] = frozenset(
         "member:read",
         "school:read",
         "student:read",
+        # The name on the challan and the number a fee reminder goes to.
+        "guardian:read",
+        "calendar:read",
         "invoice:read",
         "fee:read",
         "fee:manage",
+        "fee:issue",
+        "fee:collect",
+        # `fee:void` is deliberately ABSENT. An accountant who mis-keys a receipt asks
+        # a principal to reverse it, and that reversal carries both identities in the
+        # audit trail. Customers who want their accountant to hold it grant it
+        # explicitly -- it is simply not the default.
     }
 )
 
 SYSTEM_ROLE_PERMISSIONS: dict[SystemRole, frozenset[str]] = {
-    SystemRole.OWNER: _OWNER_PERMISSIONS,
     SystemRole.PRINCIPAL: _PRINCIPAL_PERMISSIONS,
     SystemRole.TEACHER: _TEACHER_PERMISSIONS,
     SystemRole.ACCOUNTANT: _ACCOUNTANT_PERMISSIONS,
@@ -236,30 +316,51 @@ SYSTEM_ROLE_PERMISSIONS: dict[SystemRole, frozenset[str]] = {
 
 # Human-facing names and descriptions for the seeded roles.
 SYSTEM_ROLE_META: dict[SystemRole, tuple[str, str]] = {
-    SystemRole.OWNER: (
-        "Owner",
-        "Owns billing and the organization. Can create schools and appoint principals.",
-    ),
     SystemRole.PRINCIPAL: (
         "Principal",
-        "Runs one school: staff, roles, invitations and all school data. No billing rights.",
+        "Runs the organization: billing, campuses, staff, roles and all school data.",
     ),
     SystemRole.TEACHER: ("Teacher", "Teaching staff. Marks attendance and enters grades."),
     SystemRole.ACCOUNTANT: ("Accountant", "Handles fees and invoices for the school."),
 }
 
-# `owner` and `principal` are locked (spec §5.3 rule 2): a principal must not be
-# able to widen its own role or the owner's. `teacher` and `accountant` are starting
-# points that each customer is expected to tailor.
-LOCKED_ROLE_CODES: frozenset[str] = frozenset({SystemRole.OWNER.value, SystemRole.PRINCIPAL.value})
+# `principal` is locked (spec §5.3 rule 2): the role that defines the organization's
+# top authority must not be editable by the person holding it, in either direction.
+# `teacher` and `accountant` are starting points that each customer is expected to
+# tailor.
+LOCKED_ROLE_CODES: frozenset[str] = frozenset({SystemRole.PRINCIPAL.value})
 
-# Roles created for every new school. The owner role is org-level and is created once
-# per organization at signup, so it is deliberately absent here.
+# Roles created for every new school. `principal` is deliberately absent: it is
+# org-level and created once per organization at signup. Seeding a second,
+# school-scoped "Principal" per campus is exactly the duplicate this design removes
+# -- it would put two roles of the same name in the picker, one of which silently
+# lacks billing, and hand the founder a second membership they never asked for.
 SCHOOL_SYSTEM_ROLES: tuple[SystemRole, ...] = (
-    SystemRole.PRINCIPAL,
     SystemRole.TEACHER,
     SystemRole.ACCOUNTANT,
 )
+
+# Which roles put someone in front of a class -- used to populate teacher pickers
+# (the class-teacher field on a section, the teacher on a curriculum entry).
+#
+# DEFINED BY CAPABILITY, NOT BY ROLE CODE. Matching `role.code == "teacher"` would
+# have been shorter and is wrong: the seeded `teacher` role is explicitly "a starting
+# point each customer is expected to tailor" (see above), so a school that renames it
+# to "Senior Teacher", or adds a second "Head of Curriculum" role, would get an EMPTY
+# picker while its staff list is full of teachers. Asking what the role can DO
+# survives that renaming, which is the same reason the UI gates on permissions rather
+# than on role names.
+#
+# `attendance:mark` and `grade:manage` are the two that mean "runs a classroom": one
+# asserts who was present, the other enters what they scored. A role holding either
+# is doing the job a class teacher does. Read-only academic access (`class:read`,
+# `attendance:read`) is deliberately NOT here -- an accountant has those and is not a
+# teacher.
+#
+# The principal role holds every code, including these, and so would match. It is
+# excluded structurally instead: principals are ORG-level (`school_id IS NULL`) and
+# the query filters on membership in the branch, so they never reach this test.
+TEACHING_PERMISSIONS: frozenset[str] = frozenset({"attendance:mark", "grade:manage"})
 
 
 def scope_violations(codes: frozenset[str], *, is_school_scoped: bool) -> frozenset[str]:

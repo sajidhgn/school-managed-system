@@ -38,11 +38,27 @@ from app.db.base import Base
 # keeps mapper-configuration errors readable when one is misdeclared.
 from app.modules.academics import models as academics_models
 
+# --- Attendance: one register per section per day, one record per student --
+# Listed here rather than after `students` because ruff sorts this block
+# alphabetically; the dependency direction is academics + students -> attendance,
+# which import order does not affect (foreign keys resolve lazily -- see ON ORDERING).
+from app.modules.attendance import models as attendance_models
+
 # --- Identity (global, no tenant column): users, sessions, email tokens -----
 from app.modules.auth import models as auth_models
 
 # --- Billing: subscriptions, invoices, usage counters, webhook ledger -------
 from app.modules.billing import models as billing_models
+
+# --- Fees: what a school bills its students (NOT the SaaS subscription) -----
+# After `academics` and before `students` in spirit -- `fee_structures.class_id`
+# references `classes.id` and `fee_vouchers.student_id` references `students.id`.
+from app.modules.fees import models as fees_models
+
+# --- Guardians: the adults responsible for a student, and the family links -
+# After `students` in spirit -- `student_guardians.student_id` references
+# `students.id` -- and the aggregate that unblocks the parent portal.
+from app.modules.guardians import models as guardian_models
 
 # --- Invitations: the only entry path into an existing organization ---------
 from app.modules.invitations import models as invitation_models
@@ -60,8 +76,11 @@ from app.modules.tenancy import models as tenancy_models
 __all__ = [
     "Base",
     "academics_models",
+    "attendance_models",
     "auth_models",
     "billing_models",
+    "fees_models",
+    "guardian_models",
     "invitation_models",
     "platform_models",
     "rbac_models",

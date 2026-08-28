@@ -6,6 +6,7 @@ import {
   SCHOOL_STATUS_LABELS,
   STUDENT_STATUS_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
+  VOUCHER_STATUS_LABELS,
   label,
 } from "@/lib/api/types";
 
@@ -41,6 +42,8 @@ const TONES: Record<string, Tone> = {
 
   // Needs attention, still working
   pending: "warning",
+  issued: "warning",
+  partly_paid: "warning",
   pending_approval: "warning",
   past_due: "warning",
   over_limit: "warning",
@@ -52,6 +55,7 @@ const TONES: Record<string, Tone> = {
   expired: "destructive",
   revoked: "destructive",
   uncollectible: "destructive",
+  overdue: "destructive",
 
   // Neutral outcomes
   inactive: "neutral",
@@ -99,4 +103,40 @@ export function MemberStatusBadge({ status }: { status: string | null | undefine
 
 export function InvitationStatusBadge({ status }: { status: string | null | undefined }) {
   return <StatusBadge status={status} labels={INVITATION_STATUS_LABELS} />;
+}
+
+/**
+ * `issued` and `partly_paid` are amber, not neutral: both mean money is owed and
+ * somebody has to chase it. Only `paid` is green, and `overdue` is the one red state
+ * in this module — a voided challan is a neutral outcome, not a failure.
+ */
+export function VoucherStatusBadge({ status }: { status: string | null | undefined }) {
+  return <StatusBadge status={status} labels={VOUCHER_STATUS_LABELS} />;
+}
+
+/**
+ * A status pill for a value whose domain is not known at the call site.
+ *
+ * Global search returns students, vouchers, invitations and memberships in one
+ * list, so it cannot pick a domain-specific label map per row. Merging them is
+ * safe because the collisions are all synonyms — `active` means the same thing for
+ * a student, a campus and a membership, and the pill says "Active" for each. A
+ * value in none of the maps renders as its raw string, which is the same honest
+ * fallback `label` gives everywhere else.
+ *
+ * Prefer the specific badges above wherever the domain IS known: they are exact,
+ * and this one is a deliberate compromise for the one screen that is generic.
+ */
+const ANY_STATUS_LABELS: Record<string, string> = {
+  ...STUDENT_STATUS_LABELS,
+  ...SCHOOL_STATUS_LABELS,
+  ...ORG_STATUS_LABELS,
+  ...SUBSCRIPTION_STATUS_LABELS,
+  ...MEMBER_STATUS_LABELS,
+  ...INVITATION_STATUS_LABELS,
+  ...VOUCHER_STATUS_LABELS,
+};
+
+export function AnyStatusBadge({ status }: { status: string | null | undefined }) {
+  return <StatusBadge status={status} labels={ANY_STATUS_LABELS} />;
 }

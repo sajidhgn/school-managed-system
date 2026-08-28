@@ -1,7 +1,7 @@
 """Authentication gates (spec §12 "Auth", §4).
 
-Refresh-token reuse detection, lockout, enumeration resistance, and the
-owner/principal split that spec decision D2 turns on.
+Refresh-token reuse detection, lockout, enumeration resistance, and the single
+org-level `principal` role the whole access model turns on.
 """
 
 from __future__ import annotations
@@ -19,27 +19,26 @@ from app.core.totp import encrypt_totp_secret, totp_code
 from tests.integration.conftest import API, STRONG_PASSWORD, Tenant, latest_token
 
 # ---------------------------------------------------------------------------
-# Signup and the owner/principal split
+# Signup and the single org-level principal
 # ---------------------------------------------------------------------------
 
 
-async def test_signup_creates_owner_then_principal_on_first_school(
+async def test_signup_creates_one_org_level_principal_and_schools_add_none(
     db_client: Any, mailbox: list[Any]
 ) -> None:
-    """Spec §4.3B and decision D2, end to end.
+    """Spec §4.3B, end to end: ONE human, ONE role.
 
     =========================================================================
-    THE STRUCTURAL FIX THIS ASSERTS
+    THE REGRESSION THIS GUARDS
     =========================================================================
-        The spec calls the owner/principal conflation "the single most important
-        structural fix in this rewrite". On signup the user gets an ORG-LEVEL owner
-        membership (school_id null). On creating their FIRST school they
-        additionally get a school-scoped principal membership on it.
+        Signup used to mint an org-level `owner`, and creating the first school
+        then minted a SECOND, school-scoped `principal` membership for the same
+        person. One human appeared twice in the members list and twice in the
+        context switcher -- the second time with strictly fewer permissions.
 
-        Two memberships, two scopes, one human. That is what makes requirement #6
-        work -- log in, buy a plan, land in the admin panel as principal -- without
-        welding the two concepts together, and it is what later allows handing
-        Principal to an employee while keeping owner rights.
+        There is now one role, `principal`, and it is org-level. Creating a school
+        must add no membership at all: the org-level row already reaches the new
+        campus, so a second one would be duplication, not authority.
     """
     register = await db_client.post(
         f"{API}/auth/register",
@@ -77,16 +76,17 @@ async def test_signup_creates_owner_then_principal_on_first_school(
     access = login.headers["X-Access-Token"]
     headers = {"Authorization": f"Bearer {access}"}
 
-    # Exactly ONE membership so far: org-level owner, no school.
+    # Exactly ONE membership: org-level principal, no school.
     me = await db_client.get(f"{API}/auth/me", headers=headers)
     assert me.status_code == 200, me.text
     body = me.json()
     assert len(body["memberships"]) == 1
-    owner_membership = body["memberships"][0]
-    assert owner_membership["role_code"] == "owner"
-    assert owner_membership["is_org_level"] is True
-    assert owner_membership["school_id"] is None
-    # The owner holds billing rights; a principal never will.
+    principal_membership = body["memberships"][0]
+    assert principal_membership["role_code"] == "principal"
+    assert principal_membership["is_org_level"] is True
+    assert principal_membership["school_id"] is None
+    assert principal_membership["is_primary"] is True
+    # The principal holds the whole catalog, billing included.
     assert "billing:manage" in body["permissions"]
     assert "school:create" in body["permissions"]
 
@@ -96,21 +96,15 @@ async def test_signup_creates_owner_then_principal_on_first_school(
         headers=headers,
     )
     assert created.status_code == 201, created.text
-    assert created.json()["principal_granted"] is True, (
-        "the owner was not auto-granted principal on their first school"
-    )
+    # The response is the school itself -- there is no membership grant to report.
+    assert created.json()["code"] == "MAIN"
 
     after = await db_client.get(f"{API}/auth/me", headers=headers)
     memberships = after.json()["memberships"]
-    assert len(memberships) == 2, "expected an org-level owner AND a school principal"
-
-    by_role = {m["role_code"]: m for m in memberships}
-    assert by_role["owner"]["school_id"] is None
-    assert by_role["principal"]["school_id"] is not None
-    # The owner's org-level membership stays primary, so they land on the
-    # organization dashboard rather than inside one campus.
-    assert by_role["owner"]["is_primary"] is True
-    assert by_role["principal"]["is_primary"] is False
+    assert len(memberships) == 1, "creating a school must not mint a second membership"
+    assert memberships[0]["membership_id"] == principal_membership["membership_id"]
+    assert memberships[0]["role_code"] == "principal"
+    assert memberships[0]["school_id"] is None
 
 
 async def test_signup_preserves_selected_plan_and_billing_cycle(
@@ -148,16 +142,19 @@ async def test_signup_preserves_selected_plan_and_billing_cycle(
     assert subscription.json()["status"] == "trialing"
 
 
-async def test_second_school_does_not_auto_grant_principal(tenant: Tenant) -> None:
-    """Only the FIRST school auto-grants principal.
+async def test_further_schools_still_grant_nothing(tenant: Tenant) -> None:
+    """No school -- first or fifth -- mints a membership for its creator.
 
-    Auto-granting on every school would silently accumulate memberships the owner
-    never asked for and clutter their context switcher with one entry per campus.
-    Subsequent schools expect a principal to be appointed deliberately.
+    The principal's org-level membership already spans every campus, so a grant here
+    would accumulate rows nobody asked for and put one entry per campus in the
+    context switcher for a person whose authority never changed.
     """
+    before = await tenant.get(f"{API}/auth/me")
     second = await tenant.post(f"{API}/schools", json={"name": "Second Campus", "code": "SECOND"})
     assert second.status_code == 201, second.text
-    assert second.json()["principal_granted"] is False
+
+    after = await tenant.get(f"{API}/auth/me")
+    assert after.json()["memberships"] == before.json()["memberships"]
 
 
 # ---------------------------------------------------------------------------
@@ -450,17 +447,47 @@ async def test_multi_membership_login_can_complete_context_selection(
     tenant: Tenant,
     admin_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    """A user with no primary membership receives a one-use continuation."""
+    """A user with several memberships and no primary receives a one-use continuation.
+
+    The multi-membership user is a TEACHER placed at two campuses. It cannot be the
+    principal any more: they hold exactly one membership however many campuses the
+    organization has, so login always resolves it and never needs a picker.
+    """
+    second = await tenant.post(f"{API}/schools", json={"name": "Second Campus", "code": "SECOND"})
+    assert second.status_code == 201, second.text
+    second_school_id = second.json()["id"]
+
+    roles = await tenant.get(f"{API}/schools/{tenant.school_id}/roles")
+    teacher = next(role for role in roles.json() if role["code"] == "teacher")
+    created = await tenant.post(
+        f"{API}/schools/{tenant.school_id}/members",
+        json={
+            "email": "two-campuses@test.example",
+            "full_name": "Two Campuses",
+            "password": STRONG_PASSWORD,
+            "role_id": teacher["id"],
+        },
+    )
+    assert created.status_code == 201, created.text
+    member_user_id = created.json()["user_id"]
+
+    assigned = await tenant.post(
+        f"{API}/schools/{tenant.school_id}/members/{created.json()['membership_id']}/branches",
+        json={"school_ids": [second_school_id]},
+    )
+    assert assigned.status_code == 200, assigned.text
+
     async with admin_sessionmaker() as session:
         await session.execute(
             text("UPDATE memberships SET is_primary = false WHERE user_id = :user_id"),
-            {"user_id": tenant.owner_user_id},
+            {"user_id": member_user_id},
         )
         await session.commit()
 
+    db_client.cookies.clear()
     login = await db_client.post(
         f"{API}/auth/login",
-        json={"email": tenant.owner_email, "password": STRONG_PASSWORD},
+        json={"email": "two-campuses@test.example", "password": STRONG_PASSWORD},
         headers={"X-Token-Transport": "body"},
     )
     assert login.status_code == 200, login.text
@@ -500,23 +527,51 @@ async def test_multi_membership_login_can_complete_context_selection(
     assert replay.json()["code"] == "CONTEXT_SELECTION_INVALID"
 
 
-async def test_context_switch_rescopes_the_token(tenant: Tenant) -> None:
+async def test_context_switch_rescopes_the_token(tenant: Tenant, mailbox: list[Any]) -> None:
     """Spec §4.3E: switching membership re-issues a token for the new scope.
 
-    The owner switches from their org-level context into their principal context.
-    The new token names the school; the old one did not.
+    Driven from a school-scoped TEACHER, because the principal has only one
+    membership to switch between now. The new token names the school and carries the
+    teacher's much smaller permission set; the principal's did neither.
     """
-    me = await tenant.get(f"{API}/auth/me")
-    memberships = me.json()["memberships"]
-    principal = next(m for m in memberships if m["role_code"] == "principal")
+    roles = await tenant.get(f"{API}/schools/{tenant.school_id}/roles")
+    teacher_role = next(r for r in roles.json() if r["code"] == "teacher")
+
+    invited = await tenant.post(
+        f"{API}/schools/{tenant.school_id}/invitations",
+        json={
+            "email": "switcher@test.example",
+            "full_name": "Switcher",
+            "role_id": teacher_role["id"],
+        },
+    )
+    assert invited.status_code == 201, invited.text
+
+    tenant.client.cookies.clear()
+    accepted = await tenant.client.post(
+        f"{API}/invitations/accept",
+        json={
+            "token": latest_token(mailbox),
+            "full_name": "Switcher",
+            "password": STRONG_PASSWORD,
+        },
+        headers={"X-Token-Transport": "body"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    tenant.client.cookies.clear()
+    token = accepted.headers["X-Access-Token"]
+
+    me = await tenant.client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {token}"})
+    membership = me.json()["memberships"][0]
+    assert membership["role_code"] == "teacher"
 
     switched = await tenant.client.post(
         f"{API}/auth/context",
-        json={"membership_id": principal["membership_id"]},
-        headers={**tenant.headers(), "X-Token-Transport": "body"},
+        json={"membership_id": membership["membership_id"]},
+        headers={"Authorization": f"Bearer {token}", "X-Token-Transport": "body"},
     )
     assert switched.status_code == 200, switched.text
-    assert switched.json()["school_id"] == principal["school_id"]
+    assert switched.json()["school_id"] == membership["school_id"]
 
     new_token = switched.headers["X-Access-Token"]
     after = await tenant.client.get(
@@ -524,9 +579,9 @@ async def test_context_switch_rescopes_the_token(tenant: Tenant) -> None:
     )
     assert after.status_code == 200
     body = after.json()
-    assert body["school_id"] == principal["school_id"]
-    assert body["role_code"] == "principal"
-    # A principal has no billing rights -- that is the owner/principal split.
+    assert body["school_id"] == membership["school_id"]
+    assert body["role_code"] == "teacher"
+    # Only the org-level principal holds billing.
     assert "billing:manage" not in body["permissions"]
 
 

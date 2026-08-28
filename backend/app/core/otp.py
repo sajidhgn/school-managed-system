@@ -91,6 +91,20 @@ OTP_MAX_ATTEMPTS = 5
 OTP_RESEND_COOLDOWN_SECONDS = 60
 
 
+# The type every OTP flow's purpose enum satisfies.
+#
+# WHY NOT JUST `OtpPurpose`: the guardian portal has its own purposes
+# (`GuardianOtpPurpose`), living in its module because they describe that surface's
+# doors and nothing here should know about them. Widening to `StrEnum` lets this
+# module stay the single owner of the primitives without importing downward into
+# `app.modules`, which would be a dependency inversion and an import cycle.
+#
+# The DOMAIN SEPARATION guarantee is unaffected: the digest binds `purpose.value`,
+# and the two enums use disjoint values (`signup_verify` vs `guardian_portal_login`),
+# so a code from one flow still cannot be replayed against the other.
+type AnyOtpPurpose = StrEnum
+
+
 class OtpPurpose(StrEnum):
     """What a given code is allowed to authorise.
 
@@ -119,7 +133,7 @@ def generate_otp(length: int = OTP_LENGTH) -> str:
 def hash_otp(
     code: str,
     *,
-    purpose: OtpPurpose,
+    purpose: AnyOtpPurpose,
     identifier: str,
     settings: Settings | None = None,
 ) -> str:
@@ -152,7 +166,7 @@ def verify_otp(
     code: str,
     stored_hash: str,
     *,
-    purpose: OtpPurpose,
+    purpose: AnyOtpPurpose,
     identifier: str,
     settings: Settings | None = None,
 ) -> bool:

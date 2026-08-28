@@ -50,6 +50,20 @@ const PUBLIC_PREFIXES = [
 /** Signed-in users should not sit on these; bounce them into the app. */
 const AUTH_ONLY_PAGES = ["/login", "/signup"];
 
+/**
+ * Continue, telling the server components which path they are rendering.
+ *
+ * A Server Component cannot read its own URL, and `requireUser()` needs it: when a
+ * session turns out to be dead it sends the user through `/api/auth/recover`, which
+ * has to know where to put them back afterwards. Middleware is the only layer that
+ * sees both the request and the eventual render, so it forwards the path as a header.
+ */
+function passThrough(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set("x-pathname", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.next({ request: { headers } });
+}
+
 function isPublic(pathname: string): boolean {
   if (pathname === "/") return true;
   return PUBLIC_PREFIXES.some(
@@ -70,7 +84,7 @@ export function middleware(request: NextRequest) {
       // Already an operator? Skip the form.
       return hasPlatformSession
         ? NextResponse.redirect(new URL("/platform/organizations", request.url))
-        : NextResponse.next();
+        : passThrough(request);
     }
 
     if (!hasPlatformSession) {
@@ -78,7 +92,7 @@ export function middleware(request: NextRequest) {
       if (pathname !== "/platform") url.searchParams.set("next", pathname);
       return NextResponse.redirect(url);
     }
-    return NextResponse.next();
+    return passThrough(request);
   }
 
   // --- Tenant app + marketing --------------------------------------------
@@ -97,7 +111,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return passThrough(request);
 }
 
 export const config = {

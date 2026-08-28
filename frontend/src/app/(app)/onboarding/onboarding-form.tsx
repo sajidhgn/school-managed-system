@@ -10,18 +10,20 @@ import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/errors";
-import { api, authRequest } from "@/lib/api/client";
+import { authRequest } from "@/lib/api/client";
 import { schools } from "@/lib/api/resources";
-import type { MeResponse, MembershipSummary } from "@/lib/api/types";
 import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/schools";
 
 /**
  * Create the organization's first school.
  *
- * On success the backend grants the caller a principal membership on the new school,
- * so their membership list changes underneath them. `router.refresh()` is therefore
- * not optional — without it the shell would keep rendering the org-level context and
- * the new school would be missing from the switcher until a hard reload.
+ * Creating a school grants the caller nothing: they are the org-level principal, and
+ * that membership already covers every campus including this one. What DOES change is
+ * that they now have a campus to look at, so it is selected for them — otherwise the
+ * next school-scoped page would bounce them straight to a picker holding one option.
+ *
+ * `router.refresh()` is not optional either: the shell renders the campus list, and
+ * without it the new school would be missing from the switcher until a hard reload.
  */
 export function OnboardingForm() {
   const { t } = useTranslations();
@@ -41,19 +43,7 @@ export function OnboardingForm() {
         code: values.code.toUpperCase(),
         city: values.city || undefined,
       });
-      if (created.principal_granted) {
-        const me = await api.get<MeResponse>("/auth/me");
-        const principal = me.memberships.find(
-          (membership) =>
-            membership.school_id === created.school.id && membership.role_code === "principal",
-        );
-        if (!principal) {
-          throw new Error("The principal context was not provisioned.");
-        }
-        await authRequest<MembershipSummary>("/context", {
-          membership_id: principal.membership_id,
-        });
-      }
+      await authRequest("/school", { school_id: created.id });
       router.refresh();
       router.push("/dashboard");
     } catch (error) {

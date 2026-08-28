@@ -23,11 +23,13 @@ THE THREE-PART SHAPE: WHO x WHERE x WHAT
     Permission  = an atomic `resource:action` string from a global catalog
 
     `school_id IS NULL` on either a role or a membership means ORG-LEVEL. That is how
-    the owner is represented, and it is the schema-level expression of spec decision
-    D2: owner and principal are different things. The owner holds an org-level
-    membership (no school) plus, after creating their first school, an ordinary
-    school-scoped principal membership. Two rows, two scopes, one human -- rather
-    than one overloaded role that means different things in different contexts.
+    the PRINCIPAL is represented: one org-level row per human who runs the
+    organization, spanning every school in it.
+
+    There is deliberately no second, school-scoped copy of that person. A principal
+    who also held a campus-level role would appear twice in the members list and
+    twice in the context switcher while gaining nothing -- the org-level row already
+    carries the entire catalog. One human, one role.
 """
 
 from __future__ import annotations
@@ -85,11 +87,15 @@ class PermissionScope(StrEnum):
 class SystemRole(StrEnum):
     """Role codes the platform creates and depends on.
 
-    Custom roles created by a principal use arbitrary codes; these four are seeded
+    Custom roles created by a principal use arbitrary codes; these three are seeded
     and referenced by name in the signup and invitation flows, so they are an enum.
+
+    `principal` is the organization's top role: ORG-LEVEL, holding the whole catalog
+    including billing and `school:create`. It is what the registering user receives,
+    and what `POST /org/transfer-ownership` moves between people. `teacher` and
+    `accountant` are school-scoped starting points each customer tailors.
     """
 
-    OWNER = "owner"
     PRINCIPAL = "principal"
     TEACHER = "teacher"
     ACCOUNTANT = "accountant"
@@ -161,13 +167,13 @@ class Role(Base, UUIDPrimaryKeyMixin, TenantMixin, SchoolScopedMixin, TimestampM
     principal in the organization of their access with no way to restore it."""
 
     is_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    """False on `owner` and `principal` (spec §5.3 rule 2).
+    """False on `principal` (spec §5.3 rule 2).
 
-    This is what stops a principal widening its own role. Without it, "a principal may
-    assign permissions to roles" trivially becomes "a principal may grant itself
-    `billing:manage`", and the escalation guard in rule 1 -- which only checks that
-    the actor already HOLDS what it grants -- would happily allow it, since the
-    principal is editing the very role that defines what it holds.
+    This is what stops a principal NARROWING or widening its own role. Without it,
+    "a principal may assign permissions to roles" trivially becomes "a principal may
+    rewrite the role that defines its own authority", and the escalation guard in
+    rule 1 -- which only checks that the actor already HOLDS what it grants -- cannot
+    catch it, since the actor is editing the very role that defines what it holds.
     """
 
     permissions_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -246,8 +252,8 @@ class Membership(
 ):
     """A user's role within one scope of one organization.
 
-    `school_id IS NULL` = org-level (the owner). Otherwise the membership is confined
-    to that school, and the permission dependency injects the corresponding filter.
+    `school_id IS NULL` = org-level (the principal). Otherwise the membership is
+    confined to that school, and the permission dependency injects the corresponding filter.
 
     One human may hold several of these -- across schools and across organizations --
     which is the whole point of decision D4. The access token names exactly one at a

@@ -55,6 +55,10 @@ const STRIPPED_REQUEST_HEADERS = new Set([
   // A client could otherwise ask the backend to echo tokens back through the proxy.
   "x-token-transport",
   "x-refresh-token",
+  // The active campus is read from the httpOnly cookie by `fetchWithSession`, which
+  // sets this header itself. Forwarding the browser's version would let client JS
+  // pick the campus for a request the server already decided the scope of.
+  "x-active-school",
 ]);
 const STRIPPED_RESPONSE_HEADERS = new Set([
   "content-encoding",

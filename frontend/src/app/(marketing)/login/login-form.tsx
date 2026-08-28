@@ -12,6 +12,7 @@ import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { authRequest } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import type { LoginResponse } from "@/lib/api/types";
@@ -23,10 +24,10 @@ import { loginSchema, type LoginValues } from "@/lib/validation/auth";
  * =============================================================================
  * A SUCCESSFUL LOGIN DOES NOT ALWAYS MEAN "SIGNED IN"
  * =============================================================================
- *   A user with several memberships — a teacher at two schools, or an owner who is
- *   also a principal — gets `select_required: true` and no session yet. That is not
- *   an error and must not look like one: they have not done anything wrong, they
- *   simply have not said which hat they are wearing.
+ *   A user with several memberships — a teacher at two schools, or someone who is a
+ *   principal at one organization and staff at another — gets `select_required: true`
+ *   and no session yet. That is not an error and must not look like one: they have
+ *   not done anything wrong, they simply have not said which hat they are wearing.
  *
  *   Guessing on their behalf would drop them into the wrong school's data, so the
  *   form swaps to a context picker instead. The picker calls `/api/auth/context`,
@@ -97,7 +98,7 @@ export function LoginForm() {
         error={form.formState.errors.password}
         required
       >
-        <Input type="password" autoComplete="current-password" {...form.register("password")} />
+        <PasswordInput autoComplete="current-password" {...form.register("password")} />
       </Field>
 
       {formError ? (

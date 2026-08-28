@@ -23,3 +23,9 @@ export const invitationCreateSchema = z.object({
   role_id: z.string().uuid("Choose a role"),
 });
 export type InvitationCreateValues = z.infer<typeof invitationCreateSchema>;
+
+export const memberCreateSchema = invitationCreateSchema.extend({
+  full_name: z.string().min(2, "Name is required").max(200),
+  password: z.string().min(1, "Password is required").max(200),
+});
+export type MemberCreateValues = z.infer<typeof memberCreateSchema>;

@@ -78,8 +78,16 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 # ---------------------------------------------------------------------------
 
 
-def _extract_token(request: Request, settings: Settings) -> str | None:
+def _extract_token(
+    request: Request, settings: Settings, *, cookie_name: str | None = None
+) -> str | None:
     """Read the access token from the Authorization header, else the cookie.
+
+    `cookie_name` selects WHICH cookie. The parent portal and the staff app are served
+    from one registrable domain and a teacher who is also a parent holds both sessions
+    at once, so they use different cookie names -- see the settings that define them.
+    The header path is shared: a bearer token names its own surface in its `typ` claim,
+    and the guard that reads it checks that claim.
 
     TWO TRANSPORTS ON PURPOSE. The browser app uses an httpOnly cookie, because a
     token reachable from JavaScript is a token any XSS payload can exfiltrate. But
@@ -94,7 +102,49 @@ def _extract_token(request: Request, settings: Settings) -> str | None:
     header = request.headers.get("Authorization")
     if header and header.lower().startswith("bearer "):
         return header[7:].strip() or None
-    return request.cookies.get(settings.ACCESS_COOKIE_NAME)
+    return request.cookies.get(cookie_name or settings.ACCESS_COOKIE_NAME)
+
+
+ACTIVE_SCHOOL_HEADER = "X-Active-School"
+
+
+def _extract_active_school(request: Request) -> UUID | None:
+    """Which campus an ORG-LEVEL caller is currently looking at, if they said.
+
+    =========================================================================
+    THIS NARROWS THE VIEW. IT CANNOT WIDEN AUTHORITY.
+    =========================================================================
+        The principal is org-level: no school on their membership, and permission
+        checks that span every campus. But "show me Central Campus" is a thing they
+        constantly want, and re-minting a session to answer it would be absurd -- so
+        the frontend sends the selected school as a header and the repositories
+        filter on it.
+
+        Three properties make that safe, and all three are load-bearing:
+
+        1. It is read ONLY when the token itself carries no school. A school-scoped
+           member's scope comes from their membership and this header is ignored,
+           so a teacher cannot type their way into another campus.
+
+        2. `AuthContext.school_id` is still taken from the MEMBERSHIP, not from here.
+           So `is_org_level` stays true and the scope guards keep treating the caller
+           as organization-wide. This value reaches the repository filter, nothing
+           else.
+
+        3. RLS still bounds every query to the caller's organization. A school id
+           belonging to another tenant selects nothing rather than leaking anything.
+
+        A malformed value is ignored rather than rejected: the header is a view
+        preference read from a browser cookie, and a 400 on every request would lock
+        a user out of the app over a stale string they cannot see or clear.
+    """
+    raw = request.headers.get(ACTIVE_SCHOOL_HEADER)
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError:
+        return None
 
 
 async def get_access_claims(request: Request, settings: SettingsDep) -> AccessClaims:
@@ -116,7 +166,9 @@ async def get_access_claims(request: Request, settings: SettingsDep) -> AccessCl
 
     set_user_id(claims.user_id)
     set_organization_id(claims.organization_id)
-    set_school_id(claims.school_id)
+    # An org-level caller may narrow which campus they are LOOKING at without
+    # narrowing what they may do -- see `_extract_active_school`.
+    set_school_id(claims.school_id or _extract_active_school(request))
     # NEVER armed from a token claim alone. A platform admin reads across tenants
     # only inside an explicit impersonation context, which sets this separately --
     # see `modules/platform_admin/service.py`. Defaulting it on for any token
@@ -165,7 +217,7 @@ class AuthContext:
     """Everything a handler needs to know about its caller.
 
     Frozen: a handler must not be able to widen its own context mid-request. If a
-    route needs to act in a different scope -- an owner reaching into one of their
+    route needs to act in a different scope -- a principal reaching into one of their
     schools -- it says so explicitly rather than mutating this.
     """
 
@@ -180,7 +232,7 @@ class AuthContext:
 
     @property
     def is_org_level(self) -> bool:
-        """True for the owner: spans every school in the organization (spec §2.3)."""
+        """True for the principal: spans every school in the organization (spec §2.3)."""
         return self.school_id is None
 
     def has(self, *codes: str) -> bool:
@@ -196,7 +248,7 @@ class AuthContext:
     def require_school(self) -> UUID:
         """The active school, or raise if this is an org-level context.
 
-        For handlers whose work is meaningless without a campus. The owner reaching
+        For handlers whose work is meaningless without a campus. The principal reaching
         such a route must first pick a school -- which is a real product decision,
         not an error: "mark attendance" has no answer at organization level.
         """
@@ -443,6 +495,150 @@ async def get_platform_db(
 
 
 PlatformDbSession = Annotated[AsyncSession, Depends(get_platform_db)]
+
+
+# ---------------------------------------------------------------------------
+# Guardian portal -- the third principal
+# ---------------------------------------------------------------------------
+#
+# Mounted here beside the staff and platform guards rather than inside the guardians
+# module, because "who is calling and what may they see" is answered in exactly one
+# file in this codebase. A second, module-local auth dependency is how a surface ends
+# up with its own subtly different idea of what a valid caller is.
+
+
+@dataclass(frozen=True, slots=True)
+class GuardianContext:
+    """The authenticated parent.
+
+    Deliberately NOT an `AuthContext`. It carries no `permissions` and no `role_code`,
+    because a guardian holds none: what they may see is decided per CHILD, by the
+    `can_view_results` flag on the link, not by a permission set. Giving this type the
+    same shape as the staff context would invite a route to call `ctx.has(...)` on it
+    and get `False` for everything -- which reads as "no permission" rather than as
+    "wrong kind of caller", and hides the mistake.
+    """
+
+    identity_id: UUID
+    guardian_id: UUID
+    organization_id: UUID
+    session_id: UUID
+
+
+async def get_guardian_claims(request: Request, settings: SettingsDep) -> AccessClaims:
+    """Verify a portal token and publish the tenant it names into the request context.
+
+    THE SIDE EFFECT IS THE POINT, exactly as in `get_access_claims`: setting the
+    organization here is what makes `get_db` stamp the RLS GUC, and therefore what
+    stops a parent's query reaching another school group's rows.
+
+    `school_id` is set to None on purpose. A parent legitimately spans campuses of one
+    group, so the repository's campus filter must not narrow them to one -- their scope
+    comes from their student links, which the portal service filters on explicitly.
+    """
+    reset_context()
+
+    token = _extract_token(request, settings, cookie_name=settings.GUARDIAN_ACCESS_COOKIE_NAME)
+    if not token:
+        raise AuthenticationError("Missing access token.", code="TOKEN_MISSING")
+
+    claims = decode_access_token(token, settings=settings)
+    if not claims.is_guardian:
+        # A staff or platform token presented to the portal. Refused on the `typ`
+        # claim rather than on a missing field: "has no membership claim" would also
+        # be true of a mis-minted staff token, and that must not open a parent surface.
+        raise AuthorizationError(
+            "This endpoint requires a guardian session.", code="GUARDIAN_ACCESS_REQUIRED"
+        )
+
+    set_user_id(claims.user_id)
+    set_organization_id(claims.organization_id)
+    set_school_id(None)
+    set_platform_admin(False)
+    return claims
+
+
+GuardianClaims = Annotated[AccessClaims, Depends(get_guardian_claims)]
+
+
+async def get_guardian_db(
+    _claims: GuardianClaims,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> AsyncSession:
+    """Portal session, tenant-bound. Same ordering trick as `get_tenant_db`."""
+    return session
+
+
+GuardianDbSession = Annotated[AsyncSession, Depends(get_guardian_db)]
+
+
+async def require_guardian(
+    claims: GuardianClaims,
+    session: GuardianDbSession,
+) -> GuardianContext:
+    """Guard for `/portal/*`.
+
+    THE GUARDIAN RECORD IS RE-READ ON EVERY REQUEST, for the same reason staff
+    memberships are: a school that switches its portal off, or removes a parent's
+    record, must lose that parent within one access-token lifetime rather than one
+    refresh-token lifetime. Revocation that takes effect "eventually" is not
+    revocation.
+    """
+    from app.modules.guardians.models import Guardian, GuardianIdentity
+
+    if claims.principal_type is not PrincipalType.GUARDIAN:
+        # The pre-context token reaches here when a client skips the picker. It is a
+        # valid guardian credential but names no organization, so it cannot read
+        # anything -- say so precisely rather than 401ing a caller who is signed in.
+        raise AuthorizationError(
+            "Choose a school before opening the portal.", code="GUARDIAN_CONTEXT_REQUIRED"
+        )
+    if claims.guardian_id is None or claims.organization_id is None:
+        raise AuthenticationError(
+            "This portal session is incomplete. Please sign in again.",
+            code="GUARDIAN_CONTEXT_REQUIRED",
+        )
+
+    # RLS already scoped this to the token's organization, so a guardian record
+    # belonging to another group simply is not returned -- there is no separate
+    # cross-tenant check to forget.
+    guardian = (
+        await session.execute(
+            select(Guardian).where(
+                Guardian.id == claims.guardian_id,
+                Guardian.identity_id == claims.user_id,
+                Guardian.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if guardian is None:
+        raise AuthenticationError("This portal account no longer exists.", code="GUARDIAN_REVOKED")
+    if not guardian.portal_enabled:
+        raise AuthorizationError(
+            "The parent portal is not available for this school.",
+            code="GUARDIAN_PORTAL_DISABLED",
+        )
+
+    identity = await session.get(GuardianIdentity, claims.user_id)
+    if identity is None or not identity.can_authenticate:
+        raise AuthenticationError("This account cannot sign in.", code="GUARDIAN_INACTIVE")
+
+    organization = await session.get(Organization, guardian.organization_id)
+    if organization is None or not (organization.is_active or organization.is_read_only):
+        # A suspended organization stays READABLE for staff (spec §6.3) and therefore
+        # for parents too: withholding a child's own records over the school's payment
+        # dispute punishes the wrong party. The portal is read-only anyway.
+        raise AuthorizationError("This school is no longer active.", code="ORGANIZATION_INACTIVE")
+
+    return GuardianContext(
+        identity_id=guardian.identity_id,
+        guardian_id=guardian.id,
+        organization_id=guardian.organization_id,
+        session_id=claims.session_id,
+    )
+
+
+CurrentGuardian = Annotated[GuardianContext, Depends(require_guardian)]
 
 
 # ---------------------------------------------------------------------------
