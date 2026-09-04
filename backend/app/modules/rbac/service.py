@@ -49,12 +49,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.api.deps import AuthContext
 from app.common.audit import AuditAction, record_audit
+from app.common.schemas import PageParams
 from app.core.cache import invalidate_role_permissions
 from app.core.exceptions import (
     AuthorizationError,
@@ -421,16 +422,34 @@ class RbacService:
     # Memberships
     # -----------------------------------------------------------------------
 
-    async def list_members(self, *, school_id: UUID | None) -> list[Membership]:
-        """Staff of one school, or of the whole organization for an org-level caller."""
+    async def list_members(
+        self, *, school_id: UUID | None, params: PageParams
+    ) -> tuple[list[Membership], int]:
+        """One page of a school's staff (or the whole organization's), plus the total.
+
+        Ordered by the person's name, then by membership id so pagination stays
+        deterministic when two people share a name — unstable ordering shuffles rows
+        between pages and readers see duplicates.
+        """
+        conditions: list[ColumnElement[bool]] = [Membership.deleted_at.is_(None)]
+        if school_id is not None:
+            conditions.append(Membership.school_id == school_id)
+
+        total = (
+            await self.session.execute(select(func.count(Membership.id)).where(*conditions))
+        ).scalar_one()
+
         stmt = (
             select(Membership)
+            .join(User, Membership.user_id == User.id)
             .options(joinedload(Membership.user), joinedload(Membership.role))
-            .where(Membership.deleted_at.is_(None))
+            .where(*conditions)
+            .order_by(User.full_name.asc(), Membership.id)
+            .offset(params.offset)
+            .limit(params.limit)
         )
-        if school_id is not None:
-            stmt = stmt.where(Membership.school_id == school_id)
-        return list((await self.session.execute(stmt)).scalars().all())
+        members = list((await self.session.execute(stmt)).scalars().all())
+        return members, total
 
     async def list_teaching_staff(self, *, school_id: UUID) -> list[Membership]:
         """Active staff of one branch who run a classroom, for the teacher pickers.

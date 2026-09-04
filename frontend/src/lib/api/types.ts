@@ -36,6 +36,7 @@ export type TransferOwnershipRequest = S["TransferOwnershipRequest"];
 export type SchoolRead = S["SchoolRead"];
 export type SchoolCreate = S["SchoolCreate"];
 export type SchoolUpdate = S["SchoolUpdate"];
+export type CardDesignConfig = S["CardDesignConfig"];
 
 // --- RBAC ------------------------------------------------------------------
 export type PermissionRead = S["PermissionRead"];

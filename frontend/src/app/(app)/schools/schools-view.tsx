@@ -109,8 +109,13 @@ export function SchoolsView({
       // that appears not to respond.
     } finally {
       setBusy(false);
-      router.refresh();
+      // Push BEFORE refresh. The app layout (sidebar, header) is shared between
+      // /schools and the destination, so a plain push would reuse its cached render
+      // with the previous campus still wired in. Refreshing after the navigation
+      // re-fetches the new route from the root, layout included; refreshing before
+      // it is superseded by the push and lost.
       router.push(`/schools/${school.id}` as Route);
+      router.refresh();
     }
   }
 

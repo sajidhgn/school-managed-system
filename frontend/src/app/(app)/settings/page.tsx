@@ -6,6 +6,7 @@ import {
   PERMISSIONS,
   type MemberRead,
   type OrganizationRead,
+  type Page,
   type SchoolRead,
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
@@ -25,13 +26,16 @@ export default async function SettingsPage() {
   let ownershipCandidates: MemberRead[] = [];
   if (canTransferOwnership) {
     const schools = await serverGetRequired<SchoolRead[]>("/schools");
+    // One page at the endpoint's maximum size per school. The candidate picker
+    // needs "everyone plausible", and a hundred active staff per campus covers
+    // any realistic candidate pool for handing over the organization.
     const members = (
       await Promise.all(
         schools.map((school) =>
-          serverGetRequired<MemberRead[]>(`/schools/${school.id}/members`),
+          serverGetRequired<Page<MemberRead>>(`/schools/${school.id}/members?size=100`),
         ),
       )
-    ).flat();
+    ).flatMap((page) => page.items);
     ownershipCandidates = [
       ...new Map(
         members

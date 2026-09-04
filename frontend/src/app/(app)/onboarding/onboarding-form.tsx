@@ -44,8 +44,10 @@ export function OnboardingForm() {
         city: values.city || undefined,
       });
       await authRequest("/school", { school_id: created.id });
-      router.refresh();
+      // Push before refresh so the shared app layout (sidebar) re-renders for the
+      // newly created school; a refresh issued before the push is superseded by it.
       router.push("/dashboard");
+      router.refresh();
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.code === "SCHOOL_CODE_TAKEN") {

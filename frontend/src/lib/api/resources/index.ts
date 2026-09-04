@@ -13,6 +13,8 @@ import type {
   PlanWrite,
   OrganizationRead,
   OrganizationUpdate,
+  Page,
+  PageParams,
   PermissionCategory,
   RoleCreate,
   RoleDetail,
@@ -86,7 +88,8 @@ export const roles = {
 
 // --- Members ---------------------------------------------------------------
 export const members = {
-  list: (schoolId: string) => api.get<MemberRead[]>(`/schools/${schoolId}/members`),
+  list: (schoolId: string, params: PageParams = {}) =>
+    api.get<Page<MemberRead>>(`/schools/${schoolId}/members`, { params: { ...params } }),
   /**
    * The branch's teaching staff, for the class-teacher and curriculum pickers.
    *

@@ -43,8 +43,10 @@ export function ContextPicker({
     try {
       await authRequest("/context", { membership_id: membershipId });
       onSwitched?.();
-      router.refresh();
+      // Push before refresh so the shared app layout (sidebar) re-renders for the
+      // new membership; a refresh issued before the push is superseded by it.
       router.push(redirectTo as Route);
+      router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t.errors.generic);
       setBusy(null);

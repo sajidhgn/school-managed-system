@@ -46,8 +46,10 @@ export function SchoolPicker({
     try {
       await authRequest("/school", { school_id: schoolId });
       onPicked?.();
-      router.refresh();
+      // Push before refresh so the shared app layout (sidebar) re-renders for the
+      // newly selected school; a refresh issued before the push is superseded by it.
       router.push(redirectTo as Route);
+      router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t.errors.generic);
       setBusy(null);

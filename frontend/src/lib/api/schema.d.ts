@@ -1164,7 +1164,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Members */
+        /**
+         * List Members
+         * @description One page of the school's staff, ordered by name.
+         */
         get: operations["list_members_api_v1_schools__school_id__members_get"];
         put?: never;
         /**
@@ -3629,6 +3632,103 @@ export interface components {
              */
             at_period_end?: boolean;
         };
+        /**
+         * CardDesignConfig
+         * @description A campus's student ID card template -- the principal's design decisions.
+         *
+         *     Every field has a default equal to how the card rendered before this feature
+         *     existed, so a NULL `card_design` and an empty `{}` both mean "the standard
+         *     card" and old saved designs stay valid as knobs are added. Closed enums, not
+         *     free CSS: the frontend renders these into ONE audited card layout, and a
+         *     principal cannot (and should not) express a design that hides the child's
+         *     name or pushes the QR off the card edge.
+         */
+        CardDesignConfig: {
+            /**
+             * Design
+             * @default classic
+             * @enum {string}
+             */
+            design?: "classic" | "bold" | "gradient" | "stripe" | "minimal" | "chevron" | "panel" | "wave" | "mosaic" | "duotone" | "outline" | "ribbon" | "dots" | "blob" | "rings" | "tide" | "slate" | "banner" | "corner" | "grid" | "prism" | "crest" | "frame" | "sash" | "orbit" | "aurora" | "pillar" | "halo" | "graphite" | "breeze" | "band";
+            /**
+             * Orientation
+             * @default landscape
+             * @enum {string}
+             */
+            orientation?: "landscape" | "portrait";
+            /**
+             * Logo Position
+             * @default center
+             * @enum {string}
+             */
+            logo_position?: "start" | "center" | "end";
+            /**
+             * Photo Shape
+             * @default rounded
+             * @enum {string}
+             */
+            photo_shape?: "rounded" | "circle" | "square";
+            /**
+             * Photo Size
+             * @default md
+             * @enum {string}
+             */
+            photo_size?: "sm" | "md" | "lg";
+            /**
+             * Photo Position
+             * @default start
+             * @enum {string}
+             */
+            photo_position?: "start" | "end";
+            /**
+             * Show Admission Number
+             * @default true
+             */
+            show_admission_number?: boolean;
+            /**
+             * Show Class
+             * @default true
+             */
+            show_class?: boolean;
+            /**
+             * Show Date Of Birth
+             * @default true
+             */
+            show_date_of_birth?: boolean;
+            /**
+             * Show Guardian Name
+             * @default true
+             */
+            show_guardian_name?: boolean;
+            /**
+             * Contact Number
+             * @default guardian
+             * @enum {string}
+             */
+            contact_number?: "guardian" | "emergency" | "school";
+            /**
+             * Show Qr
+             * @default true
+             */
+            show_qr?: boolean;
+            /** Rules */
+            rules?: string[];
+            /**
+             * Show Validity
+             * @default true
+             */
+            show_validity?: boolean;
+            /**
+             * Found Notice
+             * @default
+             */
+            found_notice?: string;
+            /**
+             * Contact Line
+             * @default
+             */
+            contact_line?: string;
+        };
         /** ClassCreate */
         ClassCreate: {
             /**
@@ -5861,6 +5961,10 @@ export interface components {
             billing_email: string | null;
             /** Tax Id */
             tax_id: string | null;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Theme Colors */
+            theme_colors: string[] | null;
             /**
              * Created At
              * Format: date-time
@@ -5945,6 +6049,10 @@ export interface components {
             billing_email?: string | null;
             /** Tax Id */
             tax_id?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
+            /** Theme Colors */
+            theme_colors?: string[] | null;
         };
         /** OtpRequest */
         OtpRequest: {
@@ -6051,6 +6159,12 @@ export interface components {
         Page_GuardianRead_: {
             /** Items */
             items: components["schemas"]["GuardianRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[MemberRead] */
+        Page_MemberRead_: {
+            /** Items */
+            items: components["schemas"]["MemberRead"][];
             meta: components["schemas"]["PageMeta"];
         };
         /** Page[StationeryItemRead] */
@@ -6764,6 +6878,9 @@ export interface components {
             city: string | null;
             /** Logo Url */
             logo_url: string | null;
+            /** Theme Colors */
+            theme_colors: string[] | null;
+            card_design: components["schemas"]["CardDesignConfig"] | null;
             /** Academic Year Start Month */
             academic_year_start_month: number;
             /** Timezone */
@@ -6792,6 +6909,9 @@ export interface components {
             city?: string | null;
             /** Logo Url */
             logo_url?: string | null;
+            /** Theme Colors */
+            theme_colors?: string[] | null;
+            card_design?: components["schemas"]["CardDesignConfig"] | null;
             /** Academic Year Start Month */
             academic_year_start_month?: number | null;
             /** Timezone */
@@ -11357,7 +11477,10 @@ export interface operations {
     };
     list_members_api_v1_schools__school_id__members_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                size?: number;
+            };
             header?: never;
             path: {
                 school_id: string;
@@ -11372,7 +11495,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MemberRead"][];
+                    "application/json": components["schemas"]["Page_MemberRead_"];
                 };
             };
             /** @description Bad Request */

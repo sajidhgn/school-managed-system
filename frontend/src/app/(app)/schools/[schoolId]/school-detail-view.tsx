@@ -28,7 +28,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ColorListInput, THEME_COLOR_PATTERN } from "@/components/ui/color-input";
 import { Input } from "@/components/ui/input";
+import { LogoInput } from "@/components/ui/logo-input";
 import { toast } from "@/components/ui/use-toast";
 import { ApiError } from "@/lib/api/errors";
 import { schools as schoolsApi } from "@/lib/api/resources";
@@ -84,6 +86,8 @@ export function SchoolDetailView({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(school.name);
   const [editCity, setEditCity] = useState(school.city ?? "");
+  const [editLogoUrl, setEditLogoUrl] = useState(school.logo_url ?? "");
+  const [editThemeColors, setEditThemeColors] = useState<string[]>(school.theme_colors ?? []);
   const [formError, setFormError] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,8 +99,10 @@ export function SchoolDetailView({
       if (canSelectCampus && !isActiveCampus) {
         await schoolsApi.setActive(school.id);
       }
-      router.refresh();
+      // Push before refresh so the shared layout (sidebar) is re-fetched for the
+      // destination; a refresh issued before the push is superseded by it.
       router.push(href as never);
+      router.refresh();
     } finally {
       setBusy(false);
     }
@@ -104,12 +110,21 @@ export function SchoolDetailView({
 
   async function save() {
     if (!editName.trim()) return;
+    if (editThemeColors.some((color) => !THEME_COLOR_PATTERN.test(color))) {
+      setFormError("Each theme colour must be a 6-digit hex value, like #1D4ED8.");
+      return;
+    }
     setBusy(true);
     setFormError(null);
     try {
       await schoolsApi.update(school.id, {
         name: editName.trim(),
         city: editCity.trim() || null,
+        // Explicit nulls: an emptied branding field REVERTS this campus to the
+        // organization's branding (null means inherit, not "no logo"). An empty
+        // palette is likewise sent as null — the API has one spelling for it.
+        logo_url: editLogoUrl.trim() || null,
+        theme_colors: editThemeColors.length ? editThemeColors : null,
       });
       toast({ title: `${editName.trim()} updated.` });
       setEditing(false);
@@ -203,7 +218,7 @@ export function SchoolDetailView({
             label={t.nav.invitations}
             value={pendingInvitationCount}
             disabled={busy}
-            onOpen={() => openScoped("/invitations")}
+            onOpen={() => openScoped("/members?invite=1")}
           />
         </Can>
         <Can permission={PERMISSIONS.roleRead}>
@@ -253,6 +268,18 @@ export function SchoolDetailView({
               <span className="font-medium">{t.onboarding.city}</span>
               <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} />
             </label>
+            <div className="grid gap-1.5 text-sm">
+              <span className="font-medium">Logo</span>
+              <LogoInput value={editLogoUrl} onChange={setEditLogoUrl} />
+            </div>
+            <div className="grid gap-1.5 text-sm">
+              <span className="font-medium">Theme colours</span>
+              <ColorListInput values={editThemeColors} onChange={setEditThemeColors} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Branding here applies to this branch only. Leave a field empty to use
+              your organization&apos;s branding from Settings.
+            </p>
             {formError ? (
               <p role="alert" className="text-sm text-destructive">
                 {formError}

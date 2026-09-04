@@ -7,8 +7,11 @@ import { PageHeader } from "@/components/page-header";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ColorListInput, THEME_COLOR_PATTERN } from "@/components/ui/color-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LogoInput } from "@/components/ui/logo-input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
@@ -20,6 +23,39 @@ import {
   type MemberRead,
   type OrganizationRead,
 } from "@/lib/api/types";
+import { CURRENCY_CODES, timezonesForCurrency } from "@/lib/currency-timezones";
+
+/*
+ * The full IANA list is only the fallback: normally the timezone dropdown is
+ * narrowed to the zones of the selected currency's regions. The English
+ * currency name is fixed-locale on purpose — a locale-dependent label would
+ * render differently on server and client and trip hydration.
+ */
+const TIMEZONES: string[] = (() => {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    return ["UTC"];
+  }
+})();
+
+const currencyNames = new Intl.DisplayNames(["en"], { type: "currency" });
+
+function currencyLabel(code: string): string {
+  try {
+    const name = currencyNames.of(code);
+    return name && name !== code ? `${code} — ${name}` : code;
+  } catch {
+    // `of` throws on a syntactically invalid code; a stored value is shown as-is.
+    return code;
+  }
+}
+
+function withCurrent(options: string[], current: string): string[] {
+  // A stored value outside ICU's list (an old tzdata alias, say) must still
+  // appear, otherwise the select would silently show — and save — a different one.
+  return options.includes(current) ? options : [current, ...options];
+}
 
 /**
  * Account and organization settings.
@@ -46,14 +82,50 @@ export function SettingsView({
   const { t } = useTranslations();
   const [name, setName] = useState(organization?.name ?? "");
   const [billingEmail, setBillingEmail] = useState(organization?.billing_email ?? "");
+  const [logoUrl, setLogoUrl] = useState(organization?.logo_url ?? "");
+  const [themeColors, setThemeColors] = useState<string[]>(organization?.theme_colors ?? []);
+  const [currency, setCurrency] = useState(organization?.currency ?? "USD");
+  const [timezone, setTimezone] = useState(organization?.timezone ?? "UTC");
+
+  // Zones where the chosen currency circulates; empty means "unknown", in
+  // which case the dropdown falls back to the full IANA list.
+  const currencyZones = timezonesForCurrency(currency);
+  const timezoneOptions = currencyZones.length ? currencyZones : TIMEZONES;
+
+  function changeCurrency(code: string) {
+    setCurrency(code);
+    const zones = timezonesForCurrency(code);
+    // Follow the currency: keep the timezone only if it still fits, otherwise
+    // pick the first matching zone (single-zone countries thus auto-select).
+    if (zones.length && !zones.includes(timezone)) {
+      setTimezone(zones[0]);
+    }
+  }
   const [saving, setSaving] = useState(false);
   const [newOwnerMembershipId, setNewOwnerMembershipId] = useState("");
   const [confirmTransfer, setConfirmTransfer] = useState(false);
 
   async function save() {
+    if (themeColors.some((color) => !THEME_COLOR_PATTERN.test(color))) {
+      toast({
+        variant: "destructive",
+        title: "Each theme colour must be a 6-digit hex value, like #1D4ED8.",
+      });
+      return;
+    }
     setSaving(true);
     try {
-      await orgApi.update({ name, billing_email: billingEmail || null });
+      await orgApi.update({
+        name,
+        billing_email: billingEmail || null,
+        // Empty means "unbranded", sent as an explicit null so the PATCH clears
+        // the stored value rather than leaving it (omitted = unchanged). The API
+        // spells "no palette" as null, never [].
+        logo_url: logoUrl.trim() || null,
+        theme_colors: themeColors.length ? themeColors : null,
+        currency,
+        timezone,
+      });
       toast({ title: t.settings.organizationUpdated });
       router.refresh();
     } catch (error) {
@@ -139,10 +211,77 @@ export function SettingsView({
               </p>
             </div>
 
+            {/*
+              Branding lives at BOTH levels on purpose. This is the organization-wide
+              default every branch inherits; a branch that wants its own identity
+              overrides it on its school page, field by field. That is the whole
+              "single or individual" story — there is no mode switch to forget.
+            */}
+            <div className="grid gap-4 border-t border-border pt-4">
+              <h3 className="text-sm font-medium">Branding</h3>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="org-logo">Logo</Label>
+                <LogoInput
+                  id="org-logo"
+                  value={logoUrl}
+                  disabled={!canEditOrg}
+                  onChange={setLogoUrl}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label>Theme colours</Label>
+                <ColorListInput
+                  values={themeColors}
+                  disabled={!canEditOrg}
+                  onChange={setThemeColors}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Used on student cards and printed headers. Every branch uses this
+                branding unless it sets its own — a branch overrides it from its page
+                under Schools.
+              </p>
+            </div>
+
+            <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="org-currency">{t.settings.currency}</Label>
+                <NativeSelect
+                  id="org-currency"
+                  value={currency}
+                  disabled={!canEditOrg}
+                  onChange={(event) => changeCurrency(event.target.value)}
+                >
+                  {withCurrent(CURRENCY_CODES, currency).map((code) => (
+                    <option key={code} value={code}>
+                      {currencyLabel(code)}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="org-timezone">{t.settings.timezone}</Label>
+                <NativeSelect
+                  id="org-timezone"
+                  value={timezone}
+                  disabled={!canEditOrg}
+                  onChange={(event) => setTimezone(event.target.value)}
+                >
+                  {withCurrent(timezoneOptions, timezone).map((zone) => (
+                    <option key={zone} value={zone}>
+                      {zone}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            </div>
+
             <dl className="grid gap-3 border-t border-border pt-4 text-sm">
               <Row label={t.settings.identifier} value={organization.slug} />
-              <Row label={t.settings.currency} value={organization.currency} />
-              <Row label={t.settings.timezone} value={organization.timezone} />
             </dl>
 
             {canEditOrg ? (

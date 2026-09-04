@@ -9,7 +9,6 @@ import {
   GraduationCap,
   LayoutDashboard,
   Layers,
-  Mail,
   Receipt,
   ScrollText,
   Settings,
@@ -121,13 +120,6 @@ export function SidebarNav({
           label: t.nav.roles,
           icon: ShieldCheck,
           anyOf: [PERMISSIONS.roleRead],
-          requiresSchool: true,
-        },
-        {
-          href: "/invitations",
-          label: t.nav.invitations,
-          icon: Mail,
-          anyOf: [PERMISSIONS.invitationRead, PERMISSIONS.memberInvite],
           requiresSchool: true,
         },
         {

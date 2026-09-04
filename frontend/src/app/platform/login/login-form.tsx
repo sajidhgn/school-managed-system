@@ -38,8 +38,10 @@ export function PlatformLoginForm() {
       });
       if (!response.ok) throw new ApiError(await toProblem(response));
 
-      router.refresh();
+      // Push before refresh so the destination renders with the fresh session;
+      // a refresh issued before the push is superseded by it.
       router.push("/platform/organizations");
+      router.refresh();
     } catch (err) {
       // The backend returns one indistinguishable error for unknown account, wrong
       // password and locked account — same reasoning as tenant login. Whatever it

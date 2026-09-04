@@ -181,7 +181,10 @@ async def test_principal_can_assign_teacher_to_multiple_branches(tenant: Tenant)
 
     members = await tenant.get(f"{API}/schools/{second_school_id}/members")
     assert members.status_code == 200, members.text
-    assert any(member["email"] == "multi-branch-teacher@test.example" for member in members.json())
+    assert any(
+        member["email"] == "multi-branch-teacher@test.example"
+        for member in members.json()["items"]
+    )
 
 
 async def test_campus_head_cannot_assign_branches(tenant: Tenant, mailbox: list[Any]) -> None:
@@ -348,7 +351,9 @@ async def test_user_cannot_remove_their_own_membership(tenant: Tenant, mailbox: 
         headers={"Authorization": f"Bearer {head_token}"},
     )
     assert members.status_code == 200
-    own = next(m for m in members.json() if m["email"] == "campus-head@test.example")
+    own = next(
+        m for m in members.json()["items"] if m["email"] == "campus-head@test.example"
+    )
 
     response = await tenant.client.delete(
         f"{API}/schools/{tenant.school_id}/members/{own['membership_id']}",
@@ -501,7 +506,9 @@ async def test_suspended_member_is_refused_immediately(tenant: Tenant, mailbox: 
     assert ok.status_code == 200
 
     members = await tenant.get(f"{API}/schools/{tenant.school_id}/members")
-    target = next(m for m in members.json() if m["email"] == "campus-head@test.example")
+    target = next(
+        m for m in members.json()["items"] if m["email"] == "campus-head@test.example"
+    )
 
     suspended = await tenant.patch(
         f"{API}/schools/{tenant.school_id}/members/{target['membership_id']}",

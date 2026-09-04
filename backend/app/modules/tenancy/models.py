@@ -54,7 +54,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -146,6 +146,23 @@ class Organization(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     payable, not to the principal who signed up."""
 
     tax_id: Mapped[str | None] = mapped_column(String(64))
+
+    # --- Branding ----------------------------------------------------------
+    # The organization-wide default. A school whose own branding columns are NULL
+    # inherits these, so a single-campus client (or a trust that wants one identity
+    # everywhere) configures branding exactly once. A campus that sets its own
+    # overrides them -- see `School.logo_url` / `School.theme_color`.
+    logo_url: Mapped[str | None] = mapped_column(Text)
+    """An `https://` URL or a `data:image/...` URI. Text, not varchar: uploaded
+    logos are stored inline as client-downscaled data URIs (tens of KB), because
+    the deployment has no file-storage tier and the browser is never told the
+    API origin, so there is nowhere else an `<img src>` could point. Bounded at
+    the schema layer, where the two accepted shapes are also enforced."""
+    theme_colors: Mapped[list[str] | None] = mapped_column(ARRAY(String(7)))
+    """Ordered `#RRGGBB` palette. Position is meaning -- first is primary, second
+    secondary -- and consumers (ID card designs, report headers) read by index.
+    Count and format are validated at the schema layer."""
+
     requested_plan_code: Mapped[str] = mapped_column(
         String(50), nullable=False, default="free", server_default="free"
     )
@@ -210,7 +227,27 @@ class School(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteM
     phone: Mapped[str | None] = mapped_column(String(32))
     address: Mapped[str | None] = mapped_column(Text)
     city: Mapped[str | None] = mapped_column(String(100))
-    logo_url: Mapped[str | None] = mapped_column(String(500))
+    logo_url: Mapped[str | None] = mapped_column(Text)
+    """NULL means "use the organization's logo", not "no logo": branding resolves
+    school-over-organization, field by field. Same rule for `theme_colors`.
+    Text for the same reason as `Organization.logo_url`: uploads live inline as
+    data URIs."""
+
+    theme_colors: Mapped[list[str] | None] = mapped_column(ARRAY(String(7)))
+    """Ordered `#RRGGBB` palette for this campus's ID cards and report headers,
+    overriding `Organization.theme_colors` AS A WHOLE when set -- palettes are
+    designed together, so they are never mixed element-wise across levels."""
+
+    card_design: Mapped[dict | None] = mapped_column(JSONB)
+    """The campus's student ID card template, as chosen by the principal: layout
+    design, logo/photo placement and shape, which fields print, which phone
+    number the "if found" line shows, whether a QR is included. Shape is owned
+    and validated by `CardDesignConfig` in schemas.py -- JSONB rather than a
+    column per knob because the set of knobs is the part guaranteed to change,
+    and each knob has a rendering default, so absence is always meaningful.
+    NULL means "the default card", per campus, NOT inherited from the
+    organization: card layout follows the printer sitting at a campus desk,
+    unlike colours and logos, which follow the brand."""
 
     # --- Calendar & locale -------------------------------------------------
     academic_year_start_month: Mapped[int] = mapped_column(Integer, nullable=False, default=4)

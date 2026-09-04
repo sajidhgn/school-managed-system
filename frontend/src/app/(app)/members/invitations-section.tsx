@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRound, Mail, RotateCw, X } from "lucide-react";
+import { ChevronDown, KeyRound, Mail, RotateCw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -9,7 +9,6 @@ import { useForm } from "react-hook-form";
 import { Can } from "@/components/auth/can";
 import { EmptyState } from "@/components/data-states";
 import { Field } from "@/components/form/field";
-import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +17,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
+import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api/errors";
 import { invitations as invitationsApi, members as membersApi } from "@/lib/api/resources";
 import {
@@ -32,9 +32,10 @@ import { invitationCreateSchema, type InvitationCreateValues } from "@/lib/valid
 import { memberCreateSchema, type MemberCreateValues } from "@/lib/validation/rbac";
 
 /**
- * Send and manage staff invitations (spec §7).
+ * Send and manage staff invitations (spec §7), embedded in the Members page as a
+ * collapsible section — the "Invite staff" button in the page header opens it.
  *
- * Three things this screen makes explicit, because each is surprising otherwise:
+ * Three things this section makes explicit, because each is surprising otherwise:
  *
  *   SEATS ARE CONSUMED ON SEND, not on accept. Otherwise a school could invite
  *   fifty people onto a twenty-five seat plan and discover the problem when the
@@ -48,18 +49,22 @@ import { memberCreateSchema, type MemberCreateValues } from "@/lib/validation/rb
  *   more powerful than your own is the same escalation as editing a role, through a
  *   different door, and the server refuses it.
  */
-export function InvitationsView({
+export function InvitationsSection({
   schoolId,
   schoolName,
   invitations,
   roles,
   staffSeats,
+  open,
+  onToggle,
 }: {
   schoolId: string;
   schoolName: string;
   invitations: InvitationRead[];
   roles: RoleRead[];
   staffSeats: UsageItem | null;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const router = useRouter();
   const { t } = useTranslations();
@@ -76,6 +81,7 @@ export function InvitationsView({
   });
 
   const seatsExhausted = staffSeats?.is_exhausted ?? false;
+  const pendingCount = invitations.filter((i) => i.status === "pending").length;
 
   async function send(values: InvitationCreateValues) {
     try {
@@ -156,117 +162,141 @@ export function InvitationsView({
   const past = invitations.filter((i) => i.status !== "pending");
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      <PageHeader
-        title={t.invitations.title}
-        description={t.invitations.subtitle}
-      />
-
-      <Can
-        permission={PERMISSIONS.memberInvite}
-        fallback={
-          <p className="mb-6 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
-            {t.invitations.readOnlyNotice}
-          </p>
-        }
+    <section className="mb-8 rounded-xl border border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls="invitations-panel"
+        className="flex w-full items-center justify-between gap-4 rounded-xl px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="mb-3 flex gap-2" role="group" aria-label="Member creation method">
-          <Button type="button" variant={creationMode === "invite" ? "default" : "outline"} onClick={() => setCreationMode("invite")}>
-            <Mail className="size-4" aria-hidden /> Send invite
-          </Button>
-          <Button type="button" variant={creationMode === "manual" ? "default" : "outline"} onClick={() => setCreationMode("manual")}>
-            <KeyRound className="size-4" aria-hidden /> Create with password
-          </Button>
+        <div>
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <Mail className="size-4 text-muted-foreground" aria-hidden />
+            {t.invitations.title}
+            {pendingCount > 0 ? (
+              <Badge variant="warning">
+                {pendingCount} {t.invitations.pending.toLowerCase()}
+              </Badge>
+            ) : null}
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">{t.invitations.subtitle}</span>
         </div>
-        <p className="mb-3 text-sm text-muted-foreground">
-          School branch: <span className="font-medium text-foreground">{schoolName}</span>
-        </p>
-        {creationMode === "invite" ? <form
-          onSubmit={form.handleSubmit(send)}
-          className="mb-8 grid gap-4 rounded-xl border border-border bg-card p-5"
-          noValidate
-        >
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label={t.common.email} htmlFor="email" error={form.formState.errors.email} required>
-              <Input type="email" placeholder="teacher@school.pk" {...form.register("email")} />
-            </Field>
-            <Field label={t.common.name} htmlFor="full_name" error={form.formState.errors.full_name}>
-              <Input placeholder={t.invitations.namePlaceholder} {...form.register("full_name")} />
-            </Field>
-            <Field label={t.common.role} htmlFor="role_id" error={form.formState.errors.role_id} required>
-              <NativeSelect {...form.register("role_id")}>
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-          </div>
-
-          {seatsExhausted ? (
-            <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">
-              You have used all {staffSeats?.allowed} staff seats on your plan. Upgrade, or
-              remove a member, before inviting anyone else.
-            </p>
-          ) : staffSeats && !staffSeats.is_unlimited ? (
-            <p className="text-xs text-muted-foreground">
-              {staffSeats.remaining} of {staffSeats.allowed} staff seats remaining.
-            </p>
-          ) : null}
-
-          <div>
-            <Button type="submit" disabled={form.formState.isSubmitting || seatsExhausted}>
-              <Mail className="size-4" aria-hidden />
-              {t.invitations.sendInvitation}
-            </Button>
-          </div>
-        </form> : (
-          <form onSubmit={manualForm.handleSubmit(createManually)} className="mb-8 grid gap-4 rounded-xl border border-border bg-card p-5" noValidate>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.common.email} htmlFor="manual-email" error={manualForm.formState.errors.email} required>
-                <Input id="manual-email" type="email" {...manualForm.register("email")} />
-              </Field>
-              <Field label={t.common.name} htmlFor="manual-name" error={manualForm.formState.errors.full_name} required>
-                <Input id="manual-name" {...manualForm.register("full_name")} />
-              </Field>
-              <Field label="Temporary password" htmlFor="manual-password" error={manualForm.formState.errors.password} required>
-                <PasswordInput id="manual-password" autoComplete="new-password" {...manualForm.register("password")} />
-              </Field>
-              <Field label={t.common.role} htmlFor="manual-role" error={manualForm.formState.errors.role_id} required>
-                <NativeSelect id="manual-role" {...manualForm.register("role_id")}>
-                  {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-                </NativeSelect>
-              </Field>
-            </div>
-            {seatsExhausted ? <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">No staff seats remain on the current plan.</p> : null}
-            <div><Button type="submit" disabled={manualForm.formState.isSubmitting || seatsExhausted}><KeyRound className="size-4" aria-hidden />Create member</Button></div>
-          </form>
-        )}
-      </Can>
-
-      {invitations.length === 0 ? (
-        <EmptyState
-          title={t.invitations.emptyTitle}
-          description={t.invitations.emptyBody}
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          aria-hidden
         />
-      ) : (
-        <div className="grid gap-6">
-          <InvitationTable
-            heading={t.invitations.pending}
-            rows={pending}
-            busy={busy}
-            onResend={(id, email) =>
-              act(id, () => invitationsApi.resend(schoolId, id), `New link sent to ${email}.`)
+      </button>
+
+      {open ? (
+        <div id="invitations-panel" className="border-t border-border p-5">
+          <Can
+            permission={PERMISSIONS.memberInvite}
+            fallback={
+              <p className="mb-6 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
+                {t.invitations.readOnlyNotice}
+              </p>
             }
-            onRevoke={(id, email) =>
-              act(id, () => invitationsApi.revoke(schoolId, id), `Invitation to ${email} revoked.`)
-            }
-          />
-          {past.length > 0 ? <InvitationTable heading={t.invitations.past} rows={past} busy={busy} /> : null}
+          >
+            <div className="mb-3 flex gap-2" role="group" aria-label="Member creation method">
+              <Button type="button" variant={creationMode === "invite" ? "default" : "outline"} onClick={() => setCreationMode("invite")}>
+                <Mail className="size-4" aria-hidden /> Send invite
+              </Button>
+              <Button type="button" variant={creationMode === "manual" ? "default" : "outline"} onClick={() => setCreationMode("manual")}>
+                <KeyRound className="size-4" aria-hidden /> Create with password
+              </Button>
+            </div>
+            <p className="mb-3 text-sm text-muted-foreground">
+              School branch: <span className="font-medium text-foreground">{schoolName}</span>
+            </p>
+            {creationMode === "invite" ? <form
+              onSubmit={form.handleSubmit(send)}
+              className="mb-8 grid gap-4 rounded-xl border border-border bg-background p-5"
+              noValidate
+            >
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label={t.common.email} htmlFor="email" error={form.formState.errors.email} required>
+                  <Input type="email" placeholder="teacher@school.pk" {...form.register("email")} />
+                </Field>
+                <Field label={t.common.name} htmlFor="full_name" error={form.formState.errors.full_name}>
+                  <Input placeholder={t.invitations.namePlaceholder} {...form.register("full_name")} />
+                </Field>
+                <Field label={t.common.role} htmlFor="role_id" error={form.formState.errors.role_id} required>
+                  <NativeSelect {...form.register("role_id")}>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </div>
+
+              {seatsExhausted ? (
+                <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">
+                  You have used all {staffSeats?.allowed} staff seats on your plan. Upgrade, or
+                  remove a member, before inviting anyone else.
+                </p>
+              ) : staffSeats && !staffSeats.is_unlimited ? (
+                <p className="text-xs text-muted-foreground">
+                  {staffSeats.remaining} of {staffSeats.allowed} staff seats remaining.
+                </p>
+              ) : null}
+
+              <div>
+                <Button type="submit" disabled={form.formState.isSubmitting || seatsExhausted}>
+                  <Mail className="size-4" aria-hidden />
+                  {t.invitations.sendInvitation}
+                </Button>
+              </div>
+            </form> : (
+              <form onSubmit={manualForm.handleSubmit(createManually)} className="mb-8 grid gap-4 rounded-xl border border-border bg-background p-5" noValidate>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t.common.email} htmlFor="manual-email" error={manualForm.formState.errors.email} required>
+                    <Input id="manual-email" type="email" {...manualForm.register("email")} />
+                  </Field>
+                  <Field label={t.common.name} htmlFor="manual-name" error={manualForm.formState.errors.full_name} required>
+                    <Input id="manual-name" {...manualForm.register("full_name")} />
+                  </Field>
+                  <Field label="Temporary password" htmlFor="manual-password" error={manualForm.formState.errors.password} required>
+                    <PasswordInput id="manual-password" autoComplete="new-password" {...manualForm.register("password")} />
+                  </Field>
+                  <Field label={t.common.role} htmlFor="manual-role" error={manualForm.formState.errors.role_id} required>
+                    <NativeSelect id="manual-role" {...manualForm.register("role_id")}>
+                      {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                    </NativeSelect>
+                  </Field>
+                </div>
+                {seatsExhausted ? <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">No staff seats remain on the current plan.</p> : null}
+                <div><Button type="submit" disabled={manualForm.formState.isSubmitting || seatsExhausted}><KeyRound className="size-4" aria-hidden />Create member</Button></div>
+              </form>
+            )}
+          </Can>
+
+          {invitations.length === 0 ? (
+            <EmptyState
+              title={t.invitations.emptyTitle}
+              description={t.invitations.emptyBody}
+            />
+          ) : (
+            <div className="grid gap-6">
+              <InvitationTable
+                heading={t.invitations.pending}
+                rows={pending}
+                busy={busy}
+                onResend={(id, email) =>
+                  act(id, () => invitationsApi.resend(schoolId, id), `New link sent to ${email}.`)
+                }
+                onRevoke={(id, email) =>
+                  act(id, () => invitationsApi.revoke(schoolId, id), `Invitation to ${email} revoked.`)
+                }
+              />
+              {past.length > 0 ? <InvitationTable heading={t.invitations.past} rows={past} busy={busy} /> : null}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      ) : null}
+    </section>
   );
 }
 

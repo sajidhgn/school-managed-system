@@ -4,7 +4,7 @@ import * as React from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
+import { CreditCard, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-states";
@@ -41,11 +41,15 @@ import { useDeleteStudent, useStudents } from "@/hooks/use-students";
 import {
   STUDENT_STATUS_LABELS,
   type FeeStandingFilter,
+  type StudentListRow,
   type StudentRead,
   type StudentStatus,
 } from "@/lib/api/types";
 import { cn, formatDate } from "@/lib/utils";
+import { CardDesignDialog } from "./card-design-dialog";
+import type { CardSchool } from "./student-card";
 import { StudentFormDialog } from "./student-form-dialog";
+import { StudentIdCardDialog } from "./student-id-card-dialog";
 
 const ALL = "__all__";
 
@@ -95,10 +99,20 @@ export const STUDENTS_LIST_QUERY_KEY = "students:list-query";
 export function StudentsView({
   canManage,
   canFilterByFees,
+  canDesignCard,
+  school,
 }: {
   canManage: boolean;
   /** Whether the caller holds `fee:read`. See the page component. */
   canFilterByFees: boolean;
+  /** Whether the caller holds `school:update` and may save the card template. */
+  canDesignCard: boolean;
+  /**
+   * Identity, effective branding (branch override or organization default,
+   * resolved by the page) and saved card template of the active campus.
+   * Null when the school list is unreadable.
+   */
+  school: CardSchool | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -132,6 +146,8 @@ export function StudentsView({
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<StudentRead | null>(null);
   const [deleting, setDeleting] = React.useState<StudentRead | null>(null);
+  const [cardStudent, setCardStudent] = React.useState<StudentListRow | null>(null);
+  const [designingCard, setDesigningCard] = React.useState(false);
 
   const debouncedSearch = useDebouncedValue(search);
   const { data: classes } = useClassSummary();
@@ -252,12 +268,22 @@ export function StudentsView({
         title="Students"
         description="Search, filter, and manage your school's student directory."
         actions={
-          canManage ? (
-            <Button onClick={openCreate}>
-              <Plus />
-              Enroll student
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {/* The card DESIGNER lives here, once per school — a row's "View
+                card" only renders the saved template. See CardDesignDialog. */}
+            {canDesignCard && school ? (
+              <Button variant="outline" onClick={() => setDesigningCard(true)}>
+                <CreditCard />
+                Card design
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button onClick={openCreate}>
+                <Plus />
+                Enroll student
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
@@ -518,6 +544,9 @@ export function StudentsView({
                               <DropdownMenuItem asChild>
                                 <Link href={`/students/${student.id}`}>View profile</Link>
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setCardStudent(student)}>
+                                View card
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openEdit(student)}>
                                 Edit
                               </DropdownMenuItem>
@@ -549,6 +578,13 @@ export function StudentsView({
         <>
           <StudentFormDialog open={formOpen} onOpenChange={setFormOpen} student={editing} />
 
+          <StudentIdCardDialog
+            open={Boolean(cardStudent)}
+            onOpenChange={(open) => !open && setCardStudent(null)}
+            student={cardStudent}
+            school={school}
+          />
+
           <ConfirmDialog
             open={Boolean(deleting)}
             onOpenChange={(open) => !open && setDeleting(null)}
@@ -564,6 +600,16 @@ export function StudentsView({
             onConfirm={confirmDelete}
           />
         </>
+      ) : null}
+
+      {/* Outside the canManage block: designing the card rides on
+          `school:update`, which is not implied by the student permissions. */}
+      {canDesignCard ? (
+        <CardDesignDialog
+          open={designingCard}
+          onOpenChange={setDesigningCard}
+          school={school}
+        />
       ) : null}
     </>
   );

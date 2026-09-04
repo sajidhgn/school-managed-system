@@ -1,14 +1,15 @@
 "use client";
 
 import { MoreHorizontal, UserPlus } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Can } from "@/components/auth/can";
+import { InvitationsSection } from "./invitations-section";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
+import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +32,17 @@ import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { members as membersApi } from "@/lib/api/resources";
-import { MEMBER_STATUS_LABELS, PERMISSIONS, label, type MemberRead, type RoleRead, type SchoolRead } from "@/lib/api/types";
+import {
+  MEMBER_STATUS_LABELS,
+  PERMISSIONS,
+  label,
+  type InvitationRead,
+  type MemberRead,
+  type PageMeta,
+  type RoleRead,
+  type SchoolRead,
+  type UsageItem,
+} from "@/lib/api/types";
 
 /**
  * The staff table: change role, suspend, remove.
@@ -50,18 +61,28 @@ import { MEMBER_STATUS_LABELS, PERMISSIONS, label, type MemberRead, type RoleRea
  */
 export function MembersView({
   schoolId,
+  schoolName,
   initialMembers,
+  membersMeta,
+  invitations,
   roles,
   schools,
+  staffSeats,
   canAssignBranches,
   currentMembershipId,
+  initialInviteOpen = false,
 }: {
   schoolId: string;
+  schoolName: string;
   initialMembers: MemberRead[];
+  membersMeta: PageMeta;
+  invitations: InvitationRead[];
   roles: RoleRead[];
   schools: SchoolRead[];
+  staffSeats: UsageItem | null;
   canAssignBranches: boolean;
   currentMembershipId: string | null;
+  initialInviteOpen?: boolean;
 }) {
   const { t } = useTranslations();
   const router = useRouter();
@@ -69,6 +90,23 @@ export function MembersView({
   const [removing, setRemoving] = useState<MemberRead | null>(null);
   const [assigning, setAssigning] = useState<MemberRead | null>(null);
   const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
+  const [inviteOpen, setInviteOpen] = useState(initialInviteOpen);
+  const inviteSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // The section header is always in the DOM, so scrolling does not need to wait
+  // for the panel's expanded content to render.
+  function openInvitations() {
+    setInviteOpen(true);
+    inviteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Pagination is server-driven: the page number lives in the URL, so a page is
+  // bookmarkable and survives a refresh, and the server fetches only that slice.
+  function goToPage(page: number) {
+    const query = new URLSearchParams({ page: String(page) });
+    if (inviteOpen) query.set("invite", "1");
+    router.push(`/members?${query.toString()}`);
+  }
 
   // Only roles for THIS school are assignable. The org-level `principal` role appears
   // in the list so its existence is visible, but assigning it here would be a scope
@@ -99,25 +137,35 @@ export function MembersView({
         description={t.members.subtitle}
         actions={
           <Can permission={PERMISSIONS.memberInvite}>
-            <Button asChild>
-              <Link href="/invitations">
-                <UserPlus className="size-4" aria-hidden />
-                {t.members.inviteStaff}
-              </Link>
+            <Button onClick={openInvitations}>
+              <UserPlus className="size-4" aria-hidden />
+              {t.members.inviteStaff}
             </Button>
           </Can>
         }
       />
 
-      {initialMembers.length === 0 ? (
+      <Can anyOf={[PERMISSIONS.invitationRead, PERMISSIONS.memberInvite]}>
+        <div ref={inviteSectionRef} className="scroll-mt-4">
+          <InvitationsSection
+            schoolId={schoolId}
+            schoolName={schoolName}
+            invitations={invitations}
+            roles={roles.filter((r) => r.school_id === schoolId)}
+            staffSeats={staffSeats}
+            open={inviteOpen}
+            onToggle={() => setInviteOpen((current) => !current)}
+          />
+        </div>
+      </Can>
+
+      {membersMeta.total === 0 ? (
         <EmptyState
           title={t.members.emptyTitle}
           description={t.members.emptyBody}
           action={
             <Can permission={PERMISSIONS.memberInvite}>
-              <Button asChild>
-                <Link href="/invitations">{t.members.inviteStaff}</Link>
-              </Button>
+              <Button onClick={openInvitations}>{t.members.inviteStaff}</Button>
             </Can>
           }
         />
@@ -238,6 +286,7 @@ export function MembersView({
               })}
             </TableBody>
           </Table>
+          <Pagination meta={membersMeta} onPageChange={goToPage} disabled={busy !== null} />
         </div>
       )}
 

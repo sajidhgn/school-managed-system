@@ -3,7 +3,14 @@ import { notFound } from "next/navigation";
 
 import { SchoolDetailView } from "./school-detail-view";
 import { serverGet, serverGetOrNull } from "@/lib/api/server";
-import { PERMISSIONS, type InvitationRead, type MemberRead, type RoleRead, type SchoolRead } from "@/lib/api/types";
+import {
+  PERMISSIONS,
+  type InvitationRead,
+  type MemberRead,
+  type Page,
+  type RoleRead,
+  type SchoolRead,
+} from "@/lib/api/types";
 import { getActiveSchoolId, hasPermission, requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "School" };
@@ -35,9 +42,10 @@ export default async function SchoolDetailPage({
   if (!school) notFound();
 
   const [members, invitations, roles, activeSchoolId] = await Promise.all([
+    // Only the count is shown; the smallest page carries it in its metadata.
     hasPermission(user, PERMISSIONS.memberRead)
-      ? serverGet<MemberRead[]>(`/schools/${schoolId}/members`, [])
-      : Promise.resolve<MemberRead[]>([]),
+      ? serverGet<Page<MemberRead> | null>(`/schools/${schoolId}/members?size=1`, null)
+      : Promise.resolve<Page<MemberRead> | null>(null),
     hasPermission(user, PERMISSIONS.invitationRead)
       ? serverGet<InvitationRead[]>(`/schools/${schoolId}/invitations`, [])
       : Promise.resolve<InvitationRead[]>([]),
@@ -50,7 +58,7 @@ export default async function SchoolDetailPage({
   return (
     <SchoolDetailView
       school={school}
-      memberCount={members.length}
+      memberCount={members?.meta.total ?? 0}
       pendingInvitationCount={invitations.filter((i) => i.status === "pending").length}
       roleCount={roles.filter((r) => r.school_id === schoolId).length}
       // Org-level users pick which campus the school-scoped pages render. A

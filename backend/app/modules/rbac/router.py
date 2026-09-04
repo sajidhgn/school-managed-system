@@ -9,7 +9,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
 
-from app.api.deps import AuthContext, CurrentAuth, DbSession, require
+from app.api.deps import AuthContext, CurrentAuth, DbSession, Pagination, require
+from app.common.schemas import Page
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.modules.rbac.models import Membership
 from app.modules.rbac.schemas import (
@@ -230,15 +231,17 @@ def _member_read(membership: Membership) -> MemberRead:
     )
 
 
-@members_router.get("/{school_id}/members", response_model=list[MemberRead])
+@members_router.get("/{school_id}/members", response_model=Page[MemberRead])
 async def list_members(
     school_id: UUID,
     session: DbSession,
+    params: Pagination,
     ctx: Annotated[AuthContext, Depends(require("member:read"))],
-) -> list[MemberRead]:
+) -> Page[MemberRead]:
+    """One page of the school's staff, ordered by name."""
     _assert_school_scope(ctx, school_id)
-    members = await RbacService(session).list_members(school_id=school_id)
-    return [_member_read(m) for m in members]
+    members, total = await RbacService(session).list_members(school_id=school_id, params=params)
+    return Page.create([_member_read(m) for m in members], total, params)
 
 
 @members_router.get("/{school_id}/teachers", response_model=list[TeacherOption])

@@ -10,6 +10,7 @@ import {
   PERMISSIONS,
   type InvitationRead,
   type MemberRead,
+  type Page,
   type SchoolRead,
   type UsageResponse,
 } from "@/lib/api/types";
@@ -39,9 +40,11 @@ export default async function DashboardPage() {
       ? serverGet<SchoolRead[]>("/schools", [])
       : Promise.resolve<SchoolRead[]>([]),
     serverGet<UsageResponse | null>("/org/usage", null),
+    // Only the total is displayed, so ask for the smallest page the endpoint
+    // allows and read the count from its metadata.
     schoolId && hasPermission(user, PERMISSIONS.memberRead)
-      ? serverGet<MemberRead[]>(`/schools/${schoolId}/members`, [])
-      : Promise.resolve<MemberRead[]>([]),
+      ? serverGet<Page<MemberRead> | null>(`/schools/${schoolId}/members?size=1`, null)
+      : Promise.resolve<Page<MemberRead> | null>(null),
     schoolId && hasPermission(user, PERMISSIONS.invitationRead)
       ? serverGet<InvitationRead[]>(`/schools/${schoolId}/invitations`, [])
       : Promise.resolve<InvitationRead[]>([]),
@@ -69,14 +72,14 @@ export default async function DashboardPage() {
         {schoolId ? (
           <>
             <Can permission={PERMISSIONS.memberRead}>
-              <StatCard icon={Users} label={t.nav.members} value={members.length} href="/members" />
+              <StatCard icon={Users} label={t.nav.members} value={members?.meta.total ?? 0} href="/members" />
             </Can>
             <Can permission={PERMISSIONS.invitationRead}>
               <StatCard
                 icon={Mail}
                 label={t.nav.invitations}
                 value={pendingInvites.length}
-                href="/invitations"
+                href="/members?invite=1"
               />
             </Can>
           </>
