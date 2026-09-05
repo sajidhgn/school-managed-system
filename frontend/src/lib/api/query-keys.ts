@@ -1,5 +1,6 @@
 import type { StructureListParams, VoucherListParams } from "@/lib/api/resources/fees";
 import type { SessionListParams } from "@/lib/api/resources/attendance";
+import type { ExamListParams } from "@/lib/api/resources/exams";
 import type { SubjectListParams } from "@/lib/api/resources/subjects";
 import type { StudentListParams } from "@/lib/api/resources/students";
 import type { SchoolListParams } from "@/lib/api/resources/schools";
@@ -52,6 +53,15 @@ export const queryKeys = {
     all: ["subjects"] as const,
     list: (params: SubjectListParams) => ["subjects", "list", params] as const,
     detail: (id: string) => ["subjects", "detail", id] as const,
+  },
+
+  exams: {
+    all: ["exams"] as const,
+    list: (params: ExamListParams) => ["exams", "list", params] as const,
+    detail: (id: string) => ["exams", "detail", id] as const,
+    papers: (examId: string) => ["exams", examId, "papers"] as const,
+    marks: (paperId: string) => ["exams", "papers", paperId, "marks"] as const,
+    results: (examId: string, classId: string) => ["exams", examId, "results", classId] as const,
   },
 
   attendance: {

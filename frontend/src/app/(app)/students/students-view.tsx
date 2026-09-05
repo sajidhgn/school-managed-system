@@ -37,9 +37,11 @@ import {
 } from "@/components/ui/table";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useExams } from "@/hooks/use-exams";
 import { useDeleteStudent, useStudents } from "@/hooks/use-students";
 import {
   STUDENT_STATUS_LABELS,
+  type ExamResultFilter,
   type FeeStandingFilter,
   type StudentListRow,
   type StudentRead,
@@ -50,6 +52,7 @@ import { CardDesignDialog } from "./card-design-dialog";
 import type { CardSchool } from "./student-card";
 import { StudentFormDialog } from "./student-form-dialog";
 import { StudentIdCardDialog } from "./student-id-card-dialog";
+import { StudentResultDialog } from "./student-result-dialog";
 
 const ALL = "__all__";
 
@@ -71,6 +74,18 @@ const FEE_STANDING_LABELS: Record<string, string> = {
 const DUES_COLUMN_LABELS: Record<string, string> = {
   pending: "Pending dues",
   overdue: "Overdue dues",
+};
+
+/**
+ * Labels for the exam-result filter.
+ *
+ * All three imply "marked in the chosen exam": an unmarked student is missing
+ * data, not a pass — see `ExamResultFilter` on the backend.
+ */
+const EXAM_RESULT_LABELS: Record<string, string> = {
+  passed: "Passed",
+  failed: "Failed",
+  absent: "Absent",
 };
 
 /**
@@ -99,12 +114,16 @@ export const STUDENTS_LIST_QUERY_KEY = "students:list-query";
 export function StudentsView({
   canManage,
   canFilterByFees,
+  canFilterByResults,
   canDesignCard,
   school,
 }: {
   canManage: boolean;
   /** Whether the caller holds `fee:read`. See the page component. */
   canFilterByFees: boolean;
+  /** Whether the caller holds `grade:read`, which gates the exam-result filter
+   *  the same way `fee:read` gates the fee one. */
+  canFilterByResults: boolean;
   /** Whether the caller holds `school:update` and may save the card template. */
   canDesignCard: boolean;
   /**
@@ -137,6 +156,8 @@ export function StudentsView({
   const status = (searchParams.get("status") ?? "") as StudentStatus | "";
   const sectionId = searchParams.get("section") ?? "";
   const fees = (searchParams.get("fees") ?? "") as FeeStandingFilter | "";
+  const examId = searchParams.get("exam") ?? "";
+  const examResult = (searchParams.get("result") ?? "") as ExamResultFilter | "";
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
 
   // The input keeps its own copy so typing stays instant; the URL catches up on
@@ -148,6 +169,12 @@ export function StudentsView({
   const [deleting, setDeleting] = React.useState<StudentRead | null>(null);
   const [cardStudent, setCardStudent] = React.useState<StudentListRow | null>(null);
   const [designingCard, setDesigningCard] = React.useState(false);
+  // The row whose result numbers were clicked, with the class its section
+  // belongs to — the result-sheet endpoint is addressed by class, not section.
+  const [resultTarget, setResultTarget] = React.useState<{
+    student: StudentListRow;
+    classId: string;
+  } | null>(null);
 
   const debouncedSearch = useDebouncedValue(search);
   const { data: classes } = useClassSummary();
@@ -197,11 +224,19 @@ export function StudentsView({
     status: status || null,
     section_id: sectionId || null,
     fees: fees || null,
+    exam: examId || null,
+    result: examResult || null,
     page,
     size: PAGE_SIZE,
     sort_by: "last_name",
     sort_dir: "asc",
   });
+
+  // The exam dropdown's options. Fetched only for holders of `grade:read` —
+  // the same people the server would accept the filter from.
+  const examOptions = useExams({ size: 50 }, { enabled: canFilterByResults });
+  const activeExamName =
+    examOptions.data?.items.find((exam) => exam.id === examId)?.name ?? "Result";
 
   // Remembered for the "All students" link on a student's page: Back already
   // restores the filtered list, but people click the breadcrumb just as often and
@@ -219,11 +254,19 @@ export function StudentsView({
 
   const students = query.data?.items ?? [];
   const meta = query.data?.meta;
-  const hasFilters = Boolean(urlSearch || status || sectionId || fees);
+  const hasFilters = Boolean(urlSearch || status || sectionId || fees || examId);
 
   function clearFilters() {
     setSearch("");
-    writeParams({ q: null, status: null, section: null, fees: null, page: null });
+    writeParams({
+      q: null,
+      status: null,
+      section: null,
+      fees: null,
+      exam: null,
+      result: null,
+      page: null,
+    });
   }
 
   function openCreate() {
@@ -246,7 +289,19 @@ export function StudentsView({
   // server sends no amounts at all (see `StudentListRow.dues`), so a permanently
   // present column would be permanently empty.
   const showDues = Boolean(fees) && fees !== "clear";
-  const columnCount = (canManage ? 7 : 6) + (showDues ? 1 : 0);
+  // Same rule as the dues column: without an exam filter the server sends no
+  // totals at all, so the column exists only while one is applied.
+  const showResult = Boolean(examId);
+  // Which class each section belongs to, for opening a row's result breakdown:
+  // rows carry only their section, but the result sheet is fetched per class.
+  const sectionClassId = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const cls of classes ?? []) {
+      for (const section of cls.sections) map.set(section.id, cls.id);
+    }
+    return map;
+  }, [classes]);
+  const columnCount = (canManage ? 7 : 6) + (showDues ? 1 : 0) + (showResult ? 1 : 0);
 
   // Currency comes from the challans themselves rather than being assumed: the rows
   // carry it, and a school billing in anything else would otherwise have its totals
@@ -367,6 +422,59 @@ export function StudentsView({
               </Select>
             ) : null}
 
+            {/*
+              Exam results, in two steps: pick the exam, then optionally the
+              outcome. Clearing the exam clears the outcome with it — a `result`
+              without an `exam` is a request the server (rightly) refuses.
+            */}
+            {canFilterByResults ? (
+              <>
+                <Select
+                  value={examId || ALL}
+                  onValueChange={(value) =>
+                    writeParams({
+                      exam: value === ALL ? null : value,
+                      ...(value === ALL ? { result: null } : {}),
+                      page: null,
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-48" aria-label="Filter by exam">
+                    <SelectValue placeholder="Any exam" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Any exam</SelectItem>
+                    {(examOptions.data?.items ?? []).map((exam) => (
+                      <SelectItem key={exam.id} value={exam.id}>
+                        {exam.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {examId ? (
+                  <Select
+                    value={examResult || ALL}
+                    onValueChange={(value) =>
+                      writeParams({ result: value === ALL ? null : value, page: null })
+                    }
+                  >
+                    <SelectTrigger className="w-36" aria-label="Filter by result">
+                      <SelectValue placeholder="Any result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Any result</SelectItem>
+                      {Object.entries(EXAM_RESULT_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+              </>
+            ) : null}
+
             {hasFilters ? (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X />
@@ -390,6 +498,11 @@ export function StudentsView({
                     <TableHead className="text-right">
                       {DUES_COLUMN_LABELS[fees] ?? "Dues"}
                     </TableHead>
+                  ) : null}
+                  {showResult ? (
+                    // The exam's own name, so a screenshot of the table still says
+                    // WHICH result the column shows.
+                    <TableHead className="text-right">{activeExamName}</TableHead>
                   ) : null}
                   <TableHead>Status</TableHead>
                   <TableHead>Guardian</TableHead>
@@ -519,6 +632,73 @@ export function StudentsView({
                           )}
                         </TableCell>
                       ) : null}
+                      {/*
+                        The chosen exam's totals. Red only for a paper below its
+                        declared pass line — the same "saturated colour means
+                        something is wrong" rule the dues column follows: a low
+                        percentage on papers with no pass line is a number, not
+                        a verdict.
+                      */}
+                      {showResult ? (
+                        <TableCell className="text-right">
+                          {student.exam_result ? (
+                            (() => {
+                              const summary = (
+                                <>
+                                  <span
+                                    className={cn(
+                                      "font-medium tabular-nums",
+                                      student.exam_result.failed_papers > 0 &&
+                                        "text-destructive",
+                                    )}
+                                  >
+                                    {student.exam_result.percentage}%
+                                  </span>
+                                  <span className="text-xs tabular-nums text-muted-foreground">
+                                    {student.exam_result.total_obtained}/
+                                    {student.exam_result.total_max}
+                                  </span>
+                                  {student.exam_result.failed_papers > 0 ? (
+                                    <span className="text-xs font-medium text-destructive">
+                                      {student.exam_result.failed_papers} paper
+                                      {student.exam_result.failed_papers === 1 ? "" : "s"} failed
+                                    </span>
+                                  ) : null}
+                                  {student.exam_result.absent_papers > 0 ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {student.exam_result.absent_papers} absent
+                                    </span>
+                                  ) : null}
+                                </>
+                              );
+                              const resultClassId = student.section_id
+                                ? sectionClassId.get(student.section_id)
+                                : undefined;
+                              // Clickable only when the section resolves to a
+                              // class — the breakdown is fetched off the class
+                              // result sheet, so without one there is nothing
+                              // to open.
+                              return resultClassId ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setResultTarget({ student, classId: resultClassId })
+                                  }
+                                  aria-label={`Subject-wise result for ${student.full_name}`}
+                                  title="View subject-wise marks"
+                                  className="-my-1 flex w-full cursor-pointer flex-col items-end rounded-md px-1 py-1 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                  {summary}
+                                </button>
+                              ) : (
+                                <div className="flex flex-col items-end">{summary}</div>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <StudentStatusBadge status={student.status} />
                       </TableCell>
@@ -600,6 +780,19 @@ export function StudentsView({
             onConfirm={confirmDelete}
           />
         </>
+      ) : null}
+
+      {/* Outside the canManage block: the subject-wise breakdown rides on
+          `grade:read` — the same permission that put the column on screen. */}
+      {examId ? (
+        <StudentResultDialog
+          examId={examId}
+          examName={activeExamName}
+          student={resultTarget?.student ?? null}
+          classId={resultTarget?.classId ?? null}
+          school={school}
+          onClose={() => setResultTarget(null)}
+        />
       ) : null}
 
       {/* Outside the canManage block: designing the card rides on

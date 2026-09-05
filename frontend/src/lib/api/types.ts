@@ -137,6 +137,24 @@ export type ClassSubjectRead = S["ClassSubjectRead"];
 export type ClassSubjectCreate = S["ClassSubjectCreate"];
 export type ClassSubjectUpdate = S["ClassSubjectUpdate"];
 
+// --- Exams -----------------------------------------------------------------
+export type ExamRead = S["ExamRead"];
+export type ExamCreate = S["ExamCreate"];
+export type ExamUpdate = S["ExamUpdate"];
+export type ExamStatus = S["ExamStatus"];
+export type ExamPaperRead = S["ExamPaperRead"];
+export type ExamPaperCreate = S["ExamPaperCreate"];
+export type ExamPaperUpdate = S["ExamPaperUpdate"];
+export type PaperMarksRead = S["PaperMarksRead"];
+export type StudentMarkRow = S["StudentMarkRow"];
+export type MarkEntry = S["MarkEntry"];
+export type MarksUpsert = S["MarksUpsert"];
+export type MarksUpsertResult = S["MarksUpsertResult"];
+export type ExamClassResults = S["ExamClassResults"];
+export type ExamResultRow = S["ExamResultRow"];
+export type ExamResultFilter = S["ExamResultFilter"];
+export type StudentExamResult = S["StudentExamResult"];
+
 // --- Enrollment ledger -----------------------------------------------------
 export type EnrollmentRead = S["EnrollmentRead"];
 export type EnrollmentPlacement = S["EnrollmentPlacement"];
@@ -250,6 +268,10 @@ export const PERMISSIONS = {
   calendarManage: "calendar:manage",
   subjectRead: "subject:read",
   subjectManage: "subject:manage",
+  // The exam module rides on the grade pair: the codes were seeded ahead of the
+  // module (see the RBAC catalog), so teachers already hold both by default.
+  gradeRead: "grade:read",
+  gradeManage: "grade:manage",
   attendanceRead: "attendance:read",
   attendanceMark: "attendance:mark",
   // Separate from `attendance:mark` on purpose, and absent from the teacher default:

@@ -34,13 +34,14 @@ from app.api.deps import (
     require,
 )
 from app.common.schemas import Page
-from app.core.exceptions import AuthorizationError
+from app.core.exceptions import AuthorizationError, ValidationError
 from app.core.rate_limit import enforce_rate_limit
 from app.modules.students.models import StudentStatus
 from app.modules.students.schemas import (
     AdmissionResponse,
     EnrollmentPlacement,
     EnrollmentRead,
+    ExamResultFilter,
     FeeStandingFilter,
     PromotionRequest,
     PromotionResult,
@@ -116,6 +117,23 @@ async def list_students(
             "`clear` those with nothing outstanding (including students never billed)."
         ),
     ),
+    exam_id: UUID | None = Query(
+        default=None,
+        alias="exam",
+        description=(
+            "Filter to students marked in this exam; each row then carries their "
+            "totals as `exam_result`. Requires `grade:read` on top of `student:read`."
+        ),
+    ),
+    exam_result: ExamResultFilter | None = Query(
+        default=None,
+        alias="result",
+        description=(
+            "Narrow the `exam` filter by outcome: `passed`, `failed` (below a "
+            "declared pass line on any paper) or `absent` (missed any paper). "
+            "Meaningless without `exam`."
+        ),
+    ),
 ) -> Page[StudentListRow]:
     """The `fees` filter needs `fee:read` ON TOP of `student:read`.
 
@@ -140,6 +158,17 @@ async def list_students(
             "Filtering students by fee standing requires permission to view fees.",
             code="FEE_READ_REQUIRED",
         )
+    # Same reasoning, different disclosure: `?exam=...&result=failed` is the list
+    # of children who failed, which is `grade:read` information whoever asks.
+    if exam_id is not None and not ctx.has("grade:read"):
+        raise AuthorizationError(
+            "Filtering students by exam results requires permission to view grades.",
+            code="GRADE_READ_REQUIRED",
+        )
+    if exam_result is not None and exam_id is None:
+        # Refused rather than ignored: a `result` filter that quietly did nothing
+        # would return the whole roll wearing a "failed" label in the caller's URL.
+        raise ValidationError("The `result` filter requires an `exam`.")
     return await StudentService(db).list(
         params,
         sort,
@@ -147,6 +176,8 @@ async def list_students(
         section_id=section_id,
         status=student_status,
         fee_standing=fee_standing,
+        exam_id=exam_id,
+        exam_result=exam_result,
     )
 
 

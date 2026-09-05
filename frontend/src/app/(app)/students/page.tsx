@@ -44,6 +44,10 @@ export default async function StudentsPage() {
         // the guarantee, this one stops a teacher being shown a filter that can only
         // fail. Same reasoning as the members table's disabled rows.
         canFilterByFees={hasPermission(user, PERMISSIONS.feeRead)}
+        // Same rule stated twice for the exam-result filter: the server refuses
+        // `?exam=` without `grade:read` (403 GRADE_READ_REQUIRED); hiding the
+        // control stops anyone being shown a filter that can only fail.
+        canFilterByResults={hasPermission(user, PERMISSIONS.gradeRead)}
         // Whether this user may redesign and save the campus's card template —
         // the principal's job, so it rides on `school:update`, not on the
         // student permissions that gate the rest of this page.

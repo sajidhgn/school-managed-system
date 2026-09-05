@@ -177,6 +177,19 @@ class AuditAction:
     CLASS_SUBJECT_UPDATED = "class_subject.updated"
     CLASS_SUBJECT_REMOVED = "class_subject.removed"
 
+    # --- Exams ---------------------------------------------------------------
+    #
+    # Marks entry is ONE event per sheet save, not one per student: the auditable
+    # act is "this teacher submitted Grade 5 maths marks", and five hundred rows
+    # per save would bury the trail the day results are disputed.
+    EXAM_CREATED = "exam.created"
+    EXAM_UPDATED = "exam.updated"
+    EXAM_DELETED = "exam.deleted"
+    EXAM_PAPER_ADDED = "exam_paper.added"
+    EXAM_PAPER_UPDATED = "exam_paper.updated"
+    EXAM_PAPER_REMOVED = "exam_paper.removed"
+    EXAM_MARKS_ENTERED = "exam.marks_entered"
+
     # --- Enrollment history --------------------------------------------------
     #
     # `entity_type` is `student` throughout, deliberately: the question this trail

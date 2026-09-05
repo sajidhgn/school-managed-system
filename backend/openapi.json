@@ -4754,6 +4754,43 @@
             "description": "Filter by what the family owes. `pending` is any live challan still carrying a balance, `overdue` only those past their due date, and `clear` those with nothing outstanding (including students never billed)."
           },
           {
+            "name": "exam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to students marked in this exam; each row then carries their totals as `exam_result`. Requires `grade:read` on top of `student:read`.",
+              "title": "Exam"
+            },
+            "description": "Filter to students marked in this exam; each row then carries their totals as `exam_result`. Requires `grade:read` on top of `student:read`."
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ExamResultFilter"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Narrow the `exam` filter by outcome: `passed`, `failed` (below a declared pass line on any paper) or `absent` (missed any paper). Meaningless without `exam`.",
+              "title": "Result"
+            },
+            "description": "Narrow the `exam` filter by outcome: `passed`, `failed` (below a declared pass line on any paper) or `absent` (missed any paper). Meaningless without `exam`."
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,
@@ -7267,6 +7304,630 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SectionAttendanceReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/exams/papers/{paper_id}/marks": {
+      "get": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "The mark sheet for one paper: every student of the class, marks merged in",
+        "operationId": "paper_marks_api_v1_exams_papers__paper_id__marks_get",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperMarksRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Save a paper's mark sheet (upsert; omitted students are untouched)",
+        "operationId": "upsert_marks_api_v1_exams_papers__paper_id__marks_put",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarksUpsert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarksUpsertResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/exams/papers/{paper_id}": {
+      "patch": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Change a paper's date or marks scheme",
+        "operationId": "update_paper_api_v1_exams_papers__paper_id__patch",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExamPaperUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamPaperRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Remove an unmarked paper from its exam",
+        "operationId": "remove_paper_api_v1_exams_papers__paper_id__delete",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/exams": {
+      "get": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "List and search exams",
+        "operationId": "list_exams_api_v1_exams_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortDirection",
+              "default": "asc"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search term",
+              "title": "Q"
+            },
+            "description": "Search term"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ExamRead_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Create an exam",
+        "operationId": "create_exam_api_v1_exams_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExamCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/exams/{exam_id}": {
+      "get": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Get an exam",
+        "operationId": "get_exam_api_v1_exams__exam_id__get",
+        "parameters": [
+          {
+            "name": "exam_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exam Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Edit an exam's name, dates, term or status",
+        "operationId": "update_exam_api_v1_exams__exam_id__patch",
+        "parameters": [
+          {
+            "name": "exam_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exam Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExamUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Delete an exam no marks have been entered for",
+        "operationId": "delete_exam_api_v1_exams__exam_id__delete",
+        "parameters": [
+          {
+            "name": "exam_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exam Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/exams/{exam_id}/papers": {
+      "get": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "The papers of an exam, in class-then-subject order",
+        "operationId": "list_papers_api_v1_exams__exam_id__papers_get",
+        "parameters": [
+          {
+            "name": "exam_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exam Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExamPaperRead"
+                  },
+                  "title": "Response List Papers Api V1 Exams  Exam Id  Papers Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Add a paper (one class sitting one subject) to an exam",
+        "operationId": "add_paper_api_v1_exams__exam_id__papers_post",
+        "parameters": [
+          {
+            "name": "exam_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exam Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExamPaperCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamPaperRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/exams/{exam_id}/results": {
+      "get": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "The result sheet for one class: papers as columns, students ranked",
+        "operationId": "class_results_api_v1_exams__exam_id__results_get",
+        "parameters": [
+          {
+            "name": "exam_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exam Id"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Class Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamClassResults"
                 }
               }
             }
@@ -11838,6 +12499,512 @@
         ],
         "title": "EnrollmentRead"
       },
+      "ExamClassResults": {
+        "properties": {
+          "exam_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Exam Id"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/ExamPaperRead"
+            },
+            "type": "array",
+            "title": "Papers"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ExamResultRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exam_id",
+          "class_id",
+          "class_name",
+          "papers",
+          "rows"
+        ],
+        "title": "ExamClassResults",
+        "description": "The class result sheet: papers as columns, students as rows."
+      },
+      "ExamCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "examples": [
+              "Mid-Term 2026-27"
+            ]
+          },
+          "term_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ExamCreate"
+      },
+      "ExamPaperCreate": {
+        "properties": {
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Subject Id"
+          },
+          "scheduled_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled On"
+          },
+          "max_marks": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Marks",
+            "default": 100
+          },
+          "pass_marks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Marks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_id",
+          "subject_id"
+        ],
+        "title": "ExamPaperCreate"
+      },
+      "ExamPaperRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "exam_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Exam Id"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Subject Id"
+          },
+          "subject_code": {
+            "type": "string",
+            "title": "Subject Code"
+          },
+          "subject_name": {
+            "type": "string",
+            "title": "Subject Name"
+          },
+          "scheduled_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled On"
+          },
+          "max_marks": {
+            "type": "integer",
+            "title": "Max Marks"
+          },
+          "pass_marks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Marks"
+          },
+          "marks_entered": {
+            "type": "integer",
+            "title": "Marks Entered",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "exam_id",
+          "class_id",
+          "class_name",
+          "subject_id",
+          "subject_code",
+          "subject_name",
+          "scheduled_on",
+          "max_marks",
+          "pass_marks",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ExamPaperRead",
+        "description": "A paper with its dimensions denormalised.\n\nSubject code/name and class name are inlined for the same reason\n`ClassSubjectRead` inlines them: the papers table renders every row's labels\non first paint, and ids would guarantee an N+1 in the browser."
+      },
+      "ExamPaperUpdate": {
+        "properties": {
+          "scheduled_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled On"
+          },
+          "max_marks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Marks"
+          },
+          "pass_marks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Marks"
+          }
+        },
+        "type": "object",
+        "title": "ExamPaperUpdate"
+      },
+      "ExamRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "term_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExamStatus"
+          },
+          "paper_count": {
+            "type": "integer",
+            "title": "Paper Count",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "term_id",
+          "start_date",
+          "end_date",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ExamRead"
+      },
+      "ExamResultFilter": {
+        "type": "string",
+        "enum": [
+          "passed",
+          "failed",
+          "absent"
+        ],
+        "title": "ExamResultFilter",
+        "description": "How the students list may be narrowed by one exam's outcomes.\n\nAll three states require the student to have been MARKED in the chosen exam:\nan unmarked student is \"no data\", not a pass -- filtering happens mid-marking,\nand half-entered sheets must not read as half the school passing."
+      },
+      "ExamResultRow": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "admission_number": {
+            "type": "string",
+            "title": "Admission Number"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/ResultCell"
+            },
+            "type": "array",
+            "title": "Cells"
+          },
+          "total_obtained": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Obtained"
+          },
+          "total_max": {
+            "type": "integer",
+            "title": "Total Max"
+          },
+          "percentage": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Percentage"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "full_name",
+          "admission_number",
+          "cells",
+          "total_obtained",
+          "total_max",
+          "percentage",
+          "rank"
+        ],
+        "title": "ExamResultRow"
+      },
+      "ExamStatus": {
+        "type": "string",
+        "enum": [
+          "scheduled",
+          "completed",
+          "published"
+        ],
+        "title": "ExamStatus",
+        "description": "Where an exam is in its life.\n\nThree states, not a workflow engine: SCHEDULED is the default from creation\n(papers being added, dates settling), COMPLETED means the sitting is over and\nmarks are being entered, PUBLISHED means results are final. The transition is\na plain PATCH -- the value drives display (a published exam's marks screen\nwarns before editing) rather than hard write-locks, because the person who\ncan publish is the person who could unlock anyway."
+      },
+      "ExamUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "term_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExamStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ExamUpdate",
+        "description": "PATCH semantics: omitted means unchanged; `status` moves the lifecycle."
+      },
       "FeeBillingScheduleInput": {
         "properties": {
           "academic_year": {
@@ -15682,6 +16849,86 @@
         "title": "LoginResponse",
         "description": "Login result.\n\nTWO SHAPES IN ONE RESPONSE, driven by `select_required` (spec \u00a74.3D):\n\n  * exactly one membership -> auto-selected, cookies are set, the caller is\n    logged in and can proceed.\n  * several memberships    -> `select_required = true`, a short-lived,\n    context-only access cookie is set, and the caller must call\n    `POST /auth/context` to pick one.\n\nThe second case is not an error, so it is still a 200. A user who teaches at two\nschools has not done anything wrong; they simply have not said which hat they\nare wearing, and the system must not guess. Guessing would drop a teacher into\nthe wrong school's data."
       },
+      "MarkEntry": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "marks_obtained": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks Obtained"
+          },
+          "is_absent": {
+            "type": "boolean",
+            "title": "Is Absent",
+            "default": false
+          },
+          "remarks": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remarks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id"
+        ],
+        "title": "MarkEntry",
+        "description": "One student's result, as the marks screen submits it."
+      },
+      "MarksUpsert": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/MarkEntry"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "title": "MarksUpsert",
+        "description": "The bulk write: the whole column of a paper's mark sheet in one request.\n\nAn upsert rather than a create -- re-submitting the sheet after a correction\nmust overwrite, not conflict. Students omitted from `entries` are left\nuntouched, so a partial save (marking stops at roll 23) loses nothing."
+      },
+      "MarksUpsertResult": {
+        "properties": {
+          "saved": {
+            "type": "integer",
+            "title": "Saved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "saved"
+        ],
+        "title": "MarksUpsertResult"
+      },
       "MeResponse": {
         "properties": {
           "user_id": {
@@ -16849,6 +18096,26 @@
         ],
         "title": "Page[ClassRead]"
       },
+      "Page_ExamRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExamRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[ExamRead]"
+      },
       "Page_FeeConcessionRead_": {
         "properties": {
           "items": {
@@ -17028,6 +18295,26 @@
           "meta"
         ],
         "title": "Page[SubjectRead]"
+      },
+      "PaperMarksRead": {
+        "properties": {
+          "paper": {
+            "$ref": "#/components/schemas/ExamPaperRead"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StudentMarkRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper",
+          "rows"
+        ],
+        "title": "PaperMarksRead"
       },
       "ParsedQueryRead": {
         "properties": {
@@ -18220,6 +19507,39 @@
           "password"
         ],
         "title": "ResetPasswordRequest"
+      },
+      "ResultCell": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "marks_obtained": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks Obtained"
+          },
+          "is_absent": {
+            "type": "boolean",
+            "title": "Is Absent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "marks_obtained",
+          "is_absent"
+        ],
+        "title": "ResultCell",
+        "description": "One paper's contribution to one student's result line."
       },
       "RoleCreate": {
         "properties": {
@@ -20372,6 +21692,42 @@
         "title": "StudentDues",
         "description": "What one student owes, under whichever fee filter was applied.\n\nTHE AMOUNT IS RELATIVE TO THE FILTER, and that is the point. Under\n`fees=overdue` this is the LATE money only, not the full balance -- a family that\nowes 13,000 of which 6,500 is past due appears as 6,500 on an overdue list.\nShowing the full balance there would make every row look worse than it is, and an\noffice chasing a number the parent has not yet been asked for loses the argument."
       },
+      "StudentExamResult": {
+        "properties": {
+          "total_obtained": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Obtained"
+          },
+          "total_max": {
+            "type": "integer",
+            "title": "Total Max"
+          },
+          "percentage": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Percentage"
+          },
+          "failed_papers": {
+            "type": "integer",
+            "title": "Failed Papers"
+          },
+          "absent_papers": {
+            "type": "integer",
+            "title": "Absent Papers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_obtained",
+          "total_max",
+          "percentage",
+          "failed_papers",
+          "absent_papers"
+        ],
+        "title": "StudentExamResult",
+        "description": "One student's totals in whichever exam the directory was filtered by.\n\nTotals are over the papers MARKED for this student, mirroring the result\nsheet: an unmarked paper is missing data, not a zero. Absent papers count\ntheir maximum (the sitting happened; the student scored nothing on it)."
+      },
       "StudentFeeAssignmentInput": {
         "properties": {
           "head_id": {
@@ -21128,6 +22484,16 @@
                 "type": "null"
               }
             ]
+          },
+          "exam_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudentExamResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -21157,6 +22523,66 @@
         ],
         "title": "StudentListRow",
         "description": "A student as the DIRECTORY shows them: the record plus what they owe.\n\nSeparate from `StudentRead` rather than two more nullable fields on it, because\n`dues` cannot be populated anywhere else. `create`, `get` and `update` answer\n\"what is this record\", have no fee filter to be relative to, and would carry the\nfield as a permanent null that every caller learns to ignore. Same split, and the\nsame reason, as `AttendanceSessionRead` and `AttendanceSessionDetail`."
+      },
+      "StudentMarkRow": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "admission_number": {
+            "type": "string",
+            "title": "Admission Number"
+          },
+          "marks_obtained": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks Obtained"
+          },
+          "is_absent": {
+            "type": "boolean",
+            "title": "Is Absent"
+          },
+          "remarks": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remarks"
+          },
+          "entered": {
+            "type": "boolean",
+            "title": "Entered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "full_name",
+          "admission_number",
+          "marks_obtained",
+          "is_absent",
+          "remarks",
+          "entered"
+        ],
+        "title": "StudentMarkRow",
+        "description": "One line of the marks screen: the student, and their mark if entered.\n\nThe roster and the marks arrive TOGETHER so the screen can render every\nenrolled student -- including the ones not yet marked -- in roll order.\nReturning only existing marks would hide exactly the rows the teacher still\nhas to fill in."
       },
       "StudentRead": {
         "properties": {

@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarCheck,
   CalendarRange,
+  ClipboardList,
   CreditCard,
   GraduationCap,
   LayoutDashboard,
@@ -157,6 +158,15 @@ export function SidebarNav({
           label: t.nav.subjects,
           icon: BookOpen,
           anyOf: [PERMISSIONS.subjectRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/exams",
+          label: t.nav.exams,
+          icon: ClipboardList,
+          // `grade:read` alone: a coordinator who reads result sheets without
+          // ever entering a mark still needs the schedule.
+          anyOf: [PERMISSIONS.gradeRead],
           requiresSchool: true,
         },
         {

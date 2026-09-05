@@ -2316,6 +2316,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exams/papers/{paper_id}/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The mark sheet for one paper: every student of the class, marks merged in */
+        get: operations["paper_marks_api_v1_exams_papers__paper_id__marks_get"];
+        /** Save a paper's mark sheet (upsert; omitted students are untouched) */
+        put: operations["upsert_marks_api_v1_exams_papers__paper_id__marks_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/papers/{paper_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an unmarked paper from its exam */
+        delete: operations["remove_paper_api_v1_exams_papers__paper_id__delete"];
+        options?: never;
+        head?: never;
+        /** Change a paper's date or marks scheme */
+        patch: operations["update_paper_api_v1_exams_papers__paper_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/exams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List and search exams */
+        get: operations["list_exams_api_v1_exams_get"];
+        put?: never;
+        /** Create an exam */
+        post: operations["create_exam_api_v1_exams_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an exam */
+        get: operations["get_exam_api_v1_exams__exam_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete an exam no marks have been entered for */
+        delete: operations["delete_exam_api_v1_exams__exam_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit an exam's name, dates, term or status */
+        patch: operations["update_exam_api_v1_exams__exam_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The papers of an exam, in class-then-subject order */
+        get: operations["list_papers_api_v1_exams__exam_id__papers_get"];
+        put?: never;
+        /** Add a paper (one class sitting one subject) to an exam */
+        post: operations["add_paper_api_v1_exams__exam_id__papers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The result sheet for one class: papers as columns, students ranked */
+        get: operations["class_results_api_v1_exams__exam_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fees/summary": {
         parameters: {
             query?: never;
@@ -3996,6 +4104,222 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * ExamClassResults
+         * @description The class result sheet: papers as columns, students as rows.
+         */
+        ExamClassResults: {
+            /**
+             * Exam Id
+             * Format: uuid
+             */
+            exam_id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Papers */
+            papers: components["schemas"]["ExamPaperRead"][];
+            /** Rows */
+            rows: components["schemas"]["ExamResultRow"][];
+        };
+        /** ExamCreate */
+        ExamCreate: {
+            /**
+             * Name
+             * @example Mid-Term 2026-27
+             */
+            name: string;
+            /** Term Id */
+            term_id?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** End Date */
+            end_date?: string | null;
+        };
+        /** ExamPaperCreate */
+        ExamPaperCreate: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+            /** Scheduled On */
+            scheduled_on?: string | null;
+            /**
+             * Max Marks
+             * @default 100
+             */
+            max_marks?: number;
+            /** Pass Marks */
+            pass_marks?: number | null;
+        };
+        /**
+         * ExamPaperRead
+         * @description A paper with its dimensions denormalised.
+         *
+         *     Subject code/name and class name are inlined for the same reason
+         *     `ClassSubjectRead` inlines them: the papers table renders every row's labels
+         *     on first paint, and ids would guarantee an N+1 in the browser.
+         */
+        ExamPaperRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Exam Id
+             * Format: uuid
+             */
+            exam_id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+            /** Subject Code */
+            subject_code: string;
+            /** Subject Name */
+            subject_name: string;
+            /** Scheduled On */
+            scheduled_on: string | null;
+            /** Max Marks */
+            max_marks: number;
+            /** Pass Marks */
+            pass_marks: number | null;
+            /**
+             * Marks Entered
+             * @default 0
+             */
+            marks_entered?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ExamPaperUpdate */
+        ExamPaperUpdate: {
+            /** Scheduled On */
+            scheduled_on?: string | null;
+            /** Max Marks */
+            max_marks?: number | null;
+            /** Pass Marks */
+            pass_marks?: number | null;
+        };
+        /** ExamRead */
+        ExamRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Term Id */
+            term_id: string | null;
+            /** Start Date */
+            start_date: string | null;
+            /** End Date */
+            end_date: string | null;
+            status: components["schemas"]["ExamStatus"];
+            /**
+             * Paper Count
+             * @default 0
+             */
+            paper_count?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ExamResultFilter
+         * @description How the students list may be narrowed by one exam's outcomes.
+         *
+         *     All three states require the student to have been MARKED in the chosen exam:
+         *     an unmarked student is "no data", not a pass -- filtering happens mid-marking,
+         *     and half-entered sheets must not read as half the school passing.
+         * @enum {string}
+         */
+        ExamResultFilter: "passed" | "failed" | "absent";
+        /** ExamResultRow */
+        ExamResultRow: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Cells */
+            cells: components["schemas"]["ResultCell"][];
+            /** Total Obtained */
+            total_obtained: string;
+            /** Total Max */
+            total_max: number;
+            /** Percentage */
+            percentage: string;
+            /** Rank */
+            rank: number;
+        };
+        /**
+         * ExamStatus
+         * @description Where an exam is in its life.
+         *
+         *     Three states, not a workflow engine: SCHEDULED is the default from creation
+         *     (papers being added, dates settling), COMPLETED means the sitting is over and
+         *     marks are being entered, PUBLISHED means results are final. The transition is
+         *     a plain PATCH -- the value drives display (a published exam's marks screen
+         *     warns before editing) rather than hard write-locks, because the person who
+         *     can publish is the person who could unlock anyway.
+         * @enum {string}
+         */
+        ExamStatus: "scheduled" | "completed" | "published";
+        /**
+         * ExamUpdate
+         * @description PATCH semantics: omitted means unchanged; `status` moves the lifecycle.
+         */
+        ExamUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Term Id */
+            term_id?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            status?: components["schemas"]["ExamStatus"] | null;
         };
         /**
          * FeeBillingScheduleInput
@@ -5695,6 +6019,43 @@ export interface components {
             active_membership_id?: string | null;
         };
         /**
+         * MarkEntry
+         * @description One student's result, as the marks screen submits it.
+         */
+        MarkEntry: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Marks Obtained */
+            marks_obtained?: number | string | null;
+            /**
+             * Is Absent
+             * @default false
+             */
+            is_absent?: boolean;
+            /** Remarks */
+            remarks?: string | null;
+        };
+        /**
+         * MarksUpsert
+         * @description The bulk write: the whole column of a paper's mark sheet in one request.
+         *
+         *     An upsert rather than a create -- re-submitting the sheet after a correction
+         *     must overwrite, not conflict. Students omitted from `entries` are left
+         *     untouched, so a partial save (marking stops at roll 23) loses nothing.
+         */
+        MarksUpsert: {
+            /** Entries */
+            entries: components["schemas"]["MarkEntry"][];
+        };
+        /** MarksUpsertResult */
+        MarksUpsertResult: {
+            /** Saved */
+            saved: number;
+        };
+        /**
          * MeResponse
          * @description `GET /auth/me` -- everything the app shell needs on boot.
          *
@@ -6131,6 +6492,12 @@ export interface components {
             items: components["schemas"]["ClassRead"][];
             meta: components["schemas"]["PageMeta"];
         };
+        /** Page[ExamRead] */
+        Page_ExamRead_: {
+            /** Items */
+            items: components["schemas"]["ExamRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
         /** Page[FeeConcessionRead] */
         Page_FeeConcessionRead_: {
             /** Items */
@@ -6184,6 +6551,12 @@ export interface components {
             /** Items */
             items: components["schemas"]["SubjectRead"][];
             meta: components["schemas"]["PageMeta"];
+        };
+        /** PaperMarksRead */
+        PaperMarksRead: {
+            paper: components["schemas"]["ExamPaperRead"];
+            /** Rows */
+            rows: components["schemas"]["StudentMarkRow"][];
         };
         /**
          * ParsedQueryRead
@@ -6706,6 +7079,21 @@ export interface components {
             token: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ResultCell
+         * @description One paper's contribution to one student's result line.
+         */
+        ResultCell: {
+            /**
+             * Paper Id
+             * Format: uuid
+             */
+            paper_id: string;
+            /** Marks Obtained */
+            marks_obtained: string | null;
+            /** Is Absent */
+            is_absent: boolean;
         };
         /** RoleCreate */
         RoleCreate: {
@@ -7548,6 +7936,26 @@ export interface components {
             periods: string[];
         };
         /**
+         * StudentExamResult
+         * @description One student's totals in whichever exam the directory was filtered by.
+         *
+         *     Totals are over the papers MARKED for this student, mirroring the result
+         *     sheet: an unmarked paper is missing data, not a zero. Absent papers count
+         *     their maximum (the sitting happened; the student scored nothing on it).
+         */
+        StudentExamResult: {
+            /** Total Obtained */
+            total_obtained: string;
+            /** Total Max */
+            total_max: number;
+            /** Percentage */
+            percentage: string;
+            /** Failed Papers */
+            failed_papers: number;
+            /** Absent Papers */
+            absent_papers: number;
+        };
+        /**
          * StudentFeeAssignmentInput
          * @description Put a student on, or take them off, one fee head for a year.
          *
@@ -7857,6 +8265,35 @@ export interface components {
              */
             updated_at: string;
             dues: components["schemas"]["StudentDues"] | null;
+            exam_result?: components["schemas"]["StudentExamResult"] | null;
+        };
+        /**
+         * StudentMarkRow
+         * @description One line of the marks screen: the student, and their mark if entered.
+         *
+         *     The roster and the marks arrive TOGETHER so the screen can render every
+         *     enrolled student -- including the ones not yet marked -- in roll order.
+         *     Returning only existing marks would hide exactly the rows the teacher still
+         *     has to fill in.
+         */
+        StudentMarkRow: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Marks Obtained */
+            marks_obtained: string | null;
+            /** Is Absent */
+            is_absent: boolean;
+            /** Remarks */
+            remarks: string | null;
+            /** Entered */
+            entered: boolean;
         };
         /** StudentRead */
         StudentRead: {
@@ -13227,6 +13664,10 @@ export interface operations {
                 status?: components["schemas"]["StudentStatus"] | null;
                 /** @description Filter by what the family owes. `pending` is any live challan still carrying a balance, `overdue` only those past their due date, and `clear` those with nothing outstanding (including students never billed). */
                 fees?: components["schemas"]["FeeStandingFilter"] | null;
+                /** @description Filter to students marked in this exam; each row then carries their totals as `exam_result`. Requires `grade:read` on top of `student:read`. */
+                exam?: string | null;
+                /** @description Narrow the `exam` filter by outcome: `passed`, `failed` (below a declared pass line on any paper) or `absent` (missed any paper). Meaningless without `exam`. */
+                result?: components["schemas"]["ExamResultFilter"] | null;
                 page?: number;
                 size?: number;
                 sort_by?: string | null;
@@ -15584,6 +16025,627 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SectionAttendanceReport"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    paper_marks_api_v1_exams_papers__paper_id__marks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperMarksRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    upsert_marks_api_v1_exams_papers__paper_id__marks_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarksUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarksUpsertResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_paper_api_v1_exams_papers__paper_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_paper_api_v1_exams_papers__paper_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExamPaperUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamPaperRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_exams_api_v1_exams_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+                /** @description Search term */
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ExamRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_exam_api_v1_exams_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExamCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_exam_api_v1_exams__exam_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exam_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_exam_api_v1_exams__exam_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exam_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_exam_api_v1_exams__exam_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exam_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExamUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_papers_api_v1_exams__exam_id__papers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exam_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamPaperRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_paper_api_v1_exams__exam_id__papers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exam_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExamPaperCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamPaperRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    class_results_api_v1_exams__exam_id__results_get: {
+        parameters: {
+            query: {
+                class_id: string;
+            };
+            header?: never;
+            path: {
+                exam_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamClassResults"];
                 };
             };
             /** @description Bad Request */

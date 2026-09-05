@@ -339,6 +339,40 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
     auth = AuthService(session, settings)
     demo_password = "Demo-Passphrase-9271"
 
+    # Re-runnable: a second `--demo` against a database that already has the
+    # demo org tops up whatever data was added to the seeder since (academic
+    # layer, exams) instead of dying on the duplicate email. The alternative --
+    # forcing a db-reset to get new demo data -- costs everyone their local
+    # state for the sake of one INSERT's uniqueness.
+    from app.modules.auth.models import User as _User
+
+    existing_owner = (
+        await session.execute(select(_User).where(_User.email == "owner@demo.educloud.test"))
+    ).scalar_one_or_none()
+    if existing_owner is not None:
+        organization = (
+            await session.execute(
+                select(Organization).where(Organization.owner_user_id == existing_owner.id)
+            )
+        ).scalar_one()
+        await bind_tenant(session, organization.id)
+        school = (
+            await session.execute(
+                select(School)
+                .where(School.organization_id == organization.id)
+                .order_by(School.created_at)
+            )
+        ).scalars().first()
+        academics = await _seed_academics_demo(session, organization.id, school.id)
+        await reconcile_usage(session, organization.id)
+        return {
+            "organization": organization.name,
+            "owner_email": existing_owner.email,
+            "owner_password": demo_password,
+            "note": "demo org already existed; academic data topped up",
+            **academics,
+        }
+
     owner, organization = await auth.register(
         full_name="Amina Rahman",
         email="owner@demo.educloud.test",
@@ -446,13 +480,331 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
 
     del get_role_permissions  # imported for the demo's side effects only; unused here
 
+    academics = await _seed_academics_demo(session, organization.id, principal_school.id)
+    await reconcile_usage(session, organization.id)
+
     return {
         "organization": organization.name,
         "owner_email": owner.email,
         "owner_password": demo_password,
         "schools": [s.code for s in schools],
         "pending_invitations": invited,
+        **academics,
     }
+
+
+async def _seed_academics_demo(
+    session: AsyncSession, organization_id: UUID, school_id: UUID
+) -> dict[str, Any]:
+    """Fill one campus with a working academic layer -- top-up style.
+
+    Calendar, subjects, classes with sections, a directory of students, and one
+    mid-term exam with papers and marks -- enough that every list, search box
+    and result sheet shows real-looking data on first login instead of an empty
+    state. Each layer is seeded ONLY where missing, so re-running against a
+    campus that already has (say) classes and students adds just the subjects
+    and the exam on top of them rather than skipping or duplicating.
+
+    Direct model rows, unlike the organization provisioning which goes through
+    the real services on purpose: provisioning has guards worth exercising,
+    while thirty students are just rows, and the CRUD services would demand a
+    per-request auth context this seeder does not have.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from app.modules.academics.models import (
+        AcademicYear,
+        ClassSubject,
+        SchoolClass,
+        Section,
+        Subject,
+        SubjectKind,
+        Term,
+    )
+    from app.modules.exams.models import Exam, ExamMark, ExamPaper, ExamStatus
+    from app.modules.students.models import Student, StudentStatus
+
+    scope = {"organization_id": organization_id, "school_id": school_id}
+    created: dict[str, Any] = {}
+
+    # --- Calendar: one current year with two terms, only if none exists -----
+    has_year = (
+        await session.execute(
+            select(func.count())
+            .select_from(AcademicYear)
+            .where(AcademicYear.school_id == school_id, AcademicYear.deleted_at.is_(None))
+        )
+    ).scalar_one()
+    if not has_year:
+        year = AcademicYear(
+            **scope,
+            name="2026-2027",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=True,
+        )
+        session.add(year)
+        await session.flush()
+        session.add_all(
+            [
+                Term(
+                    **scope,
+                    academic_year_id=year.id,
+                    name="Term 1",
+                    sequence=1,
+                    start_date=date(2026, 4, 1),
+                    end_date=date(2026, 9, 30),
+                ),
+                Term(
+                    **scope,
+                    academic_year_id=year.id,
+                    name="Term 2",
+                    sequence=2,
+                    start_date=date(2026, 10, 1),
+                    end_date=date(2027, 3, 31),
+                ),
+            ]
+        )
+        created["academic_year"] = "2026-2027"
+
+    # --- Classes and sections: the standard ladder, only if the campus is bare
+    classes = list(
+        (
+            await session.execute(
+                select(SchoolClass)
+                .where(SchoolClass.school_id == school_id, SchoolClass.deleted_at.is_(None))
+                .order_by(SchoolClass.level)
+            )
+        ).scalars()
+    )
+    if not classes:
+        for level in range(1, 6):
+            school_class = SchoolClass(**scope, name=f"Grade {level}", level=level)
+            session.add(school_class)
+            classes.append(school_class)
+        await session.flush()
+        for school_class in classes:
+            for section_name in ("A", "B") if school_class.level == 5 else ("A",):
+                session.add(
+                    Section(**scope, class_id=school_class.id, name=section_name, capacity=30)
+                )
+        await session.flush()
+        created["classes"] = len(classes)
+    sections = list(
+        (
+            await session.execute(
+                select(Section).where(Section.school_id == school_id, Section.deleted_at.is_(None))
+            )
+        ).scalars()
+    )
+
+    # --- Subjects: create whichever of the standard set are missing ---------
+    subject_defs = [
+        ("ENG", "English", SubjectKind.CORE),
+        ("URD", "Urdu", SubjectKind.CORE),
+        ("MATH", "Mathematics", SubjectKind.CORE),
+        ("SCI", "General Science", SubjectKind.CORE),
+        ("ISL", "Islamiyat", SubjectKind.CORE),
+        ("CS", "Computer Studies", SubjectKind.ELECTIVE),
+        ("ART", "Art & Craft", SubjectKind.ACTIVITY),
+    ]
+    existing_subjects = {
+        s.code: s
+        for s in (
+            await session.execute(
+                select(Subject).where(Subject.school_id == school_id, Subject.deleted_at.is_(None))
+            )
+        ).scalars()
+    }
+    existing_names = {s.name for s in existing_subjects.values()}
+    new_subjects = 0
+    for code, name, kind in subject_defs:
+        if code not in existing_subjects and name not in existing_names:
+            subject = Subject(**scope, code=code, name=name, kind=kind)
+            session.add(subject)
+            existing_subjects[code] = subject
+            new_subjects += 1
+    if new_subjects:
+        await session.flush()
+        created["subjects"] = new_subjects
+    core_subjects = [s for s in existing_subjects.values() if s.kind is SubjectKind.CORE]
+
+    # --- Curriculum: every class studies every core subject, gaps only ------
+    linked = {
+        (row[0], row[1])
+        for row in await session.execute(
+            select(ClassSubject.class_id, ClassSubject.subject_id).where(
+                ClassSubject.school_id == school_id, ClassSubject.deleted_at.is_(None)
+            )
+        )
+    }
+    for school_class in classes:
+        for subject in core_subjects:
+            if (school_class.id, subject.id) not in linked:
+                session.add(
+                    ClassSubject(
+                        **scope, class_id=school_class.id, subject_id=subject.id, weekly_periods=5
+                    )
+                )
+
+    # --- Students: a directory worth searching, only if the campus is thin --
+    seated = (
+        await session.execute(
+            select(func.count())
+            .select_from(Student)
+            .where(
+                Student.school_id == school_id,
+                Student.section_id.is_not(None),
+                Student.status == StudentStatus.ACTIVE,
+                Student.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one()
+    first_names = [
+        "Ayesha", "Bilal", "Chandni", "Danish", "Eman", "Farhan", "Gulnaz", "Hamza",
+        "Iqra", "Junaid", "Khadija", "Laiba", "Mustafa", "Noor", "Osama", "Parisa",
+        "Qasim", "Rania", "Saad", "Tehreem", "Usman", "Vaneeza", "Wali", "Yusra",
+        "Zain", "Alina", "Burhan", "Dua", "Ehsan", "Fatima",
+    ]
+    last_names = ["Khan", "Ahmed", "Malik", "Raza", "Sheikh", "Butt", "Qureshi", "Chaudhry"]
+    if seated < 10 and sections:
+        taken = {
+            row[0]
+            for row in await session.execute(
+                select(Student.admission_number).where(Student.school_id == school_id)
+            )
+        }
+        by_class = {s.class_id: s for s in sections}
+        serial, added = 0, 0
+        for school_class in classes:
+            section = by_class.get(school_class.id)
+            if section is None:
+                continue
+            seats = 8 if school_class.level == max(c.level for c in classes) else 4
+            for _ in range(seats):
+                serial += 1
+                admission = f"2026-{serial:03d}"
+                while admission in taken:
+                    serial += 1
+                    admission = f"2026-{serial:03d}"
+                taken.add(admission)
+                session.add(
+                    Student(
+                        **scope,
+                        admission_number=admission,
+                        first_name=first_names[(serial - 1) % len(first_names)],
+                        last_name=last_names[(serial - 1) % len(last_names)],
+                        section_id=section.id,
+                        status=StudentStatus.ACTIVE,
+                        enrolled_on=date(2026, 4, 5),
+                        guardian_name=f"Guardian of {first_names[(serial - 1) % len(first_names)]}",
+                        guardian_phone=f"0300{serial:07d}",
+                    )
+                )
+                added += 1
+        await session.flush()
+        created["students"] = added
+
+    # --- The exam: one marked mid-term for the seniormost populated class ---
+    exam_name = "Mid-Term 2026-27"
+    has_exam = (
+        await session.execute(
+            select(func.count())
+            .select_from(Exam)
+            .where(Exam.school_id == school_id, Exam.name == exam_name, Exam.deleted_at.is_(None))
+        )
+    ).scalar_one()
+    if not has_exam and core_subjects:
+        # The class whose sections seat the most students -- marks need sitters.
+        counts = {
+            row[0]: row[1]
+            for row in await session.execute(
+                select(Section.class_id, func.count(Student.id))
+                .join(Student, Student.section_id == Section.id)
+                .where(
+                    Student.school_id == school_id,
+                    Student.status == StudentStatus.ACTIVE,
+                    Student.deleted_at.is_(None),
+                )
+                .group_by(Section.class_id)
+            )
+        }
+        target = next((c for c in sorted(classes, key=lambda c: -c.level) if counts.get(c.id)), None)
+        if target is not None:
+            exam = Exam(
+                **scope,
+                name=exam_name,
+                start_date=date(2026, 9, 7),
+                end_date=date(2026, 9, 12),
+                status=ExamStatus.COMPLETED,
+            )
+            session.add(exam)
+            await session.flush()
+            papers = [
+                ExamPaper(
+                    **scope,
+                    exam_id=exam.id,
+                    class_id=target.id,
+                    subject_id=subject.id,
+                    scheduled_on=date(2026, 9, 7 + index),
+                    max_marks=100,
+                    pass_marks=40,
+                )
+                for index, subject in enumerate(core_subjects)
+            ]
+            session.add_all(papers)
+            await session.flush()
+
+            sitters = list(
+                (
+                    await session.execute(
+                        select(Student)
+                        .join(Section, Section.id == Student.section_id)
+                        .where(
+                            Section.class_id == target.id,
+                            Student.status == StudentStatus.ACTIVE,
+                            Student.deleted_at.is_(None),
+                        )
+                        .order_by(Student.admission_number)
+                    )
+                ).scalars()
+            )
+            marks = 0
+            for paper_index, paper in enumerate(papers):
+                for student_index, student in enumerate(sitters):
+                    # Deterministic spread (55-97) with one absence per ~11
+                    # entries, so ranks, percentages and the "AB" cell all show
+                    # up without a random seed to chase.
+                    if (student_index + paper_index) % 11 == 10:
+                        session.add(
+                            ExamMark(
+                                **scope,
+                                paper_id=paper.id,
+                                student_id=student.id,
+                                marks_obtained=None,
+                                is_absent=True,
+                            )
+                        )
+                    else:
+                        session.add(
+                            ExamMark(
+                                **scope,
+                                paper_id=paper.id,
+                                student_id=student.id,
+                                marks_obtained=Decimal(
+                                    55 + (student_index * 7 + paper_index * 13) % 43
+                                ),
+                                is_absent=False,
+                            )
+                        )
+                    marks += 1
+            await session.flush()
+            created["exam"] = exam_name
+            created["exam_class"] = target.name
+            created["exam_marks"] = marks
+
+    return created or {"academics": "already complete; nothing added"}
 
 
 async def reconcile_usage(session: AsyncSession, organization_id: UUID) -> None:
@@ -587,10 +939,17 @@ async def _run_seed(*, demo: bool) -> None:
                 print("\nDemo data created:")
                 print(f"  Organization : {result['organization']}")
                 print(f"  Owner login  : {result['owner_email']} / {result['owner_password']}")
-                print(f"  Schools      : {', '.join(result['schools'])}")
-                print(f"  Invitations  : {len(result['pending_invitations'])} pending")
-                for inv in result["pending_invitations"]:
-                    print(f"    {inv['email']}  ->  /invite/accept?token={inv['token']}")
+                # A re-run against an existing demo org returns a top-up result
+                # without schools/invitations -- print whatever came back.
+                if "schools" in result:
+                    print(f"  Schools      : {', '.join(result['schools'])}")
+                if "pending_invitations" in result:
+                    print(f"  Invitations  : {len(result['pending_invitations'])} pending")
+                    for inv in result["pending_invitations"]:
+                        print(f"    {inv['email']}  ->  /invite/accept?token={inv['token']}")
+                for key in ("note", "students", "classes", "subjects", "exam", "exam_marks", "academics"):
+                    if key in result:
+                        print(f"  {key.replace('_', ' ').capitalize():<13}: {result[key]}")
     finally:
         await dispose_engine()
 

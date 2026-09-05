@@ -664,9 +664,19 @@ export function CardPrintStyle() {
     <style>{`
       @media print {
         body * { visibility: hidden; }
+        /* The app's in-flow root would otherwise stretch the printed document
+           into trailing blank pages; the dialog lives in a portal div that
+           holds the sheet, which is the only body child that may keep height. */
+        body > div:not(:has(.student-id-card-sheet)) { display: none !important; }
         .student-id-card-dialog {
           position: static !important;
+          /* Tailwind v4 centers via the individual translate property, not
+             transform — both must go, or the un-positioned dialog stays the
+             sheet's containing block, shifted half a dialog off the page. */
           transform: none !important;
+          translate: none !important;
+          scale: none !important;
+          rotate: none !important;
           max-height: none !important;
           overflow: visible !important;
           border: 0 !important;

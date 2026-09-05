@@ -3,6 +3,7 @@ import type {
   AdmissionResponse,
   EnrollmentPlacement,
   EnrollmentRead,
+  ExamResultFilter,
   FeeStandingFilter,
   Page,
   PageParams,
@@ -25,6 +26,11 @@ export interface StudentListParams extends PageParams {
   /** What the family owes: "pending" | "overdue" | "clear". Server-side, so it
    *  narrows the page count too rather than filtering rows already fetched. */
   fees?: FeeStandingFilter | null;
+  /** Filter to students marked in this exam; rows then carry `exam_result`.
+   *  Requires `grade:read` on top of `student:read`. */
+  exam?: string | null;
+  /** Narrow the `exam` filter: "passed" | "failed" | "absent". Needs `exam`. */
+  result?: ExamResultFilter | null;
 }
 
 export const studentsApi = {

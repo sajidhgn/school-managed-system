@@ -42,6 +42,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.billing.router import public_router as public_plans_router
 from app.modules.billing.router import router as billing_router
 from app.modules.billing.router import webhook_router
+from app.modules.exams.router import exams_router
 from app.modules.fees.router import router as fees_router
 from app.modules.guardians.auth_router import router as guardian_auth_router
 from app.modules.guardians.portal_router import router as guardian_portal_router
@@ -128,6 +129,11 @@ api_router.include_router(subjects_router, prefix="/subjects", tags=["Subjects"]
 # campus" (the head teacher's unsubmitted list) and "this student over a term", and
 # neither has a class in its path.
 api_router.include_router(attendance_router, prefix="/attendance", tags=["Attendance"])
+
+# Exams: the assessment layer over the calendar and curriculum above. Its own
+# prefix, not `/classes/{id}/exams` -- an exam spans many classes (every grade
+# sits the mid-term), so nesting it under one class would misdescribe it.
+api_router.include_router(exams_router, prefix="/exams", tags=["Exams"])
 
 # Fees: what a school bills its STUDENTS. Deliberately not under `/billing`, which is
 # what the school owes EduCloud -- two different money flows between two different

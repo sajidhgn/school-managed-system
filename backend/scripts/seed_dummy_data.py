@@ -59,7 +59,13 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.security import hash_password
 from app.db.session import dispose_engine, init_engine, session_scope
-from app.modules.academics.models import SchoolClass, Section
+from app.modules.academics.models import (
+    ClassSubject,
+    SchoolClass,
+    Section,
+    Subject,
+    SubjectKind,
+)
 from app.modules.auth.models import User, UserStatus
 from app.modules.fees.models import (
     FeeHead,
@@ -137,6 +143,49 @@ STATIONERY_ITEMS = [
 # exactly the mistake `include_stationery` exists to prevent.
 STATIONERY_ON_STRUCTURE = {"COPY-100": Decimal(4), "PENCIL-HB": Decimal(1)}
 
+# The subject catalogue every campus gets: code -> (name, kind, weekly periods).
+# Codes and names match what a Pakistani school calls them; weekly periods are
+# what the timetable generator will read, weighted the way schools weight them
+# (English and Mathematics heaviest, activities once or twice a week).
+SUBJECT_CATALOGUE: dict[str, tuple[str, SubjectKind, int]] = {
+    "ENG": ("English", SubjectKind.CORE, 6),
+    "URD": ("Urdu", SubjectKind.CORE, 5),
+    "MATH": ("Mathematics", SubjectKind.CORE, 6),
+    "ISL": ("Islamiat", SubjectKind.CORE, 3),
+    "GK": ("General Knowledge", SubjectKind.CORE, 4),
+    "SCI": ("General Science", SubjectKind.CORE, 5),
+    "SST": ("Social Studies", SubjectKind.CORE, 4),
+    "PAK": ("Pakistan Studies", SubjectKind.CORE, 3),
+    "PHY": ("Physics", SubjectKind.CORE, 4),
+    "CHEM": ("Chemistry", SubjectKind.CORE, 4),
+    "BIO": ("Biology", SubjectKind.CORE, 4),
+    "CS": ("Computer Science", SubjectKind.ELECTIVE, 3),
+    "ART": ("Art & Drawing", SubjectKind.ELECTIVE, 2),
+    "PE": ("Physical Education", SubjectKind.ACTIVITY, 2),
+    "LIB": ("Library", SubjectKind.ACTIVITY, 1),
+}
+
+
+def curriculum_for(level: int) -> list[str]:
+    """Which of the catalogue a grade actually studies.
+
+    Follows the shape of a Pakistani school: General Knowledge in the infants,
+    General Science and Social Studies through middle school, the split sciences
+    plus Pakistan Studies from Grade 9 (matric). Levels above 10 keep the matric
+    set -- a hand-made "Grade 11" gets a sensible curriculum, not an empty one.
+    """
+    codes = ["ENG", "URD", "MATH", "ISL", "PE"]
+    if level <= 3:
+        codes += ["GK", "ART", "LIB"]
+    elif level <= 5:
+        codes += ["SCI", "SST", "ART", "LIB"]
+    elif level <= 8:
+        codes += ["SCI", "SST", "CS", "ART"]
+    else:
+        codes += ["PHY", "CHEM", "BIO", "PAK", "CS"]
+    return codes
+
+
 ACADEMIC_YEAR = "2026-2027"
 PERIOD = "Term 1"
 
@@ -190,6 +239,109 @@ async def ensure_schools(session, org: Organization, target: int) -> list[School
     return existing, made
 
 
+async def seed_subjects(session, org: Organization, school: School) -> dict[str, int]:
+    """Give one campus its subject catalogue, taught to EVERY class it has.
+
+    Self-contained (queries its own classes, roles and existing rows) so it runs
+    both inside a full populate and alone via `--subjects-only` -- "Grade 6
+    studies nothing" is wrong however the class got there. Topped up like
+    everything else in this script: a subject whose code or name you already use
+    blocks that slot, and a (class, subject) pair you assigned is left alone.
+    """
+    counts = {"subjects": 0, "class subjects": 0}
+
+    subjects = list(
+        (
+            await session.execute(select(Subject).where(Subject.school_id == school.id))
+        ).scalars().all()
+    )
+    subject_codes = {s.code for s in subjects}
+    subject_names = {s.name for s in subjects}
+    for code, (subject_name, kind, _periods) in SUBJECT_CATALOGUE.items():
+        if code in subject_codes or subject_name in subject_names:
+            continue
+        subject = Subject(
+            id=uuid4(),
+            organization_id=org.id,
+            school_id=school.id,
+            code=code,
+            name=subject_name,
+            kind=kind,
+        )
+        session.add(subject)
+        subjects.append(subject)
+        counts["subjects"] += 1
+    await session.flush()
+    subjects_by_code = {s.code: s for s in subjects}
+
+    # Default teachers come from the campus's real teacher accounts. ~70% of
+    # rows get one; the rest stay open, because an unstaffed subject is a real
+    # state the curriculum screen shows.
+    teacher_role = (
+        await session.execute(
+            select(Role).where(Role.school_id == school.id, Role.code == "teacher")
+        )
+    ).scalar_one_or_none()
+    teacher_ids: list[UUID] = []
+    if teacher_role is not None:
+        teacher_ids = list(
+            (
+                await session.execute(
+                    select(Membership.user_id).where(
+                        Membership.school_id == school.id,
+                        Membership.role_id == teacher_role.id,
+                        Membership.status == MembershipStatus.ACTIVE,
+                        Membership.deleted_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+        )
+
+    all_classes = list(
+        (
+            await session.execute(
+                select(SchoolClass).where(
+                    SchoolClass.school_id == school.id,
+                    SchoolClass.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+    )
+    # Soft-deleted pairs included on purpose: the (class, subject) unique
+    # constraint is not partial, so a deleted row still blocks a re-insert.
+    assigned = {
+        (row.class_id, row.subject_id)
+        for row in (
+            await session.execute(
+                select(ClassSubject).where(ClassSubject.school_id == school.id)
+            )
+        ).scalars().all()
+    }
+    for cls in all_classes:
+        for code in curriculum_for(cls.level):
+            subject = subjects_by_code.get(code)
+            if subject is None or (cls.id, subject.id) in assigned:
+                continue
+            session.add(
+                ClassSubject(
+                    id=uuid4(),
+                    organization_id=org.id,
+                    school_id=school.id,
+                    class_id=cls.id,
+                    subject_id=subject.id,
+                    teacher_id=(
+                        RNG.choice(teacher_ids)
+                        if teacher_ids and RNG.random() < 0.7
+                        else None
+                    ),
+                    weekly_periods=SUBJECT_CATALOGUE[code][2],
+                )
+            )
+            counts["class subjects"] += 1
+    await session.flush()
+    return counts
+
+
 async def populate_school(
     session,
     org: Organization,
@@ -202,7 +354,8 @@ async def populate_school(
 ) -> dict[str, int]:
     """Top one campus up. Anything already present is left exactly as it is."""
     counts = {"classes": 0, "sections": 0, "students": 0, "staff": 0,
-              "invitations": 0, "roles": 0, "vouchers": 0, "payments": 0}
+              "invitations": 0, "roles": 0, "vouchers": 0, "payments": 0,
+              "subjects": 0, "class subjects": 0}
 
     roles = {
         r.code: r
@@ -371,6 +524,11 @@ async def populate_school(
             )
         )
         counts["staff"] += 1
+
+    # --- Curriculum ----------------------------------------------------------
+    await session.flush()  # so the staff created just above join the teacher pool
+    for key, value in (await seed_subjects(session, org, school)).items():
+        counts[key] += value
 
     # --- Pending invitations -------------------------------------------------
     already_invited = (
@@ -664,19 +822,27 @@ async def run(args: argparse.Namespace) -> int:
         totals: dict[str, int] = {}
         async with session_scope(org_id) as session:
             org = (await session.execute(select(Organization))).scalar_one()
-            schools, made = await ensure_schools(session, org, args.schools)
+            # `--subjects-only` never creates campuses: target 0 makes
+            # `ensure_schools` a plain read of what exists.
+            schools, made = await ensure_schools(
+                session, org, 0 if args.subjects_only else args.schools
+            )
             print(f"{org_name}: {len(schools)} campus(es) ({made} created)")
 
         for school in schools:
             async with session_scope(org_id, school_id=school.id) as session:
-                counts = await populate_school(
-                    session,
-                    org,
-                    school,
-                    class_count=args.classes,
-                    min_students=args.min_students,
-                    max_students=args.max_students,
-                    staff_per_school=args.staff,
+                counts = (
+                    await seed_subjects(session, org, school)
+                    if args.subjects_only
+                    else await populate_school(
+                        session,
+                        org,
+                        school,
+                        class_count=args.classes,
+                        min_students=args.min_students,
+                        max_students=args.max_students,
+                        staff_per_school=args.staff,
+                    )
                 )
                 for key, value in counts.items():
                     totals[key] = totals.get(key, 0) + value
@@ -692,7 +858,8 @@ async def run(args: argparse.Namespace) -> int:
 
         if totals:
             print("\ntotals: " + ", ".join(f"{v} {k}" for k, v in totals.items() if v))
-            print(f"generated staff sign in with: {STAFF_PASSWORD}")
+            if totals.get("staff"):
+                print(f"generated staff sign in with: {STAFF_PASSWORD}")
         return 0
     finally:
         await dispose_engine()
@@ -706,6 +873,12 @@ def main() -> int:
     parser.add_argument("--min-students", type=int, default=20)
     parser.add_argument("--max-students", type=int, default=30)
     parser.add_argument("--staff", type=int, default=6, help="staff accounts per campus")
+    parser.add_argument(
+        "--subjects-only",
+        action="store_true",
+        help="only seed the subject catalogue and per-class curriculum; "
+        "touch nothing else and create no campuses, classes or people",
+    )
     return asyncio.run(run(parser.parse_args()))
 
 

@@ -101,6 +101,26 @@ class FeeStandingFilter(StrEnum):
     """
 
 
+class ExamResultFilter(StrEnum):
+    """How the students list may be narrowed by one exam's outcomes.
+
+    All three states require the student to have been MARKED in the chosen exam:
+    an unmarked student is "no data", not a pass -- filtering happens mid-marking,
+    and half-entered sheets must not read as half the school passing.
+    """
+
+    PASSED = "passed"
+    """Marked, missed nothing, and cleared every paper that declares a pass line."""
+
+    FAILED = "failed"
+    """Below the pass line on at least one paper that declares one. Papers with
+    no `pass_marks` cannot fail anyone -- no line, no verdict."""
+
+    ABSENT = "absent"
+    """Missed at least one paper. Separate from FAILED because the office does
+    different things with the two lists: absentees get a re-sit, not a retake."""
+
+
 class StudentRead(BaseSchema):
     id: UUID
     admission_number: str
@@ -188,6 +208,33 @@ class StudentListRow(StudentRead):
     child's family, which is a considerably larger disclosure than the one-bit filter
     that is already gated.
     """
+
+    exam_result: StudentExamResult | None = None
+    """Null unless the request named an `exam` -- which requires `grade:read`.
+    Same discipline as `dues`: marks reach the directory only through the gated
+    filter that asked for them."""
+
+
+class StudentExamResult(BaseSchema):
+    """One student's totals in whichever exam the directory was filtered by.
+
+    Totals are over the papers MARKED for this student, mirroring the result
+    sheet: an unmarked paper is missing data, not a zero. Absent papers count
+    their maximum (the sitting happened; the student scored nothing on it).
+    """
+
+    total_obtained: Decimal
+    total_max: int
+    percentage: Decimal
+    failed_papers: int
+    """Papers below their declared pass line. Zero on papers with no line."""
+    absent_papers: int
+
+
+# `StudentListRow` refers to `StudentExamResult` before it is defined; the
+# `from __future__ import annotations` turns that into a forward reference, and
+# this call resolves it. Same dance as `ClassSummary` in the academics schemas.
+StudentListRow.model_rebuild()
 
 
 class AdmissionResponse(BaseSchema):

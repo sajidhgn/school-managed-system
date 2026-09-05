@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -36,6 +37,7 @@ from app.modules.students.schemas import (
     EnrollmentBackfillResult,
     EnrollmentPlacement,
     EnrollmentRead,
+    ExamResultFilter,
     FeeStandingFilter,
     PromotionRequest,
     PromotionResult,
@@ -44,6 +46,7 @@ from app.modules.students.schemas import (
     StudentAdmissionRequest,
     StudentCreate,
     StudentDues,
+    StudentExamResult,
     StudentListRow,
     StudentRead,
     StudentUpdate,
@@ -151,6 +154,33 @@ class StudentService:
         due_before = datetime.now(UTC).date() if standing is FeeStandingFilter.OVERDUE else None
         return Student.id.in_(vouchers.students_owing(due_before=due_before))
 
+    def _exam_result_condition(
+        self, exam_id: UUID, result: ExamResultFilter | None
+    ) -> ColumnElement[bool]:
+        """Turn "how did they do in this exam" into a WHERE clause on `students`.
+
+        Subqueries for the same reason as `_fee_standing_condition`: a join to
+        `exam_marks` would multiply a student by their papers and corrupt the
+        page total. What counts as passed/failed/absent is defined beside the
+        mark model -- see `ExamMarkRepository` -- this method only composes it.
+        """
+        from app.modules.exams.repository import ExamMarkRepository
+
+        marks = ExamMarkRepository(self.session)
+        if result is None:
+            # An exam filter with no outcome: everyone marked in it at all.
+            return Student.id.in_(marks.students_marked(exam_id))
+        if result is ExamResultFilter.ABSENT:
+            return Student.id.in_(marks.students_absent(exam_id))
+        if result is ExamResultFilter.FAILED:
+            return Student.id.in_(marks.students_below_pass(exam_id))
+        # PASSED: marked, missed nothing, cleared every declared pass line.
+        return (
+            Student.id.in_(marks.students_marked(exam_id))
+            & Student.id.notin_(marks.students_absent(exam_id))
+            & Student.id.notin_(marks.students_below_pass(exam_id))
+        )
+
     async def list(
         self,
         params: PageParams,
@@ -160,6 +190,8 @@ class StudentService:
         section_id: UUID | None = None,
         status: StudentStatus | None = None,
         fee_standing: FeeStandingFilter | None = None,
+        exam_id: UUID | None = None,
+        exam_result: ExamResultFilter | None = None,
     ) -> Page[StudentListRow]:
         conditions = []
         if search:
@@ -170,6 +202,8 @@ class StudentService:
             conditions.append(Student.status == status)
         if fee_standing is not None:
             conditions.append(self._fee_standing_condition(fee_standing))
+        if exam_id is not None:
+            conditions.append(self._exam_result_condition(exam_id, exam_result))
 
         rows, total = await self.repo.list(*conditions, params=params, sort=sort)
         # Every section on the page resolved once, not once per child.
@@ -177,13 +211,48 @@ class StudentService:
             {r.section_id for r in rows if r.section_id is not None}
         )
         dues = await self._dues_for(rows, fee_standing)
+        results = await self._exam_results_for(rows, exam_id)
         items = [
             StudentListRow.model_validate(
-                (await self._read(r, labels)).model_dump() | {"dues": dues.get(r.id)}
+                (await self._read(r, labels)).model_dump()
+                | {"dues": dues.get(r.id), "exam_result": results.get(r.id)}
             )
             for r in rows
         ]
         return Page.create(items, total, params)
+
+    async def _exam_results_for(
+        self, rows: Sequence[Student], exam_id: UUID | None
+    ) -> dict[UUID, StudentExamResult]:
+        """Exam totals for the students on THIS page, when an exam was named.
+
+        Empty when no exam filter was applied -- which is also the permission
+        boundary, exactly as `_dues_for` is for balances: the `exam` parameter
+        requires `grade:read`, so declining to compute totals without it keeps
+        marks off a roll that anyone with `student:read` can read.
+        """
+        if exam_id is None:
+            return {}
+        from app.modules.exams.repository import ExamMarkRepository
+
+        raw = await ExamMarkRepository(self.session).summary_by_student(
+            exam_id, {r.id for r in rows}
+        )
+        results: dict[UUID, StudentExamResult] = {}
+        for student_id, (obtained, total_max, failed, absent) in raw.items():
+            obtained = Decimal(obtained)
+            results[student_id] = StudentExamResult(
+                total_obtained=obtained,
+                total_max=int(total_max or 0),
+                percentage=(
+                    (obtained * 100 / total_max).quantize(Decimal("0.01"))
+                    if total_max
+                    else Decimal(0)
+                ),
+                failed_papers=int(failed),
+                absent_papers=int(absent),
+            )
+        return results
 
     async def _dues_for(
         self, rows: Sequence[Student], standing: FeeStandingFilter | None

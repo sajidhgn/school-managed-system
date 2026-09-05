@@ -80,6 +80,9 @@ class Campus:
     async def patch(self, url: str, **kw: Any) -> Any:
         return await self.tenant.client.patch(url, headers=self.headers, **kw)
 
+    async def put(self, url: str, **kw: Any) -> Any:
+        return await self.tenant.client.put(url, headers=self.headers, **kw)
+
     async def delete(self, url: str, **kw: Any) -> Any:
         return await self.tenant.client.delete(url, headers=self.headers, **kw)
 
