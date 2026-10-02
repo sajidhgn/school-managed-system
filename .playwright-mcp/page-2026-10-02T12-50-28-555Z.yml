@@ -1,0 +1,26 @@
+- generic [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: E
+      - generic [ref=e7]: Operator console
+    - generic [ref=e8]:
+      - heading "Sign in" [level=1] [ref=e9]
+      - paragraph [ref=e10]: Platform operators only. Accounts are provisioned by the seed CLI.
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Email
+          - textbox "Email" [active] [ref=e15]
+        - generic [ref=e16]:
+          - generic [ref=e17]: Authentication code
+          - textbox "Authentication code" [ref=e18]:
+            - /placeholder: "123456"
+        - generic [ref=e19]:
+          - generic [ref=e20]: Password
+          - generic [ref=e21]:
+            - textbox "Password" [ref=e22]
+            - button "Show password" [ref=e23]
+        - button "Sign in" [ref=e27]
+  - region "Notifications (F8)":
+    - list

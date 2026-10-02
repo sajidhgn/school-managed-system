@@ -64,6 +64,12 @@ export const queryKeys = {
     results: (examId: string, classId: string) => ["exams", examId, "results", classId] as const,
   },
 
+  diary: {
+    all: ["diary"] as const,
+    sections: (date: string) => ["diary", "sections", date] as const,
+    page: (sectionId: string, date: string) => ["diary", "page", sectionId, date] as const,
+  },
+
   attendance: {
     all: ["attendance"] as const,
     // The date is part of the key so yesterday's overview stays cached while today's

@@ -169,27 +169,20 @@ function ResultCardSheet({
         className="mx-auto max-w-[180mm] border-4 border-double bg-white p-6 text-black"
         style={{ borderColor: primary }}
       >
-        {/* Masthead: the RESULT CARD banner, then the school's identity. */}
+        {/* Masthead: logo centred on top, the school name centred beneath it,
+            then registration/contact and the RESULT CARD banner. */}
         <div className="text-center">
-          <span
-            className="inline-block rounded-md px-6 py-1 text-sm font-bold uppercase tracking-[0.2em]"
-            style={{ backgroundColor: primary, color: "#ffffff" }}
+          {school?.logoUrl ? (
+            // Plain <img> — school-supplied host, same as the ID card.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={school.logoUrl} alt="" className="mx-auto size-20 object-contain" />
+          ) : null}
+          <h1
+            className="mt-2 text-3xl font-extrabold uppercase leading-tight"
+            style={{ color: primary }}
           >
-            Result card
-          </span>
-          <div className="mt-3 flex items-center justify-center gap-3">
-            {school?.logoUrl ? (
-              // Plain <img> — school-supplied host, same as the ID card.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={school.logoUrl} alt="" className="size-14 shrink-0 object-contain" />
-            ) : null}
-            <h1
-              className="text-3xl font-extrabold uppercase leading-tight"
-              style={{ color: primary }}
-            >
-              {school?.name ?? "School"}
-            </h1>
-          </div>
+            {school?.name ?? "School"}
+          </h1>
           {school?.code ? (
             <p className="mt-1 text-sm font-semibold">Registration No: {school.code}</p>
           ) : null}
@@ -201,6 +194,14 @@ function ResultCardSheet({
               {contactLine}
             </p>
           ) : null}
+          <div>
+            <span
+              className="mt-3 inline-block rounded-md px-6 py-1 text-sm font-bold uppercase tracking-[0.2em]"
+              style={{ backgroundColor: primary, color: "#ffffff" }}
+            >
+              Result card
+            </span>
+          </div>
         </div>
 
         {/* The pro-forma lines. S/o, D/o — son/daughter of — is the guardian

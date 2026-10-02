@@ -34,9 +34,13 @@ WHY THE PROJECTION IS NARROWER THAN THE STAFF ONE
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from datetime import date
+
+from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentGuardian, GuardianDbSession, SettingsDep
+from app.modules.diary.schemas import DiaryPage
+from app.modules.diary.service import default_diary_date
 from app.modules.guardians.portal_service import GuardianPortalService
 from app.modules.guardians.schemas import GuardianChildRead, GuardianProfile
 
@@ -86,3 +90,22 @@ async def child(
     small but real leak on a surface reachable by anyone with a handset and a code.
     """
     return await GuardianPortalService(db, settings).child(ctx, student_id)
+
+
+@router.get(
+    "/children/{student_id}/diary",
+    response_model=DiaryPage,
+    summary="The homework diary of one child's class for a date",
+)
+async def child_diary(
+    student_id: str,
+    ctx: CurrentGuardian,
+    db: GuardianDbSession,
+    settings: SettingsDep,
+    entry_date: date | None = Query(default=None, alias="date", description="Defaults to today."),
+) -> DiaryPage:
+    """Same per-child gate as `/children/{student_id}`: 404 for a child this
+    guardian may not view."""
+    return await GuardianPortalService(db, settings).child_diary(
+        ctx, student_id, entry_date or default_diary_date()
+    )

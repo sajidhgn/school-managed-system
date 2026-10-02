@@ -12,6 +12,9 @@ holds), and financial rows are voided or reversed rather than deleted.
 
 from __future__ import annotations
 
+import base64
+import re
+import zlib
 from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
@@ -255,6 +258,7 @@ async def test_organization_cannot_read_another_organizations_fee_records(
         await fx_a.get(f"{API}/fees/structures/{fx_b.structure_id}"),
         await fx_a.get(f"{API}/fees/vouchers/{b_voucher_id}"),
         await fx_a.get(f"{API}/fees/vouchers/{b_voucher_id}/pdf"),
+        await fx_a.get(f"{API}/fees/vouchers/print", params={"ids": b_voucher_id}),
         await fx_a.get(f"{API}/fees/vouchers/{b_voucher_id}/payments"),
     )
     assert all(r.status_code == 404 for r in reads), [(r.status_code, r.text) for r in reads]
@@ -321,6 +325,9 @@ async def test_campus_scope_holds_between_schools_in_one_organization(
     cross = (
         await tenant.client.get(f"{API}/fees/vouchers/{a_voucher_id}", headers=b_headers),
         await tenant.client.get(f"{API}/fees/vouchers/{a_voucher_id}/pdf", headers=b_headers),
+        await tenant.client.get(
+            f"{API}/fees/vouchers/print", params={"ids": a_voucher_id}, headers=b_headers
+        ),
         await tenant.client.post(
             f"{API}/fees/vouchers/{a_voucher_id}/payments",
             json={"amount": "1.00", "method": "cash"},
@@ -914,13 +921,37 @@ async def test_every_fee_mutation_writes_an_audit_row(
     assert after["reason"] == "Withdrawn"
 
 
+def pdf_text(payload: bytes) -> str:
+    """Every word drawn on a ReportLab PDF, as one string.
+
+    WHY THIS IS HAND-ROLLED
+        ReportLab writes its content streams ASCII85-then-Flate encoded, so the words
+        on the page are not greppable in the bytes. Decoding them is fifteen lines of
+        stdlib; a PDF library would be a production dependency added to satisfy a
+        test, and the alternative -- asserting only on the byte length -- is what let
+        a challan ship with the wrong bank account on it.
+
+        This is deliberately NOT a PDF parser. It makes no attempt at text order,
+        positioning or word breaks; it answers "does this string appear on the page",
+        which is the only question these tests ask.
+    """
+    chunks = []
+    for match in re.finditer(rb"stream\n(.*?)endstream", payload, re.S):
+        try:
+            chunks.append(zlib.decompress(base64.a85decode(match.group(1).strip(), adobe=True)))
+        except Exception:  # a non-text stream (a font, an image) -- not our business
+            continue
+    return b"\n".join(chunks).decode("latin-1")
+
+
 async def test_challan_pdf_renders_three_copies(
     tenant: Tenant, mailbox: list[EmailMessage]
 ) -> None:
     """Spec §14.14: one A4 page carrying Bank / School / Student copies.
 
     A single-copy challan is refused at the bank counter, so the three copies are a
-    functional requirement rather than a layout preference.
+    functional requirement rather than a layout preference -- and all three must fit
+    ONE sheet, or a school prints three times the paper it budgeted for.
     """
     fx = await build_fees(tenant, mailbox, students=1)
     voucher_id = (await generate(fx)).json()["voucher_ids"][0]
@@ -935,10 +966,194 @@ async def test_challan_pdf_renders_three_copies(
     payload = response.content
     assert payload.startswith(b"%PDF-"), "not a PDF"
     assert payload.rstrip().endswith(b"%%EOF")
-    assert len(payload) > 1500
 
     # One page, three copies. `/Count 1` is the page tree's page count.
     assert b"/Count 1" in payload
+
+    text_on_page = pdf_text(payload)
+    assert text_on_page.count("Bank Copy") == 1
+    assert text_on_page.count("School Copy") == 1
+    assert text_on_page.count("Student Copy") == 1
+
+    # The template's own bands, in the shape a counter clerk reads.
+    for band in (
+        "Fee Month",
+        "Particular",
+        "Total",
+        "Payable Within Due Date",
+        "Payable After Due Date",
+        "Received Amount By Officials",
+        "Printed By",
+    ):
+        assert band in text_on_page, band
+
+    # 6,500 billed, spelled out beside the figure so the two can be reconciled.
+    assert "6,500" in text_on_page
+    assert "Six Thousand Five Hundred Only" in text_on_page
+
+
+async def test_the_challan_prints_the_campus_accounts_and_only_the_chosen_copies(
+    tenant: Tenant, mailbox: list[EmailMessage]
+) -> None:
+    """The design is a property of the CAMPUS, read at print time.
+
+    The accounts are the part that matters: they are where a parent's money goes,
+    they change, and a school must be able to correct them without a deployment. A
+    campus that trims the copy list gets exactly the copies it asked for -- nothing
+    here invents a Bank Copy for a school whose parents all pay online.
+    """
+    fx = await build_fees(tenant, mailbox, students=1)
+    voucher_id = (await generate(fx)).json()["voucher_ids"][0]
+
+    saved = await fx.patch(
+        f"{API}/schools/{fx.tenant.school_id}",
+        json={
+            "challan_design": {
+                "copies": ["student"],
+                "payment_accounts": [
+                    {"label": "Easypaisa", "number": "0324-6797307", "holder": "M. Imtiaz"},
+                    {"label": "Meezan Bank", "number": "98410113254130", "holder": "M. Aftab"},
+                ],
+                "show_contact": False,
+                "footer_note": "Fees once paid are not refundable.",
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    text_on_page = pdf_text((await fx.get(f"{API}/fees/vouchers/{voucher_id}/pdf")).content)
+
+    assert "Student Copy" in text_on_page
+    assert "Bank Copy" not in text_on_page
+    assert "School Copy" not in text_on_page
+
+    assert "Easypaisa" in text_on_page
+    assert "0324-6797307" in text_on_page
+    assert "98410113254130" in text_on_page
+    assert "M. Aftab" in text_on_page
+
+    assert "Fees once paid are not refundable." in text_on_page
+    # Switched off, so the family's phone number is not on a page left on a desk.
+    assert "Contact" not in text_on_page
+
+
+# A 1x1 opaque PNG -- the smallest image that is still a real one.
+_TINY_PNG = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC"
+)
+
+
+async def test_the_challan_header_carries_the_school_name_address_and_logo(
+    tenant: Tenant, mailbox: list[EmailMessage]
+) -> None:
+    """The letterhead is read from the campus settings at print time.
+
+    Name and address identify whose account the bank is crediting; the logo is what
+    tells a parent at a glance the paper came from their child's school.
+    """
+    fx = await build_fees(tenant, mailbox, students=1)
+    voucher_id = (await generate(fx)).json()["voucher_ids"][0]
+
+    saved = await fx.patch(
+        f"{API}/schools/{fx.tenant.school_id}",
+        json={"address": "Main Road, Gaggoo Mandi", "logo_url": _TINY_PNG},
+    )
+    assert saved.status_code == 200, saved.text
+
+    payload = (await fx.get(f"{API}/fees/vouchers/{voucher_id}/pdf")).content
+    text_on_page = pdf_text(payload)
+
+    assert saved.json()["name"].upper() in text_on_page
+    assert "Main Road, Gaggoo Mandi" in text_on_page
+    assert b"/Subtype /Image" in payload
+    # Still one sheet: the header must not push the third copy onto page two.
+    assert b"/Count 1" in payload
+
+
+async def test_one_challan_can_cover_several_months(
+    tenant: Tenant, mailbox: list[EmailMessage]
+) -> None:
+    """The term-at-a-time page: three months, three challan numbers, one total.
+
+    The vouchers stay separate underneath -- each keeps its own number and receipts,
+    so paying two of three settles exactly those two. This combines the PRINTING.
+    """
+    fx = await build_fees(tenant, mailbox, students=1)
+    ids = [
+        (await generate(fx, period=period)).json()["voucher_ids"][0]
+        for period in ("2026-07", "2026-08", "2026-09")
+    ]
+
+    response = await fx.get(f"{API}/fees/vouchers/print", params=[("ids", i) for i in ids])
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert "plus-2" in response.headers["content-disposition"]
+
+    text_on_page = pdf_text(response.content)
+
+    # Each period on its own row under "Fee Month", reformatted from the stored
+    # "2026-07" into what a parent reads.
+    for month in ("Jul, 2026", "Aug, 2026", "Sep, 2026"):
+        assert month in text_on_page, month
+
+    # Every challan number in the band, so a counter can credit the right bills.
+    numbers = [(await fx.get(f"{API}/fees/vouchers/{i}")).json()["voucher_number"] for i in ids]
+    for number in numbers:
+        assert number in text_on_page, number
+
+    # 3 x 6,500 as one figure, and spelled out.
+    assert "19,500" in text_on_page
+    assert "Nineteen Thousand Five Hundred Only" in text_on_page
+
+
+async def test_a_combined_challan_refuses_anything_that_would_misbill(
+    tenant: Tenant, mailbox: list[EmailMessage]
+) -> None:
+    """Three refusals, all guarding the same failure: a page billing the wrong money.
+
+    A page naming one child and totalling another's fees is the worst thing this
+    module can print, and a voided charge folded into a live total asks a family to
+    pay a bill the school already cancelled.
+    """
+    fx = await build_fees(tenant, mailbox, students=2)
+    first_run = (await generate(fx)).json()["voucher_ids"]
+    second_run = (await generate(fx, period="2026-09")).json()["voucher_ids"]
+
+    async def combined(*ids: str) -> Any:
+        return await fx.get(f"{API}/fees/vouchers/print", params=[("ids", i) for i in ids])
+
+    # An id that does not resolve is a 404, never a silently shorter challan: a
+    # printed page quietly missing a month is one a parent underpays.
+    missing = await combined(first_run[0], str(UUID(int=0)))
+    assert missing.status_code == 404, missing.text
+
+    # Two students on one page.
+    mixed = await combined(first_run[0], first_run[1])
+    assert mixed.status_code == 422, mixed.text
+    assert mixed.json()["code"] == "CHALLAN_MIXED_STUDENTS"
+
+    # Same student, two months -- the legitimate case, so it must still work.
+    same_student = [first_run[0], second_run[0]]
+    together = await combined(*same_student)
+    assert together.status_code == 200, together.text
+
+    # ... until one of them is cancelled.
+    voided = await fx.post(
+        f"{API}/fees/vouchers/{second_run[0]}/void", json={"reason": "Billed in error"}
+    )
+    assert voided.status_code == 200, voided.text
+
+    refused = await combined(*same_student)
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "CHALLAN_VOID_COMBINED"
+
+    # But a voided challan still REPRINTS on its own -- that is how an office shows
+    # a bill was cancelled -- and says so across the page.
+    alone = await fx.get(f"{API}/fees/vouchers/{second_run[0]}/pdf")
+    assert alone.status_code == 200, alone.text
+    assert "MUST NOT BE PAID" in pdf_text(alone.content)
 
 
 # ---------------------------------------------------------------------------

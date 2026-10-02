@@ -83,6 +83,7 @@ class AuditAction:
     ROLE_PERMISSIONS_CHANGED = "role.permissions_changed"
     MEMBER_ROLE_CHANGED = "member.role_changed"
     MEMBER_CREATED = "member.created"
+    MEMBER_RENAMED = "member.renamed"
     MEMBER_SUSPENDED = "member.suspended"
     MEMBER_REACTIVATED = "member.reactivated"
     MEMBER_REMOVED = "member.removed"
@@ -91,6 +92,7 @@ class AuditAction:
     INVITATION_SENT = "invitation.sent"
     INVITATION_RESENT = "invitation.resent"
     INVITATION_REVOKED = "invitation.revoked"
+    INVITATION_DELETED = "invitation.deleted"
     INVITATION_ACCEPTED = "invitation.accepted"
 
     # --- Guardians (parent registry and portal access) ----------------------
@@ -215,6 +217,13 @@ class AuditAction:
     ATTENDANCE_SESSION_DISCARDED = "attendance_session.discarded"
     ATTENDANCE_AMENDED = "attendance_record.amended"
 
+    # --- Diary ---------------------------------------------------------------
+    #
+    # One row per SAVE, carrying every subject it changed with the text before and
+    # after. Per-subject rows would bury "who changed Grade 4-B's homework on
+    # Monday?" under five lines for one click of Save.
+    DIARY_UPDATED = "diary.updated"
+
     # --- Per-student fee arrangements ---------------------------------------
     #
     # `entity_type` is `student` rather than `student_fee_assignment`, deliberately:
@@ -253,6 +262,10 @@ class PlatformAuditAction:
     ORGANIZATION_SUSPENDED = "platform.organization_suspended"
     ORGANIZATION_REACTIVATED = "platform.organization_reactivated"
     ORGANIZATION_PLAN_OVERRIDDEN = "platform.organization_plan_overridden"
+    # Written by the maintenance job, not an operator: a trial that ended without a
+    # plan being chosen. Lives here because the tenant's own audit log is deleted
+    # with everything else -- this row is the only record that the account existed.
+    ORGANIZATION_PURGED = "platform.organization_purged"
     IMPERSONATION_STARTED = "platform.impersonation_started"
     PLAN_CREATED = "platform.plan_created"
     PLAN_UPDATED = "platform.plan_updated"

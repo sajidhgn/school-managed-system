@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { PlatformLoginForm } from "./login-form";
 
@@ -32,7 +33,11 @@ export default function PlatformLoginPage() {
             Platform operators only. Accounts are provisioned by the seed CLI.
           </p>
           <div className="mt-6">
-            <PlatformLoginForm />
+            {/* The form reads `?next=` via useSearchParams, which needs a Suspense
+                boundary or Next.js opts the whole route out of static rendering. */}
+            <Suspense fallback={null}>
+              <PlatformLoginForm />
+            </Suspense>
           </div>
         </div>
       </div>

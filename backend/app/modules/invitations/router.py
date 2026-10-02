@@ -176,6 +176,26 @@ async def revoke_invitation(
     return _read(invitation)
 
 
+@school_router.delete(
+    "/{school_id}/invitations/{invitation_id}/permanent",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_invitation(
+    school_id: UUID,
+    invitation_id: UUID,
+    session: DbSession,
+    settings: SettingsDep,
+    ctx: Annotated[AuthContext, Depends(require("invitation:revoke"))],
+) -> None:
+    """Delete an invitation outright. A pending one is revoked first (seat returned).
+
+    Rides on `invitation:revoke`: removing a row from the list is no more power
+    than killing its link, and the audit log keeps the record either way.
+    """
+    _assert_school_scope(ctx, school_id)
+    await InvitationService(session, settings).delete(ctx=ctx, invitation_id=invitation_id)
+
+
 # ---------------------------------------------------------------------------
 # Public
 # ---------------------------------------------------------------------------

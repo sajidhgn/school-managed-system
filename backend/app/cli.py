@@ -971,7 +971,9 @@ async def _run_reconcile() -> None:
 
 async def _run_maintenance() -> None:
     """Advance billing lifecycle, apply retention, generate due challans, fine late ones."""
+    from app.common.email.sender import build_email_sender
     from app.modules.billing.jobs import process_billing_lifecycle, purge_expired_audit_logs
+    from app.modules.billing.trial_retention import process_trial_retention
     from app.modules.fees.jobs import (
         apply_late_fees_for_organization,
         generate_scheduled_challans_for_organization,
@@ -981,7 +983,9 @@ async def _run_maintenance() -> None:
     settings = get_settings()
     configure_logging(settings)
     init_engine(settings)
+    email_sender = build_email_sender(settings)
     lifecycle_events = 0
+    organizations_purged = 0
     audit_rows_purged = 0
     invitations_expired = 0
     challans_generated = 0
@@ -998,6 +1002,15 @@ async def _run_maintenance() -> None:
         for organization_id in organization_ids:
             async with session_scope(organization_id) as session:
                 lifecycle_events += len(await process_billing_lifecycle(session, organization_id))
+                # Straight after the lifecycle step, so a trial expiring on this pass
+                # gets its "trial ended" email on this pass. A purged organization has
+                # nothing left for the steps below to work on.
+                retention = await process_trial_retention(
+                    session, organization_id, settings=settings, email_sender=email_sender
+                )
+                if "organization.purged" in retention:
+                    organizations_purged += 1
+                    continue
                 audit_rows_purged += await purge_expired_audit_logs(session, organization_id)
                 invitations_expired += await expire_pending_invitations(session, organization_id)
                 # BEFORE the late-fee pass, and that order is deliberate. A challan
@@ -1020,6 +1033,7 @@ async def _run_maintenance() -> None:
             "maintenance_complete",
             organizations=len(organization_ids),
             lifecycle_events=lifecycle_events,
+            organizations_purged=organizations_purged,
             audit_rows_purged=audit_rows_purged,
             invitations_expired=invitations_expired,
             challans_generated=challans_generated,

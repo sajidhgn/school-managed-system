@@ -119,6 +119,9 @@ export const invitations = {
     api.post<InvitationRead>(`/schools/${schoolId}/invitations/${id}/resend`),
   revoke: (schoolId: string, id: string) =>
     api.delete<InvitationRead>(`/schools/${schoolId}/invitations/${id}`),
+  /** Gone for good, pending or not; a pending one's seat is returned. */
+  remove: (schoolId: string, id: string) =>
+    api.delete<void>(`/schools/${schoolId}/invitations/${id}/permanent`),
 };
 
 // --- Billing ---------------------------------------------------------------

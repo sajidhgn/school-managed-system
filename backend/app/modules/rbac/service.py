@@ -66,6 +66,7 @@ from app.core.exceptions import (
 from app.core.logging import get_logger
 from app.core.passwords import validate_password
 from app.core.security import hash_password
+from app.modules.academics.models import ClassSubject, SchoolClass, Section, Subject
 from app.modules.auth.models import User, UserStatus
 from app.modules.billing.entitlements import EntitlementService
 from app.modules.rbac.catalog import TEACHING_PERMISSIONS, scope_violations, unknown_codes
@@ -451,6 +452,58 @@ class RbacService:
         members = list((await self.session.execute(stmt)).scalars().all())
         return members, total
 
+    async def class_assignments(
+        self, *, school_id: UUID, user_ids: list[UUID]
+    ) -> dict[UUID, list[dict[str, UUID | str | None]]]:
+        """Classes each user teaches in one branch, keyed by user id.
+
+        Two sources: sections they are class teacher of, and grade-wide subjects they
+        are the default teacher for. Ordered by class level so the staff table reads
+        Grade 1 → Grade 12.
+        """
+        result: dict[UUID, list[dict[str, UUID | str | None]]] = {}
+        if not user_ids:
+            return result
+
+        sections = await self.session.execute(
+            select(Section.class_teacher_id, SchoolClass.name, Section.id, Section.name)
+            .join(SchoolClass, Section.class_id == SchoolClass.id)
+            .where(
+                Section.school_id == school_id,
+                Section.class_teacher_id.in_(user_ids),
+                Section.deleted_at.is_(None),
+                SchoolClass.deleted_at.is_(None),
+            )
+            .order_by(SchoolClass.level, Section.name)
+        )
+        for user_id, class_name, section_id, section_name in sections.all():
+            result.setdefault(user_id, []).append(
+                {"class_name": class_name, "section_id": section_id, "section_name": section_name}
+            )
+
+        subjects = await self.session.execute(
+            select(ClassSubject.teacher_id, SchoolClass.name, ClassSubject.id, Subject.name)
+            .join(SchoolClass, ClassSubject.class_id == SchoolClass.id)
+            .join(Subject, ClassSubject.subject_id == Subject.id)
+            .where(
+                ClassSubject.school_id == school_id,
+                ClassSubject.teacher_id.in_(user_ids),
+                ClassSubject.deleted_at.is_(None),
+                SchoolClass.deleted_at.is_(None),
+                Subject.deleted_at.is_(None),
+            )
+            .order_by(SchoolClass.level, Subject.name)
+        )
+        for user_id, class_name, link_id, subject_name in subjects.all():
+            result.setdefault(user_id, []).append(
+                {
+                    "class_name": class_name,
+                    "class_subject_id": link_id,
+                    "subject_name": subject_name,
+                }
+            )
+        return result
+
     async def list_teaching_staff(self, *, school_id: UUID) -> list[Membership]:
         """Active staff of one branch who run a classroom, for the teacher pickers.
 
@@ -766,6 +819,36 @@ class RbacService:
             entity_id=membership_id,
             before={"role": old_role_code},
             after={"role": new_role.code},
+        )
+        return membership
+
+    async def rename_member(
+        self, *, ctx: AuthContext, membership_id: UUID, full_name: str
+    ) -> Membership:
+        """Correct a member's display name.
+
+        The name lives on the user, not the membership, so it changes everywhere the
+        person appears. Editing yourself is allowed here (unlike role or status):
+        fixing your own typo grants no authority.
+        """
+        membership = await self._get_member(ctx, membership_id)
+        user = await self.session.get(User, membership.user_id)
+        if user is None:
+            raise NotFoundError("Member not found.")
+        old_name = user.full_name
+        user.full_name = full_name.strip()
+
+        await record_audit(
+            self.session,
+            organization_id=ctx.organization_id,
+            school_id=membership.school_id,
+            action=AuditAction.MEMBER_RENAMED,
+            actor_user_id=ctx.user_id,
+            actor_membership_id=ctx.membership_id,
+            entity_type="membership",
+            entity_id=membership_id,
+            before={"full_name": old_name},
+            after={"full_name": user.full_name},
         )
         return membership
 

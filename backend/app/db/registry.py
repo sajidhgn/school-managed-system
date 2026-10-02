@@ -50,6 +50,9 @@ from app.modules.auth import models as auth_models
 # --- Billing: subscriptions, invoices, usage counters, webhook ledger -------
 from app.modules.billing import models as billing_models
 
+# --- Diary: the daily homework page per section and subject -----------------
+from app.modules.diary import models as diary_models
+
 # --- Fees: what a school bills its students (NOT the SaaS subscription) -----
 # After `academics` and before `students` in spirit -- `fee_structures.class_id`
 # references `classes.id` and `fee_vouchers.student_id` references `students.id`.
@@ -79,6 +82,7 @@ __all__ = [
     "attendance_models",
     "auth_models",
     "billing_models",
+    "diary_models",
     "fees_models",
     "guardian_models",
     "invitation_models",

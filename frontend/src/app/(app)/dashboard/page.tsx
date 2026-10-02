@@ -4,10 +4,12 @@ import { Building2, Mail, Users } from "lucide-react";
 
 import { Can } from "@/components/auth/can";
 import { UsageCard } from "@/components/billing/usage-card";
+import { AnalyticsBoard } from "@/components/dashboard/analytics";
 import { Button } from "@/components/ui/button";
 import { serverGet } from "@/lib/api/server";
 import {
   PERMISSIONS,
+  type DashboardAnalytics,
   type InvitationRead,
   type MemberRead,
   type Page,
@@ -35,7 +37,7 @@ export default async function DashboardPage() {
   const [user, t] = await Promise.all([requireUser(), getTranslations()]);
   const schoolId = user.school_id;
 
-  const [schools, usage, members, invitations] = await Promise.all([
+  const [schools, usage, members, invitations, analytics] = await Promise.all([
     hasPermission(user, PERMISSIONS.schoolRead)
       ? serverGet<SchoolRead[]>("/schools", [])
       : Promise.resolve<SchoolRead[]>([]),
@@ -48,12 +50,15 @@ export default async function DashboardPage() {
     schoolId && hasPermission(user, PERMISSIONS.invitationRead)
       ? serverGet<InvitationRead[]>(`/schools/${schoolId}/invitations`, [])
       : Promise.resolve<InvitationRead[]>([]),
+    // Gated per section on the server; a caller with none of the permissions gets
+    // an all-null board, which renders as nothing.
+    serverGet<DashboardAnalytics | null>("/dashboard/analytics", null),
   ]);
 
   const pendingInvites = invitations.filter((i) => i.status === "pending");
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="mx-auto w-full max-w-6xl">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
           {t.dashboard.welcome}, {user.full_name.split(" ")[0]}
@@ -64,6 +69,12 @@ export default async function DashboardPage() {
             : `${user.organization_name} · ${t.dashboard.organizationView}`}
         </p>
       </header>
+
+      {analytics ? (
+        <div className="mb-8">
+          <AnalyticsBoard data={analytics} />
+        </div>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Can permission={PERMISSIONS.schoolRead}>

@@ -10,7 +10,12 @@ concession schemes and per-student discounts (§5.2c), negotiated per-student ra
 (§5.2b), one-off charges on a draft challan (§5.5b), automatic late fees (§5.6), and
 the running student ledger with arrears carry-forward (§5.7). Two deferrals remain
 open and both are blocked on something outside this module — see §2.
-Last updated: 2026-08-28
+
+The printed challan was rebuilt 2026-09-25 to the ruled bank-counter layout schools
+in this market already use, with the payment accounts and the copy list moved onto
+the campus row (`schools.challan_design`) and a combined print that puts a term of
+months on one page (§9, §9.1).
+Last updated: 2026-09-25
 
 `IMPLEMENTATION_ROADMAP.md` ("Guidance for every future school module") requires an
 agreed module specification before any academic module is built, and lists the
@@ -675,10 +680,55 @@ one of them.
   `billed`, summed from the challan lines over the same row set (void and draft
   excluded) — computing a component over a different row set than its whole is how a
   dashboard ends up showing a part larger than the total it belongs to.
-- `GET /fees/vouchers/{id}/pdf` — the printable challan: one A4 page, three
-  detachable copies (Bank / School / Student), each showing the school, student,
-  period, itemised lines — stationery with its quantity and unit price — total, due
-  date and voucher number.
+- `GET /fees/vouchers/{id}/pdf` — the printable challan: one A4 page carrying the
+  campus's detachable copies (Bank / School / Student by default), each a ruled grid
+  in the shape a Pakistani bank counter reads — a letterhead with the school's name,
+  address and phone between two copies of its logo (the campus logo, else the
+  organization's; only uploaded logos print, an `https://` link is never fetched),
+  the accounts to credit across the head, then the student's identifiers and challan numbers, name, father, contact,
+  class and section, the due date, then `Fee Month | Particular | Payable` lines
+  (stationery with its quantity and unit price), the total, the total in words, the
+  two payable lines, and a blank for the counter's stamp and signature. See §9.1.
+- `GET /fees/vouchers/print?ids=…` — the same page covering **several** vouchers for
+  one student: a term billed at once prints as Jul / Aug / Sep rows under one total
+  and one challan-number band. The vouchers stay separate underneath, so paying two
+  of three settles exactly those two; this combines the printing, not the billing.
+  Capped at 12 ids. Refuses, with a 404 or a 422, anything that would misbill: an id
+  that does not resolve (never a silently shorter challan), two students on one page
+  (`CHALLAN_MIXED_STUDENTS`), or a voided charge folded into a live total
+  (`CHALLAN_VOID_COMBINED`). A voided challan still reprints **on its own**, with a
+  VOID band across it — that is how an office shows a bill was cancelled.
+
+### 9.1 The printed challan
+
+**It is a bank document before it is a school document.** A parent carries it to a
+counter where a clerk reads four things in a fixed order — the account to credit, who
+the payer is, the amount, and the date after which the amount changes — in the shape
+every other challan in the country uses. That is why the layout is a ruled grid in a
+plain sans face (Helvetica — a base-14 font, so it needs no embedding and cannot
+fail to resolve in whatever reader the bank has), black on white, with one grey
+fill. A prettier page is one the clerk has to hunt through, and hunting at a counter
+with a queue behind it is how a payment gets credited to the wrong student.
+
+| Element | Where it comes from | Why it is there |
+| --- | --- | --- |
+| Copies | `schools.challan_design.copies`, default all three | The bank keeps one, stamps and returns one, and the parent keeps one. A single-copy challan is refused at the counter. |
+| Account band | `schools.challan_design.payment_accounts` (up to 4) | Where the family's money actually goes. It changes, and a stale number does not fail visibly — the transfer succeeds into an account the school cannot reconcile. It is therefore a campus row the office edits, never a constant. |
+| Roll number | `student_enrollments.roll_number` for **the challan's own** academic year | Roll numbers are reissued every session. A reprint after promotion carrying this year's number against last year's fees cannot be matched to the register the office checks it against. |
+| Fee Month | `fee_vouchers.period_label`, reformatted when it parses as `YYYY-MM` | The automated run writes "2026-08"; a parent reads "Aug, 2026". An office's own wording ("Term 1") is printed verbatim rather than corrected. |
+| Particular | The **snapshotted** line name, gross | Gross lines plus one concession row, never net lines *and* a discount row — the column has to add up to the figure the parent is asked to pay, and it is the only way a family sees a remission they were granted. |
+| Total in words | `app.common.money.amount_in_words`, South Asian scale | A figure in numerals can be altered with one pen stroke; 1,700 becomes 4,700 by closing the top of a 1. The clerk reconciles the two. Lakh and crore because that is what is said aloud at the counter. |
+| Payable Within Due Date | Outstanding, not the total | On a reprint of a part-paid challan the figure to collect is what is **left**. A page repeating the original total is how a family pays twice. |
+| Payable After Due Date | Outstanding + the active `fee_late_fee_policies` first assessment | A preview of the rule, not a ledger figure — `apply_late_fees` is what actually fines. No policy prints the same figure twice, which is the truth: this school does not charge for paying late. |
+| Previous balance | `fee_vouchers.arrears_brought_forward`, labelled *billed separately* | Unchanged from §5.7: printed, never folded into the total, because the older challan carrying it is still payable on its own. |
+| Printed By | The caller's `users.full_name` | A challan is money changing hands. "Who printed this one?", asked six weeks later, needs an answer on the paper rather than only in a log the counter staff cannot read. |
+
+**The page measures itself.** A challan's height is not knowable in advance — it
+depends on how many months print together, how many stationery lines a family took,
+how many accounts the school names. So the type size starts at the comfortable size
+for the copy count and shrinks only while the page says it does not fit, down to a
+floor below which a clerk starts guessing at digits. Past the floor the honest
+outcome is a second sheet, split between copies and never through one.
 
 - `GET /fees/students/{id}/ledger` — the family's running account: the balance, and
   the movements that produced it, newest first (§5.7).
@@ -811,7 +861,15 @@ as the restricted `sms_app` role.
     the arrears line — the reserved challan ends `PAID`, never voided.
 23. Voiding a consolidating draft releases everything it reserved, and the next run
     is offered those challans rather than finding them stranded.
-14. The challan PDF renders one A4 page with three copies and the correct totals.
+14. The challan PDF renders one A4 page with three copies and the correct totals,
+    each carrying the template's bands (`Fee Month` / `Particular` / `Payable`, the
+    total, the total in words, the two payable lines, the signature block).
+14a. The campus's `challan_design` decides which copies print and which accounts
+    appear; a campus that never opened the designer prints the standard challan.
+14b. Several vouchers for one student print as one challan, with every challan
+    number in the band and every period as its own row. An unresolvable id 404s, two
+    students 422, and a voided challan cannot join a live total — but still reprints
+    alone, marked VOID.
 
 **Stationery**
 

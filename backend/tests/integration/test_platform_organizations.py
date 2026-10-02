@@ -75,3 +75,72 @@ async def test_list_schools_refuses_a_tenant_token(tenant: Tenant) -> None:
     response = await tenant.get(f"{API}/platform/organizations/{tenant.organization_id}/schools")
 
     assert response.status_code == 403, response.text
+
+
+async def test_analytics_reports_the_platform(
+    db_client: AsyncClient,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+    tenant: Tenant,
+) -> None:
+    headers = await _platform_session(db_client, admin_sessionmaker)
+
+    response = await db_client.get(f"{API}/platform/analytics", headers=headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["organizations_total"] >= 1
+    assert body["schools_total"] >= 1
+    assert len(body["growth"]) == 12
+    assert len(body["revenue"]) == 12
+    # The tenant fixture signed up this month, so the newest bucket counts it.
+    assert body["growth"][-1]["organizations"] >= 1
+    assert any(p["subscribers"] >= 1 for p in body["plans"])
+    assert tenant.organization_id in {o["organization_id"] for o in body["recent_organizations"]}
+
+
+async def test_analytics_refuses_a_tenant_token(tenant: Tenant) -> None:
+    response = await tenant.get(f"{API}/platform/analytics")
+
+    assert response.status_code == 403, response.text
+
+
+async def test_audit_log_names_the_actor_and_filters_by_action(
+    db_client: AsyncClient,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    headers = await _platform_session(db_client, admin_sessionmaker)
+
+    response = await db_client.get(
+        f"{API}/platform/audit-logs?action=platform_admin.logged_in", headers=headers
+    )
+
+    assert response.status_code == 200, response.text
+    entries = response.json()
+    assert entries, "the login above writes an audit row"
+    assert {e["action"] for e in entries} == {"platform_admin.logged_in"}
+    assert entries[0]["actor_email"] == "ops@platform.example"
+
+
+async def test_plan_override_converts_a_trialing_organization(
+    db_client: AsyncClient,
+    admin_sessionmaker: async_sessionmaker[AsyncSession],
+    tenant: Tenant,
+) -> None:
+    """The subscription goes ACTIVE, so the organization must stop reading as a trial."""
+    headers = await _platform_session(db_client, admin_sessionmaker)
+    async with admin_sessionmaker() as session:
+        await session.execute(
+            text("UPDATE organizations SET status = 'trialing' WHERE id = :id"),
+            {"id": tenant.organization_id},
+        )
+        await session.commit()
+
+    response = await db_client.post(
+        f"{API}/platform/organizations/{tenant.organization_id}/plan",
+        json={"plan_code": "growth"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "active"
+    assert response.json()["subscription_status"] == "active"

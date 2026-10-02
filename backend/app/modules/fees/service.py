@@ -26,8 +26,11 @@ ONE WRITER FOR `paid_total`, AND ONE PLACE THAT DECIDES A VOUCHER'S STATUS
 
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from io import StringIO
@@ -42,7 +45,7 @@ from app.common.schemas import Page, PageParams, SortParams
 from app.core.context import get_school_id, require_organization_id, require_school_id
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
-from app.modules.academics.models import SchoolClass
+from app.modules.academics.models import AcademicYear, SchoolClass
 from app.modules.fees.models import (
     ConcessionKind,
     FeeBillingSchedule,
@@ -123,7 +126,8 @@ from app.modules.fees.schemas import (
     VoucherStationeryInput,
     VoucherStatusCount,
 )
-from app.modules.students.models import Student
+from app.modules.students.models import Student, StudentEnrollment
+from app.modules.tenancy.models import Organization, School
 
 logger = get_logger(__name__)
 
@@ -145,6 +149,29 @@ MAX_LATE_FEE_BATCH = 250
 MAX_EXPORT_ROWS = 5000
 
 _ZERO = Decimal("0.00")
+
+
+@dataclass(frozen=True, slots=True)
+class ChallanPrintContext:
+    """One printed challan's worth of resolved input, handed to a pure renderer.
+
+    Exists so `challan_pdf.render_challan_pdf` can stay a function of its arguments:
+    everything it would otherwise have to look up -- the campus's design and
+    accounts, the roll number for the right session, what the fine policy would add
+    after the due date -- is decided here, where there is a database and a place to
+    raise from, and arrives there as data.
+    """
+
+    vouchers: tuple[FeeVoucher, ...]
+    """Sorted by due date, which is the order the months print in."""
+
+    school: School
+    roll_number: str | None
+    late_fee: Decimal
+    logo: bytes | None = None
+    """The campus's logo as image bytes, falling back to the organization's. None when
+    neither is set, or when the logo is a remote link -- the renderer never fetches."""
+
 
 # Stationery lines sort below every fee line on a challan. 1000 rather than a tighter
 # number because `sort_order` on both catalogs is capped at 999 by the schemas, so no
@@ -1151,6 +1178,160 @@ class FeeService:
             ],
             payments=[FeePaymentRead.model_validate(p) for p in voucher.payments],
         )
+
+    async def challan_print_context(self, voucher_ids: Sequence[UUID]) -> ChallanPrintContext:
+        """Everything the challan renderer needs, resolved and checked, in one place.
+
+        =================================================================
+        WHY SEVERAL VOUCHERS MAY SHARE ONE PRINTED CHALLAN
+        =================================================================
+            A family paying a term at a time is handed one piece of paper listing
+            July, August and September, with one total and one row of challan
+            numbers -- that is how the counter wants it, and printing three separate
+            challans for one payment produces three part-payments to reconcile.
+
+            The months stay SEPARATE VOUCHERS underneath. Each keeps its own number,
+            its own status and its own receipts, so paying two of the three settles
+            exactly those two. Merging them into one row to make the printing easier
+            would throw that away, and this module's whole position is that an
+            issued bill is a fact.
+
+        THE THREE REFUSALS, all of them about the same failure -- a page that bills
+        the wrong person or the wrong amount:
+
+          * an id that does not resolve is a 404, never a silently shorter list. RLS
+            and the campus predicate make a foreign voucher simply absent, and a
+            challan that quietly dropped a month is one a parent underpays.
+          * two students on one page is a 422. It is the worst thing this module can
+            print: the name band shows one child and the total bills another's fees.
+          * a VOID voucher cannot join a combined print. Reprinting a single voided
+            challan is legitimate -- it is how an office shows a bill was cancelled,
+            and it prints with a VOID band across it -- but folding a cancelled
+            charge into a live total asks a family to pay it.
+        """
+        vouchers = await self.vouchers.list_for_print(voucher_ids)
+        found = {voucher.id for voucher in vouchers}
+        missing = [str(vid) for vid in voucher_ids if vid not in found]
+        if missing:
+            raise NotFoundError(f"Fee voucher not found: {', '.join(missing)}.")
+
+        students = {voucher.student_id for voucher in vouchers}
+        if len(students) > 1:
+            raise ValidationError(
+                "One challan cannot bill more than one student.",
+                code="CHALLAN_MIXED_STUDENTS",
+            )
+
+        if len(vouchers) > 1 and any(v.status is VoucherStatus.VOID for v in vouchers):
+            raise ValidationError(
+                "A voided challan cannot be combined with others. Print it on its own.",
+                code="CHALLAN_VOID_COMBINED",
+            )
+
+        school = await self.session.get(School, vouchers[0].school_id)
+        if school is None:
+            raise NotFoundError("School not found.")
+
+        # Sorted BEFORE anything reads a single voucher out of the set. The repository
+        # returns rows in whatever order the planner chose, and both the roll number
+        # and the fine rule are looked up by academic year -- so picking "the first
+        # one" out of an unordered list would give a different answer on a set
+        # spanning two sessions depending on which row came back first.
+        ordered = tuple(sorted(vouchers, key=lambda v: (v.due_date, v.voucher_number)))
+
+        return ChallanPrintContext(
+            vouchers=ordered,
+            school=school,
+            roll_number=await self._roll_number_for(ordered[0]),
+            late_fee=await self._late_fee_preview(ordered),
+            logo=await self._challan_logo(school),
+        )
+
+    async def _challan_logo(self, school: School) -> bytes | None:
+        """The logo the challan header prints: the campus's own, else the organization's.
+
+        Only inline `data:` uploads are decoded. An `https://` logo is skipped rather
+        than fetched -- a challan print must not hang on, or leak a request to, a
+        third-party host -- so such a school prints the header with its name alone.
+        """
+        source = school.logo_url
+        if not source:
+            organization = await self.session.get(Organization, school.organization_id)
+            source = organization.logo_url if organization else None
+        if not source or not source.startswith("data:image/") or "," not in source:
+            return None
+        meta, _, payload = source.partition(",")
+        if not meta.endswith(";base64"):
+            return None
+        try:
+            return base64.b64decode(payload, validate=True)
+        except binascii.Error:
+            return None
+
+    async def _roll_number_for(self, voucher: FeeVoucher) -> str | None:
+        """The roll number this student held in the challan's own academic year.
+
+        Not the one they hold today. Roll numbers are re-issued every session in
+        register order, so a challan reprinted after promotion would otherwise carry
+        next year's number against last year's fees -- and the register the office
+        checks it against is sorted by the old one.
+
+        Returns None when the year has no enrollment row, which is a real state: a
+        student billed before they were seated. A blank line is better than a wrong
+        number, and the renderer simply omits it.
+        """
+        stmt = (
+            select(StudentEnrollment.roll_number)
+            .join(AcademicYear, AcademicYear.id == StudentEnrollment.academic_year_id)
+            .where(
+                StudentEnrollment.student_id == voucher.student_id,
+                AcademicYear.name == voucher.academic_year,
+                StudentEnrollment.roll_number.is_not(None),
+            )
+            # The OPEN row first: a student re-seated mid-year has two rows for the
+            # year, and the one they are sitting in now is the one the register shows.
+            .order_by(
+                StudentEnrollment.left_on.is_(None).desc(),
+                StudentEnrollment.enrolled_on.desc(),
+            )
+            .limit(1)
+        )
+        school_id = get_school_id()
+        if school_id is not None:
+            stmt = stmt.where(StudentEnrollment.school_id == school_id)
+        return (await self.session.execute(stmt)).scalars().first()
+
+    async def _late_fee_preview(self, vouchers: Sequence[FeeVoucher]) -> Decimal:
+        """What "Payable After Due Date" adds, under the campus's live fine policy.
+
+        A PREVIEW OF THE FIRST ASSESSMENT ONLY, and deliberately so. `apply_late_fees`
+        is the thing that actually fines, and it knows what this challan has already
+        earned; this knows only what the rule says about a balance. On a recurring
+        policy the real total can grow past this figure -- which is why the line is
+        labelled by a date rather than presented as a final amount, and why nothing
+        downstream reads it as one.
+
+        Zero when the campus has no policy, when the balance is under the policy's
+        floor, or when the fine would round to nothing. The renderer then prints the
+        two payable lines as the same figure, which is the truth: this school does
+        not charge for paying late.
+        """
+        policy = await self.late_fee_policies.get_active(vouchers[0].academic_year)
+        if policy is None or not policy.is_active:
+            return _ZERO
+
+        outstanding = sum((v.outstanding for v in vouchers), _ZERO)
+        if outstanding < policy.min_outstanding:
+            return _ZERO
+
+        amount = (
+            policy.value
+            if policy.kind is LateFeeKind.FIXED
+            else self._money(outstanding * policy.value / Decimal(100))
+        )
+        if policy.max_amount is not None:
+            amount = min(amount, policy.max_amount)
+        return max(amount, _ZERO)
 
     async def issue_voucher(self, voucher_id: UUID, *, actor_id: UUID | None) -> FeeVoucherDetail:
         voucher = await self.get_voucher(voucher_id)

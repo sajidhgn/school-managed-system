@@ -454,10 +454,14 @@ class PlatformService:
 
             organization = await self.session.get(Organization, organization_id)
             if organization is not None and organization.status in (
+                OrganizationStatus.TRIALING,
                 OrganizationStatus.OVER_LIMIT,
                 OrganizationStatus.PAST_DUE,
             ):
                 # A manual upgrade is usually the resolution of exactly these states.
+                # TRIALING is included because the subscription just became ACTIVE:
+                # leaving the organization on "trialing" made a contracted customer
+                # read as an unconverted trial in every console list, indefinitely.
                 organization.status = OrganizationStatus.ACTIVE
 
             self.session.add(

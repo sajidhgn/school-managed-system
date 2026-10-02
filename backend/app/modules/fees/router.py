@@ -35,6 +35,7 @@ ROUTE ORDER IS LOAD-BEARING
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -43,7 +44,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import AuthContext, DbSession, Pagination, Sorting, require
 from app.common.schemas import Page
-from app.core.exceptions import NotFoundError
+from app.modules.auth.models import User
 from app.modules.fees.challan_pdf import render_challan_pdf
 from app.modules.fees.models import FeeStructureStatus, StationeryCategory, VoucherStatus
 from app.modules.fees.schemas import (
@@ -85,7 +86,6 @@ from app.modules.fees.schemas import (
     VoucherVoidRequest,
 )
 from app.modules.fees.service import FeeService
-from app.modules.tenancy.models import School
 
 router = APIRouter()
 
@@ -94,6 +94,13 @@ ManageCtx = Annotated[AuthContext, Depends(require("fee:manage"))]
 IssueCtx = Annotated[AuthContext, Depends(require("fee:issue"))]
 CollectCtx = Annotated[AuthContext, Depends(require("fee:collect"))]
 VoidCtx = Annotated[AuthContext, Depends(require("fee:void"))]
+
+# How many vouchers one printed challan may combine. A term is three months and a
+# school year is twelve, so twelve covers "bill the whole session up front" -- the
+# only real reason to go past a term. Beyond it the page stops being legible at three
+# copies to an A4, which is the point at which a combined challan has stopped helping
+# the counter it was printed for.
+MAX_CHALLAN_VOUCHERS = 12
 
 
 # ---------------------------------------------------------------------------
@@ -761,6 +768,34 @@ async def reverse_payment(
     return await FeeService(db).reverse_payment(payment_id, payload.reason, actor_id=ctx.user_id)
 
 
+# The literal segment comes first: declared after `/vouchers/{voucher_id}` it would
+# be parsed as a voucher id and 422 on "print".
+@router.get(
+    "/vouchers/print",
+    summary="Download one printable challan covering several vouchers",
+)
+async def download_combined_challan_pdf(
+    db: DbSession,
+    ctx: ReadCtx,
+    ids: Annotated[
+        list[UUID],
+        Query(
+            min_length=1,
+            max_length=MAX_CHALLAN_VOUCHERS,
+            description="Vouchers to print on one challan. All must bill the same student.",
+        ),
+    ],
+) -> StreamingResponse:
+    """The term-at-a-time challan: several months, one page, one total.
+
+    Every voucher keeps its own number, status and receipts -- this combines the
+    PRINTING, not the billing. See `FeeService.challan_print_context` for the three
+    refusals that keep the page honest, and note the cap: a family billed for more
+    months than fit legibly on a shared A4 gets two challans, not an unreadable one.
+    """
+    return await _challan_response(db, ctx, ids)
+
+
 @router.get(
     "/vouchers/{voucher_id}",
     response_model=FeeVoucherDetail,
@@ -772,26 +807,44 @@ async def get_voucher(voucher_id: UUID, db: DbSession, _ctx: ReadCtx) -> FeeVouc
 
 @router.get("/vouchers/{voucher_id}/pdf", summary="Download the printable challan")
 async def download_challan_pdf(voucher_id: UUID, db: DbSession, ctx: ReadCtx) -> StreamingResponse:
-    """One A4 page, three detachable copies (Bank / School / Student).
+    """One A4 page carrying the campus's detachable copies (Bank / School / Student).
 
     The voucher is resolved through RLS and the school predicate BEFORE rendering, so
     the renderer itself performs no authorization and cannot be handed a foreign row.
     """
-    service = FeeService(db)
-    voucher = await service.vouchers.get_detail(voucher_id)
-    if voucher is None:
-        raise NotFoundError("Fee voucher not found.")
+    return await _challan_response(db, ctx, [voucher_id])
 
-    school = await db.get(School, voucher.school_id)
-    if school is None:
-        raise NotFoundError("School not found.")
 
-    payload = render_challan_pdf(voucher, school)
+async def _challan_response(
+    db: DbSession, ctx: AuthContext, voucher_ids: list[UUID]
+) -> StreamingResponse:
+    """Shared by the one-voucher and combined routes -- one renderer, one header set.
+
+    `Printed By` names the person who pressed the button, not the school. A challan
+    is money changing hands, and the office asking "who printed this one" six weeks
+    later needs an answer that is on the paper itself rather than only in a log the
+    counter staff cannot read.
+    """
+    context = await FeeService(db).challan_print_context(voucher_ids)
+
+    user = await db.get(User, ctx.user_id)
+    payload = render_challan_pdf(
+        context.vouchers,
+        context.school,
+        printed_by=user.full_name if user else "—",
+        printed_on=date.today(),
+        roll_number=context.roll_number,
+        late_fee=context.late_fee,
+        logo=context.logo,
+    )
+
+    first = context.vouchers[0].voucher_number
+    name = first if len(context.vouchers) == 1 else f"{first}-plus-{len(context.vouchers) - 1}"
     return StreamingResponse(
         iter([payload]),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="challan-{voucher.voucher_number}.pdf"',
+            "Content-Disposition": f'attachment; filename="challan-{name}.pdf"',
             # A challan names a minor and what their family owes. It must not sit in
             # a shared proxy cache or a browser's disk cache on a school office PC.
             "Cache-Control": "private, no-store",

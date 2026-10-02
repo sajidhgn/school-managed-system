@@ -50,6 +50,11 @@ import {
 import { currentAcademicYear } from "@/lib/academic-year";
 import { formatDate } from "@/lib/utils";
 
+// Mirrors `MAX_CHALLAN_VOUCHERS` in the fees router. Stated twice on purpose: the
+// server is the guarantee, and this stops an operator ticking a fourteenth box only
+// to be told no after they have chosen.
+const MAX_COMBINED = 12;
+
 /**
  * Everything this one student owes, has paid, and can be made to pay — on their
  * own page.
@@ -131,6 +136,7 @@ export function StudentFeesPanel({
   const [reverseReason, setReverseReason] = React.useState("");
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [generating, setGenerating] = React.useState(false);
+  const [selected, setSelected] = React.useState<string[]>([]);
 
   const items = React.useMemo(() => vouchers.data?.items ?? [], [vouchers.data]);
   const currency = items[0]?.currency ?? "PKR";
@@ -146,6 +152,17 @@ export function StudentFeesPanel({
 
   const totals = React.useMemo(() => summarise(items), [items]);
 
+  // Selections are cleared when the list underneath them changes -- a challan voided
+  // or paid in another tab would otherwise stay ticked, and the combined print would
+  // 422 against a page still showing it as selectable.
+  const ids = React.useMemo(() => items.map((v) => v.id).join(","), [items]);
+  React.useEffect(() => setSelected([]), [ids]);
+
+  const chosen = React.useMemo(
+    () => items.filter((voucher) => selected.includes(voucher.id)),
+    [items, selected],
+  );
+
   return (
     <section className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
@@ -155,12 +172,28 @@ export function StudentFeesPanel({
             Every challan billed to {studentName}, and what is still owed on each.
           </p>
         </div>
-        {canIssue ? (
-          <Button variant="outline" size="sm" onClick={() => setGenerating(true)}>
-            <Receipt className="size-4" aria-hidden />
-            Generate a challan
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {chosen.length > 1 ? (
+            /* A real navigation, like the single-challan print: the PDF is a stream
+               the browser hands to its own viewer. */
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href={feesApi.vouchers.combinedPdfUrl(chosen.map((voucher) => voucher.id))}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Printer className="size-4" aria-hidden />
+                Print {chosen.length} on one challan
+              </a>
+            </Button>
+          ) : null}
+          {canIssue ? (
+            <Button variant="outline" size="sm" onClick={() => setGenerating(true)}>
+              <Receipt className="size-4" aria-hidden />
+              Generate a challan
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/* --- The four figures --------------------------------------------- */}
@@ -209,7 +242,7 @@ export function StudentFeesPanel({
       {/* --- The challans -------------------------------------------------- */}
       <Card className="mt-3 overflow-hidden p-0">
         {vouchers.isPending ? (
-          <TableCardSkeleton columns={7} />
+          <TableCardSkeleton columns={8} />
         ) : vouchers.isError ? (
           <ErrorState error={vouchers.error} onRetry={() => void vouchers.refetch()} />
         ) : items.length === 0 ? (
@@ -232,6 +265,9 @@ export function StudentFeesPanel({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8">
+                    <span className="sr-only">Select for a combined challan</span>
+                  </TableHead>
                   <TableHead className="w-10" />
                   <TableHead>Challan</TableHead>
                   <TableHead>Due</TableHead>
@@ -249,9 +285,31 @@ export function StudentFeesPanel({
                   const isVoid = voucher.status === "void";
                   const open = expanded === voucher.id;
 
+                  const ticked = selected.includes(voucher.id);
+
                   return (
                     <React.Fragment key={voucher.id}>
                       <TableRow className={isVoid ? "opacity-60" : undefined}>
+                        <TableCell>
+                          {/* A VOIDED challan cannot join a combined print -- folding a
+                              cancelled charge into a live total asks a family to pay
+                              it, and the API refuses. Reprinting one on its own is
+                              still available from the row's printer button. */}
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-primary disabled:opacity-40"
+                            checked={ticked}
+                            disabled={isVoid || (!ticked && selected.length >= MAX_COMBINED)}
+                            aria-label={`Include ${voucher.voucher_number} in a combined challan`}
+                            onChange={(event) =>
+                              setSelected((current) =>
+                                event.target.checked
+                                  ? [...current, voucher.id]
+                                  : current.filter((id) => id !== voucher.id),
+                              )
+                            }
+                          />
+                        </TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
@@ -389,7 +447,7 @@ export function StudentFeesPanel({
 
                       {open ? (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={8} className="bg-muted/30 p-0">
+                          <TableCell colSpan={9} className="bg-muted/30 p-0">
                             <VoucherBreakdown
                               voucherId={voucher.id}
                               currency={currency}

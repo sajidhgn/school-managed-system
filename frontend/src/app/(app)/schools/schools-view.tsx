@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { LogoInput } from "@/components/ui/logo-input";
+import { SchoolLogo } from "@/components/ui/school-logo";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
@@ -52,10 +54,13 @@ import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/sc
 export function SchoolsView({
   schools,
   schoolSeats,
+  organizationLogoUrl = null,
   canSelectCampus = false,
 }: {
   schools: SchoolRead[];
   schoolSeats: UsageItem | null;
+  /** The organization's logo (Settings), shown on any campus without its own. */
+  organizationLogoUrl?: string | null;
   /**
    * Whether opening a branch should also make it the active one.
    *
@@ -78,7 +83,7 @@ export function SchoolsView({
 
   const form = useForm<SchoolCreateValues>({
     resolver: zodResolver(schoolCreateSchema),
-    defaultValues: { name: "", code: "", city: "" },
+    defaultValues: { name: "", code: "", city: "", logo_url: "" },
   });
 
   /**
@@ -126,6 +131,8 @@ export function SchoolsView({
         name: values.name,
         code: values.code.toUpperCase(),
         city: values.city || undefined,
+        // Left empty, the campus inherits the organization's logo.
+        logo_url: values.logo_url?.trim() || undefined,
       });
       toast({
         title: `${result.name} created.`,
@@ -243,7 +250,12 @@ export function SchoolsView({
               className="relative rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60 focus-within:border-primary/60"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <SchoolLogo
+                  src={school.logo_url ?? organizationLogoUrl}
+                  name={school.name}
+                  className="size-10"
+                />
+                <div className="min-w-0 flex-1">
                   <h2 className="truncate font-medium">
                     <Link
                       href={`/schools/${school.id}`}
@@ -309,6 +321,13 @@ export function SchoolsView({
             <Field label={t.onboarding.city} htmlFor="city" error={form.formState.errors.city}>
               <Input {...form.register("city")} />
             </Field>
+            <div className="grid gap-1.5 text-sm">
+              <span className="font-medium">Logo</span>
+              <LogoInput
+                value={form.watch("logo_url") ?? ""}
+                onChange={(value) => form.setValue("logo_url", value)}
+              />
+            </div>
 
             {formError ? (
               <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">

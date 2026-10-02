@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, KeyRound, Mail, RotateCw, X } from "lucide-react";
+import { ChevronDown, KeyRound, Mail, RotateCw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -158,6 +158,13 @@ export function InvitationsSection({
     }
   }
 
+  function remove(id: string, email: string) {
+    if (!window.confirm(`Delete the invitation to ${email}? It will be removed from this list.`)) {
+      return;
+    }
+    void act(id, () => invitationsApi.remove(schoolId, id), `Invitation to ${email} deleted.`);
+  }
+
   const pending = invitations.filter((i) => i.status === "pending");
   const past = invitations.filter((i) => i.status !== "pending");
 
@@ -290,8 +297,11 @@ export function InvitationsSection({
                 onRevoke={(id, email) =>
                   act(id, () => invitationsApi.revoke(schoolId, id), `Invitation to ${email} revoked.`)
                 }
+                onDelete={remove}
               />
-              {past.length > 0 ? <InvitationTable heading={t.invitations.past} rows={past} busy={busy} /> : null}
+              {past.length > 0 ? (
+                <InvitationTable heading={t.invitations.past} rows={past} busy={busy} onDelete={remove} />
+              ) : null}
             </div>
           )}
         </div>
@@ -306,13 +316,17 @@ function InvitationTable({
   busy,
   onResend,
   onRevoke,
+  onDelete,
 }: {
   heading: string;
   rows: InvitationRead[];
   busy: string | null;
   onResend?: (id: string, email: string) => void;
   onRevoke?: (id: string, email: string) => void;
+  onDelete?: (id: string, email: string) => void;
 }) {
+  const hasActions = Boolean(onResend || onRevoke || onDelete);
+
   if (rows.length === 0) return null;
 
   return (
@@ -326,7 +340,7 @@ function InvitationTable({
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Expires</TableHead>
-              {onResend ? <TableHead className="w-32" /> : null}
+              {hasActions ? <TableHead className="w-32" /> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -355,9 +369,10 @@ function InvitationTable({
                 <TableCell className="text-sm text-muted-foreground">
                   {new Date(invitation.expires_at).toLocaleDateString()}
                 </TableCell>
-                {onResend ? (
+                {hasActions ? (
                   <TableCell>
                     <div className="flex gap-1">
+                      {onResend ? (
                       <Can permission={PERMISSIONS.invitationResend}>
                         <Button
                           variant="ghost"
@@ -370,6 +385,8 @@ function InvitationTable({
                           <span className="sr-only">Resend to {invitation.email}</span>
                         </Button>
                       </Can>
+                      ) : null}
+                      {onRevoke ? (
                       <Can permission={PERMISSIONS.invitationRevoke}>
                         <Button
                           variant="ghost"
@@ -382,6 +399,22 @@ function InvitationTable({
                           <span className="sr-only">Revoke {invitation.email}</span>
                         </Button>
                       </Can>
+                      ) : null}
+                      {onDelete ? (
+                        <Can permission={PERMISSIONS.invitationRevoke}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            disabled={busy === invitation.id}
+                            onClick={() => onDelete(invitation.id, invitation.email)}
+                            title="Delete — removes it from this list"
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                            <span className="sr-only">Delete invitation to {invitation.email}</span>
+                          </Button>
+                        </Can>
+                      ) : null}
                     </div>
                   </TableCell>
                 ) : null}

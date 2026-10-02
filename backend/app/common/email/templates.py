@@ -149,6 +149,10 @@ class ActionPurpose(StrEnum):
     VERIFY_EMAIL = "verify_email"
     RESET_PASSWORD = "reset_password"
     INVITATION = "invitation"
+    # Notices rather than one-shot actions: the link is just "go to billing", it
+    # carries no token and never expires, so the expiry line is omitted.
+    TRIAL_EXPIRED = "trial_expired"
+    TRIAL_DELETION_WARNING = "trial_deletion_warning"
 
 
 # Subject, greeting sentence, button label, and the closing security note per flow.
@@ -177,6 +181,23 @@ _ACTION_COPY: dict[ActionPurpose, tuple[str, str, str, str]] = {
         "If you were not expecting this invitation, you can safely ignore it. "
         "Nothing is shared with you until you accept.",
     ),
+    ActionPurpose.TRIAL_EXPIRED: (
+        "Your free trial has ended",
+        "Your {app_name} trial has ended. Your account is now read-only: every record "
+        "is still visible, but nothing can be added, edited or deleted. Choose a plan "
+        "to continue — otherwise the account and all of its data will be permanently "
+        "deleted on the date below.",
+        "Choose a plan",
+        "Deleted data cannot be recovered. Export anything you want to keep before then.",
+    ),
+    ActionPurpose.TRIAL_DELETION_WARNING: (
+        "Your account will be deleted soon",
+        "Your {app_name} trial ended and no plan has been chosen. The account and ALL of "
+        "its data — schools, students, staff, fees and records — will be permanently "
+        "deleted on the date below unless you upgrade.",
+        "Upgrade now",
+        "Deleted data cannot be recovered. Export anything you want to keep before then.",
+    ),
 }
 
 
@@ -187,7 +208,7 @@ def render_action_email(
     purpose: ActionPurpose,
     recipient_name: str | None = None,
     details: list[tuple[str, str]] | None = None,
-    expiry_text: str = "24 hours",
+    expiry_text: str | None = "24 hours",
     settings: Settings | None = None,
 ) -> EmailMessage:
     """Render a link-action email.
@@ -202,7 +223,8 @@ def render_action_email(
         details: label/value rows shown in a summary box. Used by invitations to show
             the school and role, so the recipient can tell a legitimate invite from a
             phishing attempt WITHOUT having to click the link to find out.
-        expiry_text: human phrasing of the validity window, e.g. "7 days".
+        expiry_text: human phrasing of the validity window, e.g. "7 days". None for
+            notices whose link carries no token and does not expire.
     """
     settings = settings or get_settings()
     subject, action_text, button_label, security_note = _ACTION_COPY[purpose]
@@ -219,7 +241,9 @@ def render_action_email(
         "greeting_name": recipient_name or "there",
         "app_name": settings.APP_NAME,
         "logo_url": settings.EMAIL_LOGO_URL or None,
-        "preheader": f"{action_text} This link expires in {expiry_text}.",
+        "preheader": (
+            f"{action_text} This link expires in {expiry_text}." if expiry_text else action_text
+        ),
     }
 
     env = _environment()

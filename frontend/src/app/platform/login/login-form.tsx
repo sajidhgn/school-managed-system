@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import type { Route } from "next";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
@@ -12,6 +13,7 @@ import { platformLoginSchema, type PlatformLoginValues } from "@/lib/validation/
 
 export function PlatformLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<PlatformLoginValues>({
@@ -40,7 +42,12 @@ export function PlatformLoginForm() {
 
       // Push before refresh so the destination renders with the fresh session;
       // a refresh issued before the push is superseded by it.
-      router.push("/platform/organizations");
+      // Back to the page middleware bounced them from. Only console paths: a `next`
+      // pointing anywhere else is either a mistake or an open-redirect probe.
+      const next = searchParams.get("next");
+      router.push(
+        (next && next.startsWith("/platform/") && !next.startsWith("//") ? next : "/platform") as Route,
+      );
       router.refresh();
     } catch (err) {
       // The backend returns one indistinguishable error for unknown account, wrong
@@ -70,8 +77,25 @@ export function PlatformLoginForm() {
       </div>
 
       <div className="grid gap-1.5">
+        <label htmlFor="password" className="text-sm font-medium text-slate-300">
+          Password
+        </label>
+        <PasswordInput
+          id="password"
+          autoComplete="current-password"
+          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 shadow-none focus-visible:ring-slate-500 focus-visible:ring-offset-0"
+          toggleClassName="text-slate-400 hover:text-slate-100 focus-visible:ring-slate-500"
+          {...form.register("password")}
+        />
+        {form.formState.errors.password ? (
+          <p className="text-xs text-red-400">{form.formState.errors.password.message}</p>
+        ) : null}
+      </div>
+
+      <div className="grid gap-1.5">
         <label htmlFor="totp_code" className="text-sm font-medium text-slate-300">
-          Authentication code
+          Authentication code{" "}
+          <span className="font-normal text-slate-500">(only if MFA is enabled)</span>
         </label>
         <input
           id="totp_code"
@@ -85,22 +109,6 @@ export function PlatformLoginForm() {
         />
         {form.formState.errors.totp_code ? (
           <p className="text-xs text-red-400">{form.formState.errors.totp_code.message}</p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-1.5">
-        <label htmlFor="password" className="text-sm font-medium text-slate-300">
-          Password
-        </label>
-        <PasswordInput
-          id="password"
-          autoComplete="current-password"
-          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 shadow-none focus-visible:ring-slate-500 focus-visible:ring-offset-0"
-          toggleClassName="text-slate-400 hover:text-slate-100 focus-visible:ring-slate-500"
-          {...form.register("password")}
-        />
-        {form.formState.errors.password ? (
-          <p className="text-xs text-red-400">{form.formState.errors.password.message}</p>
         ) : null}
       </div>
 

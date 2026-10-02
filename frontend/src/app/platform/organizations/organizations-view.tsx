@@ -1,9 +1,10 @@
 "use client";
 
-import { Ban, Eye, MoreHorizontal, Play } from "lucide-react";
+import type { Route } from "next";
+import { Ban, Eye, MoreHorizontal, Play, Search } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/data-states";
@@ -18,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api/client";
@@ -46,21 +48,60 @@ import {
  */
 export function OrganizationsView({
   organizations,
+  hasMore,
+  offset,
+  pageSize,
+  q,
+  status,
 }: {
   organizations: OrganizationSummary[];
+  hasMore: boolean;
+  offset: number;
+  pageSize: number;
+  q: string;
+  status: string;
 }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const pathname = usePathname();
+  const [search, setSearch] = useState(q);
   const [busy, setBusy] = useState<string | null>(null);
   const [suspending, setSuspending] = useState<OrganizationSummary | null>(null);
+  const filtering = Boolean(q || status);
 
-  const filtered = search
-    ? organizations.filter(
-        (org) =>
-          org.name.toLowerCase().includes(search.toLowerCase()) ||
-          org.slug.toLowerCase().includes(search.toLowerCase()),
-      )
-    : organizations;
+  /** Filters live in the URL so they survive refresh and can be shared. */
+  function navigate(next: { q?: string; status?: string; offset?: number }) {
+    const params = new URLSearchParams();
+    const nextQ = next.q ?? q;
+    const nextStatus = next.status ?? status;
+    if (nextQ) params.set("q", nextQ);
+    if (nextStatus) params.set("status", nextStatus);
+    if (next.offset) params.set("offset", String(next.offset));
+    const query = params.toString();
+    router.push(`${pathname}${query ? `?${query}` : ""}` as Route);
+  }
+
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    navigate({ q: search.trim(), offset: 0 });
+  }
+
+  async function viewAs(org: OrganizationSummary) {
+    try {
+      const grant = await api.post<ImpersonationGrant>(
+        `/platform/organizations/${org.id}/impersonate`,
+        { reason: "Support investigation" },
+      );
+      router.push(
+        `/platform/organizations/${org.id}?supportUntil=${encodeURIComponent(grant.expires_at)}` as Route,
+      );
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not start the support view",
+        description: error instanceof ApiError ? error.message : undefined,
+      });
+    }
+  }
 
   async function setStatus(org: OrganizationSummary, suspend: boolean, reason?: string) {
     setBusy(org.id);
@@ -84,25 +125,49 @@ export function OrganizationsView({
     <>
       <PageHeader
         title="Organizations"
-        description={`${organizations.length} on the platform.`}
+        description={
+          organizations.length === 0
+            ? "Every customer account on the platform."
+            : `Showing ${offset + 1}–${offset + organizations.length}${filtering ? " matching" : ""}.`
+        }
       />
 
-      <div className="mb-4 max-w-sm">
-        <Input
-          type="search"
-          placeholder="Search by name or identifier…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+        <form onSubmit={submitSearch} className="flex flex-1 gap-2 sm:max-w-sm" role="search">
+          <Input
+            type="search"
+            placeholder="Search by name or identifier…"
+            aria-label="Search organizations"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <Button type="submit" variant="outline" size="icon">
+            <Search className="size-4" aria-hidden />
+            <span className="sr-only">Search</span>
+          </Button>
+        </form>
+        <NativeSelect
+          aria-label="Filter by status"
+          className="sm:w-44"
+          value={status}
+          onChange={(event) => navigate({ status: event.target.value, offset: 0 })}
+        >
+          <option value="">All statuses</option>
+          {Object.entries(ORG_STATUS_LABELS).map(([value, text]) => (
+            <option key={value} value={value}>
+              {text}
+            </option>
+          ))}
+        </NativeSelect>
       </div>
 
-      {filtered.length === 0 ? (
+      {organizations.length === 0 ? (
         <EmptyState
           title="No organizations"
-          description={search ? "Nothing matches that search." : "None have signed up yet."}
+          description={filtering ? "Nothing matches these filters." : "None have signed up yet."}
         />
       ) : (
-        <div className="rounded-xl border border-border bg-card">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -116,7 +181,7 @@ export function OrganizationsView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((org) => (
+              {organizations.map((org) => (
                 <TableRow key={org.id}>
                   <TableCell>
                     <Link
@@ -153,22 +218,7 @@ export function OrganizationsView({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem
-                          onSelect={async () => {
-                            try {
-                              const grant = await api.post<ImpersonationGrant>(
-                                `/platform/organizations/${org.id}/impersonate`,
-                                { reason: "Support investigation" },
-                              );
-                              router.push(
-                                `/platform/organizations/${org.id}?supportUntil=${encodeURIComponent(grant.expires_at)}`,
-                              );
-                            } catch {
-                              toast({ variant: "destructive", title: "Could not start" });
-                            }
-                          }}
-                          className="gap-2"
-                        >
+                        <DropdownMenuItem onSelect={() => viewAs(org)} className="gap-2">
                           <Eye className="size-4" aria-hidden />
                           View as (audited, read-only)
                         </DropdownMenuItem>
@@ -201,6 +251,23 @@ export function OrganizationsView({
           </Table>
         </div>
       )}
+
+      {offset > 0 || hasMore ? (
+        <div className="mt-4 flex justify-between">
+          {offset > 0 ? (
+            <Button variant="outline" onClick={() => navigate({ offset: Math.max(0, offset - pageSize) })}>
+              Newer
+            </Button>
+          ) : (
+            <span />
+          )}
+          {hasMore ? (
+            <Button variant="outline" onClick={() => navigate({ offset: offset + pageSize })}>
+              Older
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <ConfirmDialog
         open={suspending !== null}

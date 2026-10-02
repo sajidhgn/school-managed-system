@@ -142,7 +142,7 @@ async def subscribe(
     payload: SubscribeRequest,
     session: DbSession,
     gateway: GatewayDep,
-    ctx: Annotated[AuthContext, Depends(require("billing:manage"))],
+    ctx: Annotated[AuthContext, Depends(require("billing:manage", allow_read_only=True))],
     idempotency_key: IdempotencyKey = None,
 ) -> SubscriptionRead:
     """Move onto a paid plan.
@@ -187,7 +187,7 @@ async def change_plan(
     payload: SubscribeRequest,
     session: DbSession,
     gateway: GatewayDep,
-    ctx: Annotated[AuthContext, Depends(require("billing:manage"))],
+    ctx: Annotated[AuthContext, Depends(require("billing:manage", allow_read_only=True))],
     idempotency_key: IdempotencyKey = None,
 ) -> SubscriptionRead:
     """Upgrade or downgrade. A downgrade below current usage never deletes data."""

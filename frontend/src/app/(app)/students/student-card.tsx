@@ -465,6 +465,19 @@ const PHOTO_SHAPE_CLASSES: Record<ResolvedCardDesign["photo_shape"], string> = {
 };
 
 /**
+ * Type size for the school name in the card header, by length. Thresholds are
+ * roughly what fits in two lines beside a logo at each size, so "THE CAMBRIDGE
+ * INTERNATIONAL SCHOOL GAGGOO" sets whole instead of clipping.
+ */
+function schoolNameSize(name: string | undefined): string {
+  const length = name?.length ?? 0;
+  if (length > 48) return "text-[9px] tracking-normal";
+  if (length > 34) return "text-[10px] tracking-wide";
+  if (length > 22) return "text-xs tracking-wide";
+  return "text-sm tracking-wide";
+}
+
+/**
  * Soft low-poly band for the "mosaic" design: `[points, which colour, opacity]`
  * in a 100×24 viewBox stretched across the card's top. Opacities stay under
  * 0.45 so the school name printed over the band remains readable — the sample
@@ -798,7 +811,15 @@ export function StudentCardView({
       >
         {config.logo_position !== "end" ? logo : null}
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold uppercase tracking-wide">
+          {/* Wrapped, never truncated: a school's name cut to "THE CAMBRIDGE
+              INTERNATIO…" is not its name. The card is a fixed size, so a long name
+              steps down in size to hold two lines rather than growing the band. */}
+          <p
+            className={cn(
+              "line-clamp-2 text-balance break-words font-bold uppercase leading-tight",
+              schoolNameSize(school?.name),
+            )}
+          >
             {school?.name ?? "Student identity card"}
           </p>
           <p className={cn("text-[11px]", headerTinted ? "opacity-80" : "text-muted-foreground")}>

@@ -1321,15 +1321,83 @@
         }
       }
     },
+    "/api/v1/platform/analytics": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "summary": "Analytics",
+        "description": "Growth, revenue, plan mix and watch lists for the operator dashboard.",
+        "operationId": "analytics_api_v1_platform_analytics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAnalytics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/platform/audit-logs": {
       "get": {
         "tags": [
           "Platform"
         ],
         "summary": "Platform Audit Logs",
-        "description": "What operators have done, newest first (spec \u00a78).",
+        "description": "What operators have done, newest first (spec \u00a78).\n\n`action` matches a prefix, so `platform.plan_` returns every plan change.",
         "operationId": "platform_audit_logs_api_v1_platform_audit_logs_get",
         "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Organization Id"
+            }
+          },
           {
             "name": "limit",
             "in": "query",
@@ -3150,7 +3218,7 @@
           "Members"
         ],
         "summary": "Update Member",
-        "description": "Change a member's role, suspend, or reactivate (spec \u00a78).\n\nTwo operations behind one PATCH because the members table exposes both as inline\nedits on the same row. Each is permission-checked separately: suspending needs\n`member:suspend` on top of `member:update`, since removing someone's access is a\nmaterially different act from correcting their job title.",
+        "description": "Rename a member, change their role, suspend, or reactivate (spec \u00a78).\n\nTwo operations behind one PATCH because the members table exposes both as inline\nedits on the same row. Each is permission-checked separately: suspending needs\n`member:suspend` on top of `member:update`, since removing someone's access is a\nmaterially different act from correcting their job title.",
         "operationId": "update_member_api_v1_schools__school_id__members__membership_id__patch",
         "parameters": [
           {
@@ -3472,6 +3540,55 @@
         }
       }
     },
+    "/api/v1/schools/{school_id}/invitations/{invitation_id}/permanent": {
+      "delete": {
+        "tags": [
+          "Invitations"
+        ],
+        "summary": "Delete Invitation",
+        "description": "Delete an invitation outright. A pending one is revoked first (seat returned).\n\nRides on `invitation:revoke`: removing a row from the list is no more power\nthan killing its link, and the audit log keeps the record either way.",
+        "operationId": "delete_invitation_api_v1_schools__school_id__invitations__invitation_id__permanent_delete",
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "School Id"
+            }
+          },
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invitation Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/schools/{school_id}/audit-logs": {
       "get": {
         "tags": [
@@ -3739,6 +3856,70 @@
         }
       }
     },
+    "/api/v1/portal/children/{student_id}/diary": {
+      "get": {
+        "tags": [
+          "Guardian portal"
+        ],
+        "summary": "The homework diary of one child's class for a date",
+        "description": "Same per-child gate as `/children/{student_id}`: 404 for a child this\nguardian may not view.",
+        "operationId": "child_diary_api_v1_portal_children__student_id__diary_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Defaults to today.",
+              "title": "Date"
+            },
+            "description": "Defaults to today."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -3894,6 +4075,40 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SearchConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/analytics": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Students, attendance, fees and exams at a glance",
+        "description": "The landing screen's numbers, in one round trip.\n\nSections the caller may not read come back as null. Scoped to the active campus,\nor the whole organization for a principal with no campus open.",
+        "operationId": "analytics_api_v1_dashboard_analytics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardAnalytics"
                 }
               }
             }
@@ -7947,6 +8162,202 @@
         }
       }
     },
+    "/api/v1/diary/sections": {
+      "get": {
+        "tags": [
+          "Diary"
+        ],
+        "summary": "Every section, with what the caller may write on its diary",
+        "description": "The caller's own classes come first: class teacher, then subject teacher.",
+        "operationId": "list_sections_api_v1_diary_sections_get",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The diary's day. Defaults to today.",
+              "title": "Date"
+            },
+            "description": "The diary's day. Defaults to today."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DiarySectionOption"
+                  },
+                  "title": "Response List Sections Api V1 Diary Sections Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/diary/sections/{section_id}": {
+      "get": {
+        "tags": [
+          "Diary"
+        ],
+        "summary": "One section's diary page for a date",
+        "operationId": "get_page_api_v1_diary_sections__section_id__get",
+        "parameters": [
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The diary's day. Defaults to today.",
+              "title": "Date"
+            },
+            "description": "The diary's day. Defaults to today."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Diary"
+        ],
+        "summary": "Write homework on a section's diary page",
+        "description": "Partial: subjects not named are untouched. A blank `content` clears that\nsubject. 403 `DIARY_NOT_ASSIGNED` if any named row is not the caller's to write;\nnothing is saved in that case.\n\nGuarded on `diary:read` and then on `diary:write` OR `diary:manage` in the\nservice: `require()` demands every code it is given, and a coordinator role may\nreasonably hold `manage` without `write`.",
+        "operationId": "write_page_api_v1_diary_sections__section_id__put",
+        "parameters": [
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The diary's day. Defaults to today.",
+              "title": "Date"
+            },
+            "description": "The diary's day. Defaults to today."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiaryPageWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/fees/summary": {
       "get": {
         "tags": [
@@ -10376,6 +10787,57 @@
         }
       }
     },
+    "/api/v1/fees/vouchers/print": {
+      "get": {
+        "tags": [
+          "Fees"
+        ],
+        "summary": "Download one printable challan covering several vouchers",
+        "description": "The term-at-a-time challan: several months, one page, one total.\n\nEvery voucher keeps its own number, status and receipts -- this combines the\nPRINTING, not the billing. See `FeeService.challan_print_context` for the three\nrefusals that keep the page honest, and note the cap: a family billed for more\nmonths than fit legibly on a shared A4 gets two challans, not an unreadable one.",
+        "operationId": "download_combined_challan_pdf_api_v1_fees_vouchers_print_get",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "minItems": 1,
+              "maxItems": 12,
+              "description": "Vouchers to print on one challan. All must bill the same student.",
+              "title": "Ids"
+            },
+            "description": "Vouchers to print on one challan. All must bill the same student."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/fees/vouchers/{voucher_id}": {
       "get": {
         "tags": [
@@ -10427,7 +10889,7 @@
           "Fees"
         ],
         "summary": "Download the printable challan",
-        "description": "One A4 page, three detachable copies (Bank / School / Student).\n\nThe voucher is resolved through RLS and the school predicate BEFORE rendering, so\nthe renderer itself performs no authorization and cannot be handed a foreign row.",
+        "description": "One A4 page carrying the campus's detachable copies (Bank / School / Student).\n\nThe voucher is resolved through RLS and the school predicate BEFORE rendering, so\nthe renderer itself performs no authorization and cannot be handed a foreign row.",
         "operationId": "download_challan_pdf_api_v1_fees_vouchers__voucher_id__pdf_get",
         "parameters": [
           {
@@ -11090,6 +11552,37 @@
         "title": "AffectedOrganization",
         "description": "One organization the proposed limits would push into `over_limit`.\n\nThe field is named `organization_id` rather than aliased to `id`: an alias would\nmake the Python attribute and the JSON property disagree, and every reader of the\ngenerated TypeScript would then have to know about the mapping."
       },
+      "AttendanceDay": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "marked": {
+            "type": "integer",
+            "title": "Marked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "rate",
+          "marked"
+        ],
+        "title": "AttendanceDay"
+      },
       "AttendanceEntryInput": {
         "properties": {
           "student_id": {
@@ -11235,6 +11728,54 @@
         ],
         "title": "AttendanceMarkRequest",
         "description": "Set statuses for some or all students on a register.\n\nPARTIAL BY DESIGN. A teacher marks the four absentees and leaves twenty-six\nstudents alone; sending the whole register on every keystroke would be a\nwrite amplification of 30x for no gain. Students not named keep whatever they\nalready have -- which, for a freshly opened register, is `present`."
+      },
+      "AttendancePulse": {
+        "properties": {
+          "today": {
+            "$ref": "#/components/schemas/AttendanceToday"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceDay"
+            },
+            "type": "array",
+            "title": "Days"
+          },
+          "rate_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate 30D"
+          },
+          "rate_prev_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Prev 30D"
+          },
+          "mix_30d": {
+            "$ref": "#/components/schemas/StatusMix"
+          }
+        },
+        "type": "object",
+        "required": [
+          "today",
+          "days",
+          "rate_30d",
+          "rate_prev_30d",
+          "mix_30d"
+        ],
+        "title": "AttendancePulse"
       },
       "AttendanceSessionDetail": {
         "properties": {
@@ -11565,6 +12106,40 @@
         ],
         "title": "AttendanceStatus",
         "description": "What one student's line on one register says.\n\nWHY FIVE VALUES AND NOT TWO\n    Present/absent is what a database designer writes and what no school uses.\n    Each extra value below exists because it changes a downstream number:\n\n      LATE      counts as attended for the percentage a report card prints, but\n                is what a punctuality warning is issued from. Folding it into\n                PRESENT loses the warning; folding it into ABSENT understates\n                attendance and triggers absence alerts for children who are in\n                the building.\n      EXCUSED   an absence the school authorised -- illness with a note, a\n                funeral, a sanctioned trip. Excluded from the DENOMINATOR of the\n                attendance percentage, which is the whole point: a child off\n                sick for a fortnight with notes should not fail an attendance\n                threshold they were excused from.\n      HALF_DAY  counts as half a day present. Standard in this market for a\n                child collected after the morning session.\n\n    `is_present` and `counts_toward_attendance` below are where those rules are\n    stated once, so no report re-derives them."
+      },
+      "AttendanceToday": {
+        "properties": {
+          "sections_total": {
+            "type": "integer",
+            "title": "Sections Total"
+          },
+          "sections_submitted": {
+            "type": "integer",
+            "title": "Sections Submitted"
+          },
+          "mix": {
+            "$ref": "#/components/schemas/StatusMix"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sections_total",
+          "sections_submitted",
+          "mix",
+          "rate"
+        ],
+        "title": "AttendanceToday"
       },
       "AuditLogRead": {
         "properties": {
@@ -11954,6 +12529,115 @@
         "title": "CardDesignConfig",
         "description": "A campus's student ID card template -- the principal's design decisions.\n\nEvery field has a default equal to how the card rendered before this feature\nexisted, so a NULL `card_design` and an empty `{}` both mean \"the standard\ncard\" and old saved designs stay valid as knobs are added. Closed enums, not\nfree CSS: the frontend renders these into ONE audited card layout, and a\nprincipal cannot (and should not) express a design that hides the child's\nname or pushes the QR off the card edge."
       },
+      "ChallanDesignConfig": {
+        "properties": {
+          "copies": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "bank",
+                "school",
+                "student"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Copies",
+            "default": [
+              "bank",
+              "school",
+              "student"
+            ]
+          },
+          "payment_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ChallanPaymentAccount"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Payment Accounts"
+          },
+          "show_admission_number": {
+            "type": "boolean",
+            "title": "Show Admission Number",
+            "default": true
+          },
+          "show_roll_number": {
+            "type": "boolean",
+            "title": "Show Roll Number",
+            "default": true
+          },
+          "show_father_name": {
+            "type": "boolean",
+            "title": "Show Father Name",
+            "default": true
+          },
+          "show_contact": {
+            "type": "boolean",
+            "title": "Show Contact",
+            "default": true
+          },
+          "show_amount_in_words": {
+            "type": "boolean",
+            "title": "Show Amount In Words",
+            "default": true
+          },
+          "show_signature_block": {
+            "type": "boolean",
+            "title": "Show Signature Block",
+            "default": true
+          },
+          "footer_note": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Footer Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "ChallanDesignConfig",
+        "description": "A campus's printed fee challan -- the office's layout decisions.\n\nSame contract as `CardDesignConfig`: every field defaults to how the challan\nrendered before this feature existed, so a NULL `challan_design` and an empty\n`{}` both mean \"the standard challan\" and saved designs stay valid as knobs are\nadded. Closed toggles, not free layout -- the renderer owns ONE audited grid,\nand an office cannot express a challan that loses the amount or the due date."
+      },
+      "ChallanPaymentAccount": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Label",
+            "examples": [
+              "Easypaisa",
+              "Meezan Bank"
+            ]
+          },
+          "number": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Number",
+            "examples": [
+              "0324-6797307"
+            ]
+          },
+          "holder": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Holder",
+            "default": "",
+            "examples": [
+              "M. Imtiaz"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "number"
+        ],
+        "title": "ChallanPaymentAccount",
+        "description": "One \"pay us here\" line printed across the head of every fee challan.\n\nA list rather than two fixed fields because a campus collects through whatever\nit has arranged -- a bank account, an Easypaisa wallet, a second branch for the\nafternoon shift -- and the count changes between schools and between terms. The\nholder's name is separate from the number because that is the pair a bank\ncounter checks: a transfer to the right number under the wrong title bounces,\nand a parent reading one string cannot tell which half was mistyped."
+      },
       "ClassCreate": {
         "properties": {
           "name": {
@@ -11982,6 +12666,29 @@
           "level"
         ],
         "title": "ClassCreate"
+      },
+      "ClassHeadcount": {
+        "properties": {
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_name",
+          "level",
+          "count"
+        ],
+        "title": "ClassHeadcount"
       },
       "ClassRead": {
         "properties": {
@@ -12267,6 +12974,31 @@
         ],
         "title": "ContextSwitchRequest"
       },
+      "CurrencyMrr": {
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "mrr": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mrr"
+          },
+          "arr": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Arr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "currency",
+          "mrr",
+          "arr"
+        ],
+        "title": "CurrencyMrr"
+      },
       "DailyOverview": {
         "properties": {
           "session_date": {
@@ -12303,6 +13035,328 @@
           "sections_not_started"
         ],
         "title": "DailyOverview"
+      },
+      "DashboardAnalytics": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "students": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudentPulse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attendance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttendancePulse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fees": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeePulse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exams": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExamPulse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "students",
+          "attendance",
+          "fees",
+          "exams"
+        ],
+        "title": "DashboardAnalytics"
+      },
+      "DiaryAccess": {
+        "type": "string",
+        "enum": [
+          "class_teacher",
+          "subject_teacher",
+          "manage",
+          "read"
+        ],
+        "title": "DiaryAccess",
+        "description": "Why the caller sees a section in their diary list, strongest first."
+      },
+      "DiaryEntryInput": {
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Subject Id"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_id",
+          "content"
+        ],
+        "title": "DiaryEntryInput"
+      },
+      "DiaryPage": {
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Section Id"
+          },
+          "section_name": {
+            "type": "string",
+            "title": "Section Name"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "class_teacher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Name"
+          },
+          "entry_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Entry Date"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section_id",
+          "section_name",
+          "class_id",
+          "class_name",
+          "class_teacher_name",
+          "entry_date",
+          "rows",
+          "can_edit"
+        ],
+        "title": "DiaryPage"
+      },
+      "DiaryPageWrite": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryEntryInput"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "title": "DiaryPageWrite",
+        "description": "The rows the caller changed. Subjects not named are left as they are, so two\nsubject teachers saving the same page at once never overwrite each other."
+      },
+      "DiaryRow": {
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Subject Id"
+          },
+          "subject_code": {
+            "type": "string",
+            "title": "Subject Code"
+          },
+          "subject_name": {
+            "type": "string",
+            "title": "Subject Name"
+          },
+          "teacher_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Id"
+          },
+          "teacher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Name"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "written_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written By Name"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_id",
+          "subject_code",
+          "subject_name",
+          "teacher_id",
+          "teacher_name",
+          "content",
+          "written_by_name",
+          "updated_at",
+          "can_edit"
+        ],
+        "title": "DiaryRow"
+      },
+      "DiarySectionOption": {
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Section Id"
+          },
+          "section_name": {
+            "type": "string",
+            "title": "Section Name"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "class_level": {
+            "type": "integer",
+            "title": "Class Level"
+          },
+          "class_teacher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Name"
+          },
+          "access": {
+            "$ref": "#/components/schemas/DiaryAccess"
+          },
+          "filled_count": {
+            "type": "integer",
+            "title": "Filled Count",
+            "default": 0
+          },
+          "subject_count": {
+            "type": "integer",
+            "title": "Subject Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "section_id",
+          "section_name",
+          "class_id",
+          "class_name",
+          "class_level",
+          "class_teacher_name",
+          "access"
+        ],
+        "title": "DiarySectionOption",
+        "description": "One section in the diary picker."
       },
       "EnrollmentBackfillResult": {
         "properties": {
@@ -12785,6 +13839,32 @@
         },
         "type": "object",
         "title": "ExamPaperUpdate"
+      },
+      "ExamPulse": {
+        "properties": {
+          "exam_name": {
+            "type": "string",
+            "title": "Exam Name"
+          },
+          "exam_status": {
+            "type": "string",
+            "title": "Exam Status"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectScore"
+            },
+            "type": "array",
+            "title": "Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exam_name",
+          "exam_status",
+          "subjects"
+        ],
+        "title": "ExamPulse"
       },
       "ExamRead": {
         "properties": {
@@ -13859,6 +14939,75 @@
         ],
         "title": "FeePaymentStatus"
       },
+      "FeePulse": {
+        "properties": {
+          "academic_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Academic Year"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "billed": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Billed"
+          },
+          "collected": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Collected"
+          },
+          "outstanding": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Outstanding"
+          },
+          "overdue": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Overdue"
+          },
+          "collection_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Rate"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/MonthCollection"
+            },
+            "type": "array",
+            "title": "Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "academic_year",
+          "currency",
+          "billed",
+          "collected",
+          "outstanding",
+          "overdue",
+          "collection_rate",
+          "months"
+        ],
+        "title": "FeePulse"
+      },
       "FeeRecurrence": {
         "type": "string",
         "enum": [
@@ -14785,6 +15934,47 @@
           "other"
         ],
         "title": "Gender"
+      },
+      "GenderSlice": {
+        "properties": {
+          "gender": {
+            "type": "string",
+            "title": "Gender"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gender",
+          "count"
+        ],
+        "title": "GenderSlice"
+      },
+      "GrowthPoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "organizations": {
+            "type": "integer",
+            "title": "Organizations"
+          },
+          "schools": {
+            "type": "integer",
+            "title": "Schools"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "organizations",
+          "schools"
+        ],
+        "title": "GrowthPoint"
       },
       "GuardianChildRead": {
         "properties": {
@@ -17053,6 +18243,28 @@
             },
             "type": "array",
             "title": "Permissions"
+          },
+          "read_only": {
+            "type": "boolean",
+            "title": "Read Only",
+            "default": false
+          },
+          "trial_expired": {
+            "type": "boolean",
+            "title": "Trial Expired",
+            "default": false
+          },
+          "scheduled_deletion_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Deletion At"
           }
         },
         "type": "object",
@@ -17094,6 +18306,66 @@
         ],
         "title": "MemberBranchAssign",
         "description": "Additional branches to attach to an existing member."
+      },
+      "MemberClassAssignment": {
+        "properties": {
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "class_subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Subject Id"
+          },
+          "subject_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_name"
+        ],
+        "title": "MemberClassAssignment",
+        "description": "One class a staff member is assigned to, for the staff table.\n\n`section_name` is set for a class-teacher assignment (a section's register);\n`subject_name` for a subject taught across the whole grade."
       },
       "MemberCreate": {
         "properties": {
@@ -17199,6 +18471,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "assigned_classes": {
+            "items": {
+              "$ref": "#/components/schemas/MemberClassAssignment"
+            },
+            "type": "array",
+            "title": "Assigned Classes"
           }
         },
         "type": "object",
@@ -17220,6 +18499,19 @@
       },
       "MemberUpdate": {
         "properties": {
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
           "role_id": {
             "anyOf": [
               {
@@ -17246,7 +18538,7 @@
         },
         "type": "object",
         "title": "MemberUpdate",
-        "description": "Change a member's role, their status, or both."
+        "description": "Change a member's name, role, status, or any combination."
       },
       "MembershipSummary": {
         "properties": {
@@ -17379,6 +18671,25 @@
           "churn_rate"
         ],
         "title": "MetricsResponse"
+      },
+      "MonthCollection": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "collected": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Collected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "collected"
+        ],
+        "title": "MonthCollection"
       },
       "OrganizationDetail": {
         "properties": {
@@ -17924,6 +19235,118 @@
         "type": "object",
         "title": "OrganizationUpdate",
         "description": "PATCH body. Every field optional -- omitted means \"leave unchanged\".\n\n`slug` is absent on purpose: it appears in URLs and in links already sent by\nemail, so changing it silently breaks bookmarks. It is set once at signup."
+      },
+      "OrganizationUsageRank": {
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "students": {
+            "type": "integer",
+            "title": "Students"
+          },
+          "staff": {
+            "type": "integer",
+            "title": "Staff"
+          },
+          "schools": {
+            "type": "integer",
+            "title": "Schools"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organization_id",
+          "name",
+          "slug",
+          "plan_name",
+          "students",
+          "staff",
+          "schools"
+        ],
+        "title": "OrganizationUsageRank"
+      },
+      "OrganizationWatch": {
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organization_id",
+          "name",
+          "slug",
+          "plan_name",
+          "at"
+        ],
+        "title": "OrganizationWatch",
+        "description": "One organization on a watch list: trials ending, or payment/limit trouble."
       },
       "OtpRequest": {
         "properties": {
@@ -18596,6 +20019,51 @@
         "title": "PlanAdminRead",
         "description": "A plan as the operator sees it -- including the fields the public view hides."
       },
+      "PlanBreakdown": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "subscribers": {
+            "type": "integer",
+            "title": "Subscribers"
+          },
+          "paying": {
+            "type": "integer",
+            "title": "Paying"
+          },
+          "mrr": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mrr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "code",
+          "name",
+          "currency",
+          "subscribers",
+          "paying",
+          "mrr"
+        ],
+        "title": "PlanBreakdown"
+      },
       "PlanImpactRequest": {
         "properties": {
           "limits": {
@@ -19114,6 +20582,156 @@
         ],
         "title": "PlatformAdminRead"
       },
+      "PlatformAnalytics": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "organizations_total": {
+            "type": "integer",
+            "title": "Organizations Total"
+          },
+          "organizations_new_30d": {
+            "type": "integer",
+            "title": "Organizations New 30D"
+          },
+          "organizations_new_prev_30d": {
+            "type": "integer",
+            "title": "Organizations New Prev 30D"
+          },
+          "organizations_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Organizations By Status"
+          },
+          "subscriptions_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Subscriptions By Status"
+          },
+          "paying_organizations": {
+            "type": "integer",
+            "title": "Paying Organizations"
+          },
+          "trialing_organizations": {
+            "type": "integer",
+            "title": "Trialing Organizations"
+          },
+          "schools_total": {
+            "type": "integer",
+            "title": "Schools Total"
+          },
+          "students_total": {
+            "type": "integer",
+            "title": "Students Total"
+          },
+          "staff_total": {
+            "type": "integer",
+            "title": "Staff Total"
+          },
+          "mrr_by_currency": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyMrr"
+            },
+            "type": "array",
+            "title": "Mrr By Currency"
+          },
+          "failed_payments_30d": {
+            "type": "integer",
+            "title": "Failed Payments 30D"
+          },
+          "churn_rate": {
+            "type": "number",
+            "title": "Churn Rate"
+          },
+          "revenue_currency": {
+            "type": "string",
+            "title": "Revenue Currency"
+          },
+          "growth": {
+            "items": {
+              "$ref": "#/components/schemas/GrowthPoint"
+            },
+            "type": "array",
+            "title": "Growth"
+          },
+          "revenue": {
+            "items": {
+              "$ref": "#/components/schemas/RevenuePoint"
+            },
+            "type": "array",
+            "title": "Revenue"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanBreakdown"
+            },
+            "type": "array",
+            "title": "Plans"
+          },
+          "trials_ending": {
+            "items": {
+              "$ref": "#/components/schemas/OrganizationWatch"
+            },
+            "type": "array",
+            "title": "Trials Ending"
+          },
+          "at_risk": {
+            "items": {
+              "$ref": "#/components/schemas/OrganizationWatch"
+            },
+            "type": "array",
+            "title": "At Risk"
+          },
+          "top_organizations": {
+            "items": {
+              "$ref": "#/components/schemas/OrganizationUsageRank"
+            },
+            "type": "array",
+            "title": "Top Organizations"
+          },
+          "recent_organizations": {
+            "items": {
+              "$ref": "#/components/schemas/RecentOrganization"
+            },
+            "type": "array",
+            "title": "Recent Organizations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "organizations_total",
+          "organizations_new_30d",
+          "organizations_new_prev_30d",
+          "organizations_by_status",
+          "subscriptions_by_status",
+          "paying_organizations",
+          "trialing_organizations",
+          "schools_total",
+          "students_total",
+          "staff_total",
+          "mrr_by_currency",
+          "failed_payments_30d",
+          "churn_rate",
+          "revenue_currency",
+          "growth",
+          "revenue",
+          "plans",
+          "trials_ending",
+          "at_risk",
+          "top_organizations",
+          "recent_organizations"
+        ],
+        "title": "PlatformAnalytics",
+        "description": "Everything the operator dashboard draws, in one read.\n\nMoney is per currency (`mrr_by_currency`) and the revenue series is in\n`revenue_currency` only -- see `platform_admin/analytics.py` for why nothing\nhere sums across currencies."
+      },
       "PlatformAuditRead": {
         "properties": {
           "id": {
@@ -19192,6 +20810,28 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "actor_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Email"
+          },
+          "target_organization_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Organization Name"
           }
         },
         "type": "object",
@@ -19373,6 +21013,53 @@
         "title": "PromotionSkip",
         "description": "One student the promotion could not move, and why.\n\nReturned rather than raised. A promotion is a bulk action over a whole section,\nand aborting the entire run because one student is already seated in the target\nwould make the feature unusable exactly when it is retried after a partial\nfailure."
       },
+      "RecentOrganization": {
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organization_id",
+          "name",
+          "slug",
+          "status",
+          "plan_name",
+          "created_at"
+        ],
+        "title": "RecentOrganization"
+      },
       "RegisterRequest": {
         "properties": {
           "full_name": {
@@ -19540,6 +21227,35 @@
         ],
         "title": "ResultCell",
         "description": "One paper's contribution to one student's result line."
+      },
+      "RevenuePoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "collected": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Collected"
+          },
+          "succeeded": {
+            "type": "integer",
+            "title": "Succeeded"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "collected",
+          "succeeded",
+          "failed"
+        ],
+        "title": "RevenuePoint"
       },
       "RoleCreate": {
         "properties": {
@@ -19856,6 +21572,19 @@
             ],
             "title": "City"
           },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300000,
+                "pattern": "^(https?://|data:image/)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
           "academic_year_start_month": {
             "type": "integer",
             "maximum": 12.0,
@@ -19986,6 +21715,16 @@
               }
             ]
           },
+          "challan_design": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChallanDesignConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "academic_year_start_month": {
             "type": "integer",
             "title": "Academic Year Start Month"
@@ -20022,6 +21761,7 @@
           "logo_url",
           "theme_colors",
           "card_design",
+          "challan_design",
           "academic_year_start_month",
           "timezone",
           "locale",
@@ -20126,6 +21866,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/CardDesignConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "challan_design": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChallanDesignConfig"
               },
               {
                 "type": "null"
@@ -21270,6 +23020,37 @@
         ],
         "title": "StationeryUnit",
         "description": "What one unit of the price IS.\n\nPrinted on the challan next to the quantity, because \"Pencil x 2\" is ambiguous\nand expensive: two pencils and two dozen pencils differ by a factor of twelve,\nand the parent finds out at the counter."
+      },
+      "StatusMix": {
+        "properties": {
+          "present": {
+            "type": "integer",
+            "title": "Present",
+            "default": 0
+          },
+          "late": {
+            "type": "integer",
+            "title": "Late",
+            "default": 0
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent",
+            "default": 0
+          },
+          "excused": {
+            "type": "integer",
+            "title": "Excused",
+            "default": 0
+          },
+          "half_day": {
+            "type": "integer",
+            "title": "Half Day",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "StatusMix"
       },
       "StudentAdmissionRequest": {
         "properties": {
@@ -22584,6 +24365,50 @@
         "title": "StudentMarkRow",
         "description": "One line of the marks screen: the student, and their mark if entered.\n\nThe roster and the marks arrive TOGETHER so the screen can render every\nenrolled student -- including the ones not yet marked -- in roll order.\nReturning only existing marks would hide exactly the rows the teacher still\nhas to fill in."
       },
+      "StudentPulse": {
+        "properties": {
+          "active": {
+            "type": "integer",
+            "title": "Active"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "joined_last_30_days": {
+            "type": "integer",
+            "title": "Joined Last 30 Days"
+          },
+          "gender": {
+            "items": {
+              "$ref": "#/components/schemas/GenderSlice"
+            },
+            "type": "array",
+            "title": "Gender"
+          },
+          "by_class": {
+            "items": {
+              "$ref": "#/components/schemas/ClassHeadcount"
+            },
+            "type": "array",
+            "title": "By Class"
+          },
+          "unplaced": {
+            "type": "integer",
+            "title": "Unplaced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active",
+          "pending",
+          "joined_last_30_days",
+          "gender",
+          "by_class",
+          "unplaced"
+        ],
+        "title": "StudentPulse"
+      },
       "StudentRead": {
         "properties": {
           "id": {
@@ -23082,6 +24907,41 @@
           "updated_at"
         ],
         "title": "SubjectRead"
+      },
+      "SubjectScore": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "average_pct": {
+            "type": "number",
+            "title": "Average Pct"
+          },
+          "pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Rate"
+          },
+          "sat": {
+            "type": "integer",
+            "title": "Sat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "average_pct",
+          "pass_rate",
+          "sat"
+        ],
+        "title": "SubjectScore"
       },
       "SubjectUpdate": {
         "properties": {

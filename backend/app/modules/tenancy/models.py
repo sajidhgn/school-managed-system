@@ -43,6 +43,7 @@ WHY `Organization` DOES NOT USE `TenantMixin`
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -238,7 +239,7 @@ class School(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteM
     overriding `Organization.theme_colors` AS A WHOLE when set -- palettes are
     designed together, so they are never mixed element-wise across levels."""
 
-    card_design: Mapped[dict | None] = mapped_column(JSONB)
+    card_design: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     """The campus's student ID card template, as chosen by the principal: layout
     design, logo/photo placement and shape, which fields print, which phone
     number the "if found" line shows, whether a QR is included. Shape is owned
@@ -248,6 +249,20 @@ class School(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDeleteM
     NULL means "the default card", per campus, NOT inherited from the
     organization: card layout follows the printer sitting at a campus desk,
     unlike colours and logos, which follow the brand."""
+
+    challan_design: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    """The campus's printed fee challan template, as chosen by the office: which
+    detachable copies print, the bank and wallet accounts named across its head,
+    which of the student's identifiers and the family's contact appear, whether
+    the total is spelled out and whether a signature block is left blank at the
+    foot. Shape is owned and validated by `ChallanDesignConfig` in schemas.py,
+    on the same terms as `card_design` above -- JSONB, every knob with a
+    rendering default, NULL meaning "the standard challan".
+
+    PER CAMPUS, NOT PER ORGANIZATION, and the accounts are why: the number a
+    parent transfers to is the one that campus reconciles against, and a group
+    that inherited a sibling campus's account would discover it as money in the
+    wrong ledger."""
 
     # --- Calendar & locale -------------------------------------------------
     academic_year_start_month: Mapped[int] = mapped_column(Integer, nullable=False, default=4)

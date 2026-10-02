@@ -42,6 +42,7 @@ from app.db.session import bind_tenant
 from app.modules.auth.models import Session
 from app.modules.auth.router import _attach_body_tokens, _wants_body_tokens
 from app.modules.auth.service import AuthService, IssuedTokens
+from app.modules.platform_admin.analytics import platform_analytics
 from app.modules.platform_admin.models import Plan, PlatformAdmin, PlatformAuditLog
 from app.modules.platform_admin.schemas import (
     ImpersonateRequest,
@@ -57,10 +58,12 @@ from app.modules.platform_admin.schemas import (
     PlanPatch,
     PlanWrite,
     PlatformAdminRead,
+    PlatformAnalytics,
     PlatformAuditRead,
     PlatformLoginRequest,
 )
 from app.modules.platform_admin.service import PlatformService
+from app.modules.tenancy.models import Organization
 from app.modules.tenancy.schemas import SchoolRead
 
 router = APIRouter()
@@ -437,22 +440,44 @@ async def metrics(
     return MetricsResponse.model_validate(await PlatformService(session, settings).metrics())
 
 
+@router.get("/analytics", response_model=PlatformAnalytics)
+async def analytics(session: PlatformDbSession, ctx: PlatformAuth) -> PlatformAnalytics:
+    """Growth, revenue, plan mix and watch lists for the operator dashboard."""
+    return PlatformAnalytics.model_validate(await platform_analytics(session))
+
+
 @router.get("/audit-logs", response_model=list[PlatformAuditRead])
 async def platform_audit_logs(
     session: PlatformDbSession,
     ctx: PlatformAuth,
+    action: Annotated[str | None, Query(max_length=80)] = None,
+    organization_id: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[PlatformAuditLog]:
-    """What operators have done, newest first (spec §8)."""
+) -> list[PlatformAuditRead]:
+    """What operators have done, newest first (spec §8).
+
+    `action` matches a prefix, so `platform.plan_` returns every plan change.
+    """
     await bind_tenant(session, None, platform_admin=True)
     try:
-        rows = await session.execute(
-            select(PlatformAuditLog)
-            .order_by(PlatformAuditLog.created_at.desc())
-            .limit(limit)
-            .offset(offset)
+        stmt = (
+            select(PlatformAuditLog, PlatformAdmin.email, Organization.name)
+            .outerjoin(PlatformAdmin, PlatformAdmin.id == PlatformAuditLog.actor_admin_id)
+            .outerjoin(Organization, Organization.id == PlatformAuditLog.target_organization_id)
         )
-        return list(rows.scalars().all())
+        if action:
+            stmt = stmt.where(PlatformAuditLog.action.startswith(action, autoescape=True))
+        if organization_id:
+            stmt = stmt.where(PlatformAuditLog.target_organization_id == organization_id)
+        rows = await session.execute(
+            stmt.order_by(PlatformAuditLog.created_at.desc()).limit(limit).offset(offset)
+        )
+        return [
+            PlatformAuditRead.model_validate(entry).model_copy(
+                update={"actor_email": email, "target_organization_name": org_name}
+            )
+            for entry, email, org_name in rows.all()
+        ]
     finally:
         await bind_tenant(session, None)

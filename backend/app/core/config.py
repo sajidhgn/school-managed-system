@@ -248,6 +248,14 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     EMAIL_LOGO_URL: str = ""
 
+    # --- Trial retention ------------------------------------------------------
+    # After a trial ends the organization stays READ-ONLY for this many days, then
+    # it and every row it owns is permanently deleted unless a plan is chosen. The
+    # owner is warned by email this many days before the deletion; the deletion
+    # never runs earlier than that many days after the warning actually went out.
+    TRIAL_GRACE_DAYS: int = Field(default=7, ge=1, le=365)
+    TRIAL_DELETION_NOTICE_DAYS: int = Field(default=2, ge=1, le=30)
+
     @property
     def email_from(self) -> str:
         """Formatted From header: `School Manage <noreply@example.com>`."""

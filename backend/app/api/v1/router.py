@@ -42,6 +42,8 @@ from app.modules.auth.router import router as auth_router
 from app.modules.billing.router import public_router as public_plans_router
 from app.modules.billing.router import router as billing_router
 from app.modules.billing.router import webhook_router
+from app.modules.dashboard.router import router as dashboard_router
+from app.modules.diary.router import router as diary_router
 from app.modules.exams.router import exams_router
 from app.modules.fees.router import router as fees_router
 from app.modules.guardians.auth_router import router as guardian_auth_router
@@ -106,6 +108,10 @@ api_router.include_router(guardian_portal_router, prefix="/portal", tags=["Guard
 # module's list endpoint uses. See the module docstring.
 api_router.include_router(search_router, prefix="/search", tags=["Search"])
 
+# Dashboard analytics: like search, reads across modules, owns no tables, and gates
+# each section on its own module's read permission rather than on the route.
+api_router.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
+
 # --- Academic modules ------------------------------------------------------
 # Out of scope for the core spec (§13) but already built, now re-keyed onto
 # organization_id + school_id and the shared permission catalog.
@@ -134,6 +140,10 @@ api_router.include_router(attendance_router, prefix="/attendance", tags=["Attend
 # prefix, not `/classes/{id}/exams` -- an exam spans many classes (every grade
 # sits the mid-term), so nesting it under one class would misdescribe it.
 api_router.include_router(exams_router, prefix="/exams", tags=["Exams"])
+
+# Diary: the daily homework page per section. Keyed by section and date like
+# attendance, and its own prefix for the same reason.
+api_router.include_router(diary_router, prefix="/diary", tags=["Diary"])
 
 # Fees: what a school bills its STUDENTS. Deliberately not under `/billing`, which is
 # what the school owes EduCloud -- two different money flows between two different

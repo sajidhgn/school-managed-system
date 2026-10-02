@@ -12,6 +12,7 @@ export const schoolCreateSchema = z.object({
     // filenames. Spaces and punctuation survive none of those cleanly.
     .regex(/^[A-Za-z0-9_-]+$/, "Use letters, numbers, hyphens or underscores only"),
   city: z.string().max(100).optional().or(z.literal("")),
+  logo_url: z.string().optional(),
 });
 export type SchoolCreateValues = z.infer<typeof schoolCreateSchema>;
 

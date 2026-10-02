@@ -354,3 +354,39 @@ async def test_unknown_token_does_not_confirm_or_deny(tenant: Tenant) -> None:
         params={"token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
     )
     assert response.status_code == 404
+
+
+async def test_deleting_removes_the_invitation_and_returns_a_pending_seat(
+    tenant: Tenant, mailbox: list[Any]
+) -> None:
+    """Delete takes the row off the list for good -- pending or not.
+
+    A pending invitation is revoked on the way out, so deleting can never strand
+    the staff seat it reserved; a past one (here, revoked) simply disappears.
+    """
+    base = f"{API}/schools/{tenant.school_id}/invitations"
+    before = (await tenant.get(f"{API}/org/usage")).json()
+    staff_before = next(i for i in before["items"] if i["key"] == "max_staff")["current"]
+
+    pending_id, _ = await _invite(tenant, "delete-pending@test.example")
+    token = latest_token(mailbox)
+    past_id, _ = await _invite(tenant, "delete-past@test.example")
+    assert (await tenant.delete(f"{base}/{past_id}")).status_code == 200
+
+    deleted = await tenant.delete(f"{base}/{pending_id}/permanent")
+    assert deleted.status_code == 204, deleted.text
+    assert (await tenant.delete(f"{base}/{past_id}/permanent")).status_code == 204
+
+    listed = {i["id"] for i in (await tenant.get(base)).json()}
+    assert pending_id not in listed and past_id not in listed
+
+    after = (await tenant.get(f"{API}/org/usage")).json()
+    staff_after = next(i for i in after["items"] if i["key"] == "max_staff")["current"]
+    assert staff_after == staff_before, "deleting a pending invitation kept its seat"
+
+    tenant.client.cookies.clear()
+    dead = await tenant.client.post(
+        f"{API}/invitations/accept",
+        json={"token": token, "full_name": "Deleted", "password": STRONG_PASSWORD},
+    )
+    assert dead.status_code in (404, 410)

@@ -21,7 +21,7 @@ Hi {{ greeting_name }},
 
 {{ action_url }}
 
-This link expires in {{ expiry_text }}. {{ security_note }}
+{% if expiry_text %}This link expires in {{ expiry_text }}. {% endif %}{{ security_note }}
 
 --
 {{ app_name }} — sent automatically, please do not reply.

@@ -39,7 +39,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import get_logger
 from app.db.session import bind_tenant
 from app.modules.billing.entitlements import EntitlementService
@@ -187,7 +192,13 @@ class BillingService:
         subscription, current_plan = await self.get_subscription(organization_id)
         new_plan = await _plan_by_code(self.session, plan_code)
 
-        if new_plan.id == subscription.plan_id and subscription.billing_cycle is billing_cycle:
+        # Re-choosing the trialled plan after the trial EXPIRED is the normal way to
+        # start paying for it, so it is not "unchanged".
+        if (
+            new_plan.id == subscription.plan_id
+            and subscription.billing_cycle is billing_cycle
+            and subscription.status is not SubscriptionStatus.EXPIRED
+        ):
             raise ConflictError("The organization is already on this plan.", code="PLAN_UNCHANGED")
         if not new_plan.is_public:
             # Hidden plans (enterprise) are assigned by the super admin after a
@@ -200,6 +211,19 @@ class BillingService:
         organization = await self.session.get(Organization, organization_id)
         if organization is None:
             raise NotFoundError("Organization not found.")
+
+        # The route lets a suspended organization through so that an expired trial
+        # can upgrade its way out of read-only. Any OTHER suspension -- non-payment,
+        # or a platform admin acting on abuse -- is not lifted by picking a plan.
+        trial_expired = subscription.status is SubscriptionStatus.EXPIRED
+        if organization.status is OrganizationStatus.SUSPENDED and not trial_expired:
+            raise AuthorizationError(
+                "This organization is suspended and is currently read-only.",
+                code="ORGANIZATION_READ_ONLY",
+            )
+        # One free trial per organization. Without this, picking the same plan again
+        # after expiry would hand out a fresh trial every time it ran out.
+        trial_days = 0 if trial_expired else new_plan.trial_days
 
         if subscription.gateway_subscription_ref:
             remote = await self.gateway.change_plan(
@@ -219,24 +243,26 @@ class BillingService:
                 customer_ref=customer.customer_ref,
                 plan_code=new_plan.code,
                 billing_cycle=billing_cycle.value,
-                trial_days=new_plan.trial_days,
+                trial_days=trial_days,
             )
             subscription.gateway = self.gateway.name
             subscription.gateway_customer_ref = customer.customer_ref
             subscription.gateway_subscription_ref = remote.subscription_ref
             subscription.current_period_start = remote.current_period_start
             subscription.current_period_end = remote.current_period_end
-            if new_plan.trial_days:
+            if trial_days:
                 subscription.trial_ends_at = remote.current_period_end
 
         previous_plan_id = subscription.plan_id
         subscription.plan_id = new_plan.id
         subscription.billing_cycle = billing_cycle
         subscription.status = (
-            SubscriptionStatus.TRIALING if new_plan.trial_days else SubscriptionStatus.ACTIVE
+            SubscriptionStatus.TRIALING if trial_days else SubscriptionStatus.ACTIVE
         )
         subscription.cancel_at_period_end = False
         subscription.cancelled_at = None
+        if trial_expired:
+            organization.status = OrganizationStatus.ACTIVE
         await self.session.flush()
 
         # Evaluated AFTER the plan is applied, so the check runs against the new

@@ -15,6 +15,7 @@ from app.core.exceptions import AuthorizationError, ValidationError
 from app.modules.rbac.models import Membership
 from app.modules.rbac.schemas import (
     MemberBranchAssign,
+    MemberClassAssignment,
     MemberCreate,
     MemberRead,
     MemberUpdate,
@@ -240,8 +241,19 @@ async def list_members(
 ) -> Page[MemberRead]:
     """One page of the school's staff, ordered by name."""
     _assert_school_scope(ctx, school_id)
-    members, total = await RbacService(session).list_members(school_id=school_id, params=params)
-    return Page.create([_member_read(m) for m in members], total, params)
+    service = RbacService(session)
+    members, total = await service.list_members(school_id=school_id, params=params)
+    assignments = await service.class_assignments(
+        school_id=school_id, user_ids=[m.user_id for m in members]
+    )
+    items = []
+    for m in members:
+        item = _member_read(m)
+        item.assigned_classes = [
+            MemberClassAssignment.model_validate(a) for a in assignments.get(m.user_id, [])
+        ]
+        items.append(item)
+    return Page.create(items, total, params)
 
 
 @members_router.get("/{school_id}/teachers", response_model=list[TeacherOption])
@@ -329,7 +341,7 @@ async def update_member(
     session: DbSession,
     ctx: Annotated[AuthContext, Depends(require("member:update"))],
 ) -> MemberRead:
-    """Change a member's role, suspend, or reactivate (spec §8).
+    """Rename a member, change their role, suspend, or reactivate (spec §8).
 
     Two operations behind one PATCH because the members table exposes both as inline
     edits on the same row. Each is permission-checked separately: suspending needs
@@ -339,10 +351,18 @@ async def update_member(
     _assert_school_scope(ctx, school_id)
     service = RbacService(session)
 
-    if payload.role_id is None and payload.suspended is None:
-        raise ValidationError("Provide role_id, suspended, or both.", code="EMPTY_UPDATE")
+    if payload.full_name is None and payload.role_id is None and payload.suspended is None:
+        raise ValidationError(
+            "Provide full_name, role_id, suspended, or a combination.", code="EMPTY_UPDATE"
+        )
 
     membership = None
+    if payload.full_name is not None:
+        if not payload.full_name.strip():
+            raise ValidationError("Name cannot be blank.", code="INVALID_NAME")
+        membership = await service.rename_member(
+            ctx=ctx, membership_id=membership_id, full_name=payload.full_name
+        )
     if payload.role_id is not None:
         membership = await service.change_member_role(
             ctx=ctx, membership_id=membership_id, new_role_id=payload.role_id

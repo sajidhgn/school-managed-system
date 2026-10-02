@@ -1,10 +1,10 @@
 "use client";
 
-import { AlertTriangle, CreditCard, Lock } from "lucide-react";
+import { AlertTriangle, Clock, CreditCard, Lock } from "lucide-react";
 import Link from "next/link";
 
 import { useTranslations } from "@/components/providers/i18n-provider";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 /**
  * Subscription-state banner.
@@ -25,14 +25,52 @@ import { cn } from "@/lib/utils";
  *   past_due   — full access continues during the grace window
  *   suspended  — read-only, and exports still work
  *
- * All three take care to state what STILL WORKS. A billing banner that only says
+ * An expired trial is a fourth, sharper case of `suspended`: the same read-only
+ * access, but with a deadline -- the account is deleted on `scheduledDeletionAt`
+ * unless a plan is chosen -- so it names the date and points straight at upgrading.
+ *
+ * All of them take care to state what STILL WORKS. A billing banner that only says
  * what is broken reads as a threat, and the underlying policy is deliberately not
  * one: spec §6.3 refuses to lock a school out of its own student records.
  */
-export function OrganizationBanner({ status }: { status: string | null | undefined }) {
+export function OrganizationBanner({
+  status,
+  trialExpired = false,
+  scheduledDeletionAt = null,
+}: {
+  status: string | null | undefined;
+  trialExpired?: boolean;
+  scheduledDeletionAt?: string | null;
+}) {
   const { t } = useTranslations();
 
   if (!status || status === "active" || status === "trialing") return null;
+
+  if (status === "suspended" && trialExpired) {
+    return (
+      <div
+        role="alert"
+        className="flex flex-col gap-3 border-b border-border bg-destructive/12 px-4 py-3 text-destructive sm:flex-row sm:items-center sm:px-6"
+      >
+        <div className="flex min-w-0 flex-1 items-start gap-3 text-sm">
+          <Clock className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <p className="font-medium">{t.billing.trialExpiredTitle}</p>
+            <p className="text-pretty opacity-90">
+              {t.billing.trialExpiredBody}{" "}
+              <strong className="font-semibold">{formatDate(scheduledDeletionAt)}</strong>.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/billing"
+          className="shrink-0 self-start rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 sm:self-center"
+        >
+          {t.billing.upgradePlan}
+        </Link>
+      </div>
+    );
+  }
 
   const config = {
     over_limit: {

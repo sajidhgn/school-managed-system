@@ -4,7 +4,12 @@ import { notFound } from "next/navigation";
 import { OrganizationDetailView } from "./organization-detail-view";
 import { PlatformChrome } from "@/components/platform/platform-chrome";
 import { serverGetOrNull, serverGetRequired } from "@/lib/api/server";
-import type { OrganizationDetail, PlanAdminRead, SchoolRead } from "@/lib/api/types";
+import type {
+  OrganizationDetail,
+  PlanAdminRead,
+  PlatformAuditRead,
+  SchoolRead,
+} from "@/lib/api/types";
 import { requirePlatformAdmin } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Organization" };
@@ -31,9 +36,15 @@ export default async function OrganizationDetailPage({
   );
   if (!organization) notFound();
 
-  const [schools, plans] = await Promise.all([
+  const [schools, plans, activity] = await Promise.all([
     serverGetRequired<SchoolRead[]>(`/platform/organizations/${id}/schools`, "platform"),
     serverGetRequired<PlanAdminRead[]>("/platform/plans", "platform"),
+    // Operator history for THIS organization: who suspended it, who changed its
+    // plan, who looked at it. Optional — a failed read hides the panel, nothing more.
+    serverGetOrNull<PlatformAuditRead[]>(
+      `/platform/audit-logs?organization_id=${id}&limit=10`,
+      "platform",
+    ),
   ]);
 
   return (
@@ -42,6 +53,7 @@ export default async function OrganizationDetailPage({
         organization={organization}
         schools={schools}
         plans={plans}
+        activity={activity ?? []}
         supportUntil={query.supportUntil ?? null}
       />
     </PlatformChrome>

@@ -210,8 +210,19 @@ export const feesApi = {
     recordPayment: (id: string, body: FeePaymentCreate) =>
       api.post<FeePaymentRead>(`/fees/vouchers/${id}/payments`, body),
 
-    /** The printable three-copy challan. Opened, not fetched — see the view. */
+    /** The printable challan. Opened, not fetched — see the view. */
     pdfUrl: (id: string) => `/api/bff/fees/vouchers/${id}/pdf`,
+
+    /**
+     * Several months on ONE printed challan — the term-at-a-time page.
+     *
+     * The vouchers stay separate underneath: each keeps its own number, status and
+     * receipts, so paying two of three settles exactly those two. This combines the
+     * printing only. The API refuses ids belonging to different students, and
+     * refuses to fold a voided challan into a live total.
+     */
+    combinedPdfUrl: (ids: string[]) =>
+      `/api/bff/fees/vouchers/print?${ids.map((id) => `ids=${id}`).join("&")}`,
   },
 
   payments: {

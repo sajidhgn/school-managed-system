@@ -25,6 +25,7 @@ from sqlalchemy.orm import InstrumentedAttribute, selectinload
 from app.common.repository import BaseRepository
 from app.common.schemas import PageParams, SortParams
 from app.core.context import get_school_id
+from app.modules.academics.models import Section
 from app.modules.fees.models import (
     FeeBillingSchedule,
     FeeConcession,
@@ -420,6 +421,32 @@ class FeeVoucherRepository(BaseRepository[FeeVoucher]):
             )
         )
         return (await self.session.execute(stmt)).scalars().unique().one_or_none()
+
+    async def list_for_print(self, voucher_ids: Sequence[UUID]) -> Sequence[FeeVoucher]:
+        """The vouchers behind one printed challan, with everything the renderer reads.
+
+        The renderer is a pure function and walks `student.section.school_class` to
+        print the class and section band. A lazy load from inside it would emit SQL
+        halfway through a PDF -- on an async session, an error rather than a slow
+        page -- so the chain is loaded here, once, for the whole set.
+
+        Scoped like every other read: RLS contains the organization and
+        `_base_select` the campus, so a foreign id simply does not come back and the
+        caller sees a short list rather than someone else's child.
+        """
+        if not voucher_ids:
+            return []
+        stmt = (
+            self._base_select()
+            .where(FeeVoucher.id.in_(voucher_ids))
+            .options(
+                selectinload(FeeVoucher.items),
+                selectinload(FeeVoucher.student)
+                .selectinload(Student.section)
+                .selectinload(Section.school_class),
+            )
+        )
+        return (await self.session.execute(stmt)).scalars().unique().all()
 
     async def existing_period_student_ids(
         self, student_ids: Sequence[UUID], academic_year: str, period_label: str

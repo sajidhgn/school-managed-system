@@ -83,7 +83,7 @@ export function middleware(request: NextRequest) {
     if (pathname === "/platform/login") {
       // Already an operator? Skip the form.
       return hasPlatformSession
-        ? NextResponse.redirect(new URL("/platform/organizations", request.url))
+        ? NextResponse.redirect(new URL("/platform", request.url))
         : passThrough(request);
     }
 

@@ -1,8 +1,8 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { SessionProvider } from "@/components/providers/session-provider";
-import { serverGetOrNull } from "@/lib/api/server";
-import type { SchoolRead } from "@/lib/api/types";
-import { getActiveSchoolId, listSchools, requireUser } from "@/lib/auth/session";
+import { serverGet, serverGetOrNull } from "@/lib/api/server";
+import { PERMISSIONS, type OrganizationRead, type SchoolRead } from "@/lib/api/types";
+import { getActiveSchoolId, hasPermission, listSchools, requireUser } from "@/lib/auth/session";
 
 /**
  * Authenticated tenant shell.
@@ -40,12 +40,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await serverGetOrNull<SchoolRead>(`/schools/${user.school_id}`)
     : (schools.find((s) => s.id === activeSchoolId) ?? null);
 
+  // The logo the chrome wears: the open campus's own, else the organization's
+  // (Settings). The organization is only fetched when it is actually needed, and
+  // only for someone allowed to read it -- a teacher without `org:read` whose
+  // campus has no logo simply gets the initial tile.
+  const organization =
+    !activeSchool?.logo_url && hasPermission(user, PERMISSIONS.orgRead)
+      ? await serverGet<OrganizationRead | null>("/org", null)
+      : null;
+  const logoUrl = activeSchool?.logo_url ?? organization?.logo_url ?? null;
+
   return (
     <SessionProvider user={user}>
       <AppShell
         schools={schools}
         activeSchoolId={activeSchoolId}
         activeSchool={activeSchool}
+        logoUrl={logoUrl}
         // A school-scoped member always has a campus even if the fetch above failed,
         // so the sidebar must not go dark over a slow request.
         activeSchoolName={activeSchool?.name ?? user.school_name ?? null}

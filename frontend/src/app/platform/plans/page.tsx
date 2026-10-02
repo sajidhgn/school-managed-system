@@ -2,19 +2,20 @@ import type { Metadata } from "next";
 
 import { PlansView } from "./plans-view";
 import { PlatformChrome } from "@/components/platform/platform-chrome";
-import { serverGetRequired } from "@/lib/api/server";
-import type { OrganizationSummary, PlanAdminRead } from "@/lib/api/types";
+import { serverGetOrNull, serverGetRequired } from "@/lib/api/server";
+import type { PlanAdminRead, PlatformAnalytics } from "@/lib/api/types";
 import { requirePlatformAdmin } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Plans" };
 
+export const dynamic = "force-dynamic";
+
 /**
  * The product catalog, editable by operators.
  *
- * Subscriber counts are derived from the organization list rather than added to the
- * plans endpoint. The console already fetches that list, the numbers are small, and
- * keeping `GET /platform/plans` a plain catalog read means the public pricing page
- * and this page share the same shape.
+ * Subscriber counts come from the analytics read, which counts every subscription
+ * server-side. They used to be derived from the first 200 organizations, which
+ * silently undercounted the moment the platform grew past that.
  *
  * They matter here because "how many customers is this?" is the question an operator
  * needs answered BEFORE opening the editor, not only inside the save confirmation.
@@ -22,15 +23,14 @@ export const metadata: Metadata = { title: "Plans" };
 export default async function PlansPage() {
   const admin = await requirePlatformAdmin();
 
-  const [plans, organizations] = await Promise.all([
+  const [plans, analytics] = await Promise.all([
     serverGetRequired<PlanAdminRead[]>("/platform/plans", "platform"),
-    serverGetRequired<OrganizationSummary[]>("/platform/organizations?limit=200", "platform"),
+    serverGetOrNull<PlatformAnalytics>("/platform/analytics", "platform"),
   ]);
 
-  const subscriberCounts = organizations.reduce<Record<string, number>>((counts, org) => {
-    if (org.plan_code) counts[org.plan_code] = (counts[org.plan_code] ?? 0) + 1;
-    return counts;
-  }, {});
+  const subscriberCounts = Object.fromEntries(
+    (analytics?.plans ?? []).map((plan) => [plan.code, plan.subscribers]),
+  );
 
   return (
     <PlatformChrome adminName={admin.full_name}>

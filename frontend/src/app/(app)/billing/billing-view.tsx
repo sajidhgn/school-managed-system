@@ -160,7 +160,7 @@ export function BillingView({
             </p>
           ) : null}
 
-          {canManage && !subscription.cancel_at_period_end ? (
+          {canManage && !subscription.cancel_at_period_end && subscription.status !== "expired" ? (
             <Button
               variant="ghost"
               size="sm"
@@ -200,7 +200,9 @@ export function BillingView({
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             {plans.map((plan) => {
-              const isCurrent = plan.code === currentCode;
+              // An expired trial has no current plan to keep: picking the one it
+              // trialled is how it starts paying, so that card stays clickable.
+              const isCurrent = plan.code === currentCode && subscription?.status !== "expired";
               return (
                 <div
                   key={plan.id}

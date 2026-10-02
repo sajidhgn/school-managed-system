@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Menu, School, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
 
 import { OrganizationBanner } from "@/components/layout/organization-banner";
@@ -10,6 +10,7 @@ import { LocaleSwitcher } from "@/components/locale-switcher";
 import { GlobalSearch } from "@/components/search/global-search";
 import { useRequiredSession } from "@/components/providers/session-provider";
 import { Button } from "@/components/ui/button";
+import { SchoolLogo } from "@/components/ui/school-logo";
 import type { SchoolRead } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ export function AppShell({
   activeSchoolId = null,
   activeSchool = null,
   activeSchoolName = null,
+  logoUrl = null,
 }: {
   children: React.ReactNode;
   /** The organization's campuses. Empty for a school-scoped member — see the layout. */
@@ -36,9 +38,12 @@ export function AppShell({
   activeSchool?: SchoolRead | null;
   /** The branch whose modules the sidebar should open, or null. See the layout. */
   activeSchoolName?: string | null;
+  /** The open campus's logo, already falling back to the organization's. */
+  logoUrl?: string | null;
 }) {
   const user = useRequiredSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const brandName = activeSchoolName ?? user.organization_name ?? null;
 
   return (
     <div className="flex min-h-svh">
@@ -47,7 +52,7 @@ export function AppShell({
           against the content instead of beside the nav. */}
       <aside className="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
         <div className="sticky top-0 flex h-svh flex-col">
-          <Brand />
+          <Brand logoUrl={logoUrl} name={brandName} />
           <SidebarNav activeSchoolName={activeSchoolName} />
         </div>
       </aside>
@@ -63,7 +68,7 @@ export function AppShell({
           />
           <aside className="absolute inset-y-0 start-0 flex w-64 flex-col border-e border-sidebar-border bg-sidebar">
             <div className="flex items-center">
-              <Brand />
+              <Brand logoUrl={logoUrl} name={brandName} />
               <Button
                 variant="ghost"
                 size="icon"
@@ -100,9 +105,9 @@ export function AppShell({
               apart until you can see the street. The organization keeps a line only
               when there is no branch open and nothing to disambiguate. */}
           <div className="flex min-w-0 items-center gap-2">
+            <SchoolLogo src={logoUrl} name={brandName} />
             {activeSchoolName ? (
               <>
-                <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="min-w-0 leading-tight">
                   <p className="truncate text-sm font-medium">{activeSchoolName}</p>
                   <p className="truncate text-xs text-muted-foreground">
@@ -111,12 +116,9 @@ export function AppShell({
                 </div>
               </>
             ) : (
-              <>
-                <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <p className="truncate text-sm font-medium">
-                  {user.organization_name ?? "—"}
-                </p>
-              </>
+              <p className="truncate text-sm font-medium">
+                {user.organization_name ?? "—"}
+              </p>
             )}
           </div>
 
@@ -135,7 +137,11 @@ export function AppShell({
             the content rather than on the billing page, because the user hits the
             consequence (a blocked create) somewhere else entirely and needs the
             explanation where they are. */}
-        <OrganizationBanner status={user.organization_status} />
+        <OrganizationBanner
+          status={user.organization_status}
+          trialExpired={user.trial_expired ?? false}
+          scheduledDeletionAt={user.scheduled_deletion_at ?? null}
+        />
 
         <main id="main" className={cn("flex-1 px-4 py-6 sm:px-6 sm:py-8")}>
           {children}
@@ -160,7 +166,20 @@ function campusLocation(school: SchoolRead | null): string | null {
   return school.code ? `${place} · ${school.code}` : place;
 }
 
-function Brand() {
+/**
+ * The sidebar's masthead. A school that has a logo (its own, or its
+ * organization's) sees its own brand here; EduCloud's mark is only the fallback
+ * for one that has not uploaded anything yet.
+ */
+function Brand({ logoUrl, name }: { logoUrl: string | null; name: string | null }) {
+  if (logoUrl) {
+    return (
+      <div className="flex h-16 min-w-0 items-center gap-2 px-5 font-semibold tracking-tight">
+        <SchoolLogo src={logoUrl} name={name} />
+        <span className="truncate">{name ?? "EduCloud"}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex h-16 items-center gap-2 px-5 font-semibold tracking-tight">
       <span className="grid size-7 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">

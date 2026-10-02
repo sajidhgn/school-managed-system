@@ -208,6 +208,13 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("calendar:manage", "Academics", "Define academic years and terms."),
     _school("subject:read", "Academics", "View subjects and class curricula."),
     _school("subject:manage", "Academics", "Define subjects and assign them to classes."),
+    # The daily homework diary. `write` is bounded by ASSIGNMENT in the service (your
+    # class as class teacher, your subjects as subject teacher); `manage` is the
+    # coordinator's override for covering an absent teacher, and is the only one
+    # that writes on a page the holder is not assigned to.
+    _school("diary:read", "Academics", "View class diaries."),
+    _school("diary:write", "Academics", "Write the diary for your own classes and subjects."),
+    _school("diary:manage", "Academics", "Write any class's diary, assigned or not."),
     _school("grade:read", "Academics", "View grades."),
     _school("grade:manage", "Academics", "Enter and edit grades."),
     # FIVE fee codes, not one. `fee:collect` and `fee:void` are separate because the
@@ -285,6 +292,8 @@ _TEACHER_PERMISSIONS: frozenset[str] = frozenset(
         "grade:read",
         "grade:manage",
         "timetable:read",
+        "diary:read",
+        "diary:write",
     }
 )
 

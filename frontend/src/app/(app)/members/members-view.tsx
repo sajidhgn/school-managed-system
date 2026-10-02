@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { Can } from "@/components/auth/can";
+import { EditMemberDialog } from "./edit-member-dialog";
 import { InvitationsSection } from "./invitations-section";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/data-states";
@@ -89,6 +90,7 @@ export function MembersView({
   const [busy, setBusy] = useState<string | null>(null);
   const [removing, setRemoving] = useState<MemberRead | null>(null);
   const [assigning, setAssigning] = useState<MemberRead | null>(null);
+  const [editing, setEditing] = useState<MemberRead | null>(null);
   const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
   const [inviteOpen, setInviteOpen] = useState(initialInviteOpen);
   const inviteSectionRef = useRef<HTMLDivElement | null>(null);
@@ -176,6 +178,7 @@ export function MembersView({
               <TableRow>
                 <TableHead>{t.common.name}</TableHead>
                 <TableHead>{t.common.role}</TableHead>
+                <TableHead>Classes assigned</TableHead>
                 <TableHead>{t.common.status}</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
@@ -195,6 +198,25 @@ export function MembersView({
                     </TableCell>
                     <TableCell>{member.role_name}</TableCell>
                     <TableCell>
+                      {member.assigned_classes && member.assigned_classes.length > 0 ? (
+                        <div className="flex max-w-xs flex-wrap gap-1">
+                          {member.assigned_classes.map((a, i) => (
+                            <Badge
+                              key={i}
+                              variant={a.section_name ? "default" : "neutral"}
+                              title={a.section_name ? "Class teacher" : "Subject teacher"}
+                            >
+                              {a.class_name}
+                              {a.section_name ? ` – ${a.section_name}` : ""}
+                              {a.subject_name ? ` · ${a.subject_name}` : ""}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={member.status === "active" ? "success" : "destructive"}>
                         {label(MEMBER_STATUS_LABELS, member.status)}
                       </Badge>
@@ -212,6 +234,10 @@ export function MembersView({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56">
                             <Can permission={PERMISSIONS.memberUpdate}>
+                              <DropdownMenuItem onSelect={() => setEditing(member)}>
+                                Edit member
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               {canAssignBranches ? (
                                 <DropdownMenuItem
                                   onSelect={() => {
@@ -289,6 +315,13 @@ export function MembersView({
           <Pagination meta={membersMeta} onPageChange={goToPage} disabled={busy !== null} />
         </div>
       )}
+
+      <EditMemberDialog
+        schoolId={schoolId}
+        member={editing}
+        roles={assignableRoles}
+        onClose={() => setEditing(null)}
+      />
 
       <ConfirmDialog
         open={removing !== null}

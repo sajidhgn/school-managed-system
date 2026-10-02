@@ -385,7 +385,7 @@ async def get_auth_context(
 CurrentAuth = Annotated[AuthContext, Depends(get_auth_context)]
 
 
-def require(*codes: str):  # type: ignore[no-untyped-def]
+def require(*codes: str, allow_read_only: bool = False):  # type: ignore[no-untyped-def]
     """Dependency factory: demand specific permissions (spec §5.4).
 
         @router.post("/schools/{school_id}/members")
@@ -403,6 +403,10 @@ def require(*codes: str):  # type: ignore[no-untyped-def]
     A factory (a function returning a dependency) is the idiomatic way to
     parameterise a FastAPI dependency, and it keeps the required permissions visible
     in the route signature, where a reviewer reads them.
+
+    `allow_read_only=True` lets a write through for a suspended organization. It
+    exists for exactly one purpose: choosing a plan. A read-only account whose
+    "Upgrade" button is itself refused as a write has no way out.
     """
 
     async def _guard(
@@ -417,7 +421,11 @@ def require(*codes: str):  # type: ignore[no-untyped-def]
         # lock a school out of its own student records over a payment dispute --
         # the records are the school's, not ours, and withholding them is leverage
         # no software vendor should hold over a school mid-term.
-        if ctx.organization_status == "suspended" and request.method not in _SAFE_METHODS:
+        if (
+            ctx.organization_status == "suspended"
+            and request.method not in _SAFE_METHODS
+            and not allow_read_only
+        ):
             raise AuthorizationError(
                 "This organization is suspended and is currently read-only.",
                 code="ORGANIZATION_READ_ONLY",

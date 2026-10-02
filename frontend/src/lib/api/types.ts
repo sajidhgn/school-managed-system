@@ -37,6 +37,8 @@ export type SchoolRead = S["SchoolRead"];
 export type SchoolCreate = S["SchoolCreate"];
 export type SchoolUpdate = S["SchoolUpdate"];
 export type CardDesignConfig = S["CardDesignConfig"];
+export type ChallanDesignConfig = S["ChallanDesignConfig"];
+export type ChallanPaymentAccount = S["ChallanPaymentAccount"];
 
 // --- RBAC ------------------------------------------------------------------
 export type PermissionRead = S["PermissionRead"];
@@ -58,6 +60,15 @@ export type InvitationRead = S["InvitationRead"];
 export type InvitationPreview = S["InvitationPreview"];
 export type InvitationAccept = S["InvitationAccept"];
 export type InvitationAcceptResponse = S["InvitationAcceptResponse"];
+
+// --- Dashboard -------------------------------------------------------------
+export type DashboardAnalytics = S["DashboardAnalytics"];
+export type StudentPulse = S["StudentPulse"];
+export type AttendancePulse = S["AttendancePulse"];
+export type AttendanceDay = S["AttendanceDay"];
+export type StatusMix = S["StatusMix"];
+export type FeePulse = S["FeePulse"];
+export type ExamPulse = S["ExamPulse"];
 
 // --- Billing ---------------------------------------------------------------
 export type PlanPublic = S["PlanPublic"];
@@ -85,6 +96,9 @@ export type AffectedOrganization = S["AffectedOrganization"];
 export type PlanLimitBreach = S["PlanLimitBreach"];
 export type MetricsResponse = S["MetricsResponse"];
 export type PlatformAuditRead = S["PlatformAuditRead"];
+export type PlatformAnalytics = S["PlatformAnalytics"];
+export type PlanBreakdown = S["PlanBreakdown"];
+export type OrganizationWatch = S["OrganizationWatch"];
 export type ImpersonateRequest = S["ImpersonateRequest"];
 export type ImpersonationGrant = S["ImpersonationGrant"];
 
@@ -136,6 +150,13 @@ export type SubjectKind = S["SubjectKind"];
 export type ClassSubjectRead = S["ClassSubjectRead"];
 export type ClassSubjectCreate = S["ClassSubjectCreate"];
 export type ClassSubjectUpdate = S["ClassSubjectUpdate"];
+
+// --- Diary -----------------------------------------------------------------
+export type DiaryAccess = S["DiaryAccess"];
+export type DiarySectionOption = S["DiarySectionOption"];
+export type DiaryPage = S["DiaryPage"];
+export type DiaryRow = S["DiaryRow"];
+export type DiaryPageWrite = S["DiaryPageWrite"];
 
 // --- Exams -----------------------------------------------------------------
 export type ExamRead = S["ExamRead"];
@@ -278,6 +299,11 @@ export const PERMISSIONS = {
   // whoever records absences must not be the one who can rewrite the record. Same
   // control as `feeVoid` above, applied to the register a truancy referral is built on.
   attendanceAmend: "attendance:amend",
+  // The daily homework diary. `diaryWrite` reaches only the classes and subjects the
+  // holder is assigned to (enforced server-side); `diaryManage` reaches every page.
+  diaryRead: "diary:read",
+  diaryWrite: "diary:write",
+  diaryManage: "diary:manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -342,6 +368,21 @@ export const ORG_STATUS_LABELS: Record<string, string> = {
   over_limit: "Over limit",
   suspended: "Suspended",
   cancelled: "Cancelled",
+};
+
+/** Platform audit actions, as `common/audit.py::PlatformAuditAction` names them. */
+export const PLATFORM_AUDIT_ACTION_LABELS: Record<string, string> = {
+  "platform_admin.logged_in": "Signed in",
+  "platform_admin.login_failed": "Sign-in failed",
+  "platform_admin.logged_out": "Signed out",
+  "platform_admin.refresh_reuse_detected": "Token reuse detected",
+  "platform.organization_suspended": "Organization suspended",
+  "platform.organization_reactivated": "Organization reactivated",
+  "platform.organization_plan_overridden": "Plan overridden",
+  "platform.impersonation_started": "Support view opened",
+  "platform.plan_created": "Plan created",
+  "platform.plan_updated": "Plan updated",
+  "platform.plan_deleted": "Plan retired",
 };
 
 export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {

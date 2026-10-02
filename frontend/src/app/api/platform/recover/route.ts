@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const requested = safePath(request.nextUrl.searchParams.get("next"));
   const next =
-    requested && requested.startsWith("/platform") ? requested : "/platform/organizations";
+    requested && requested.startsWith("/platform") ? requested : "/platform";
 
   const alreadyTried = await isRecovering("platform");
   const tokens = alreadyTried ? null : await refreshSession("platform");
@@ -41,6 +41,6 @@ export async function GET(request: NextRequest) {
   await clearSession("platform");
 
   const login = new URL("/platform/login", request.url);
-  if (next !== "/platform/organizations") login.searchParams.set("next", next);
+  if (next !== "/platform") login.searchParams.set("next", next);
   return NextResponse.redirect(login);
 }

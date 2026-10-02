@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Receipt, Settings2, Wallet } from "lucide-react";
+import { FileText, Receipt, Settings2, Wallet } from "lucide-react";
 
+import { ChallanDesignDialog, type ChallanSchool } from "./challan-design-dialog";
 import { GenerateChallansDialog } from "./generate-challans-dialog";
 import { EmptyState, ErrorState, TableCardSkeleton } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
@@ -54,16 +55,21 @@ export function FeesView({
   canIssue,
   canCollect,
   canManage,
+  canDesignChallan,
+  school,
 }: {
   canIssue: boolean;
   canCollect: boolean;
   canManage: boolean;
+  canDesignChallan: boolean;
+  school: ChallanSchool | null;
 }) {
   const [academicYear, setAcademicYear] = React.useState(currentAcademicYear);
   const [period, setPeriod] = React.useState("");
   const [status, setStatus] = React.useState<string>("all");
   const [page, setPage] = React.useState(1);
   const [generating, setGenerating] = React.useState(false);
+  const [designing, setDesigning] = React.useState(false);
 
   const trimmedPeriod = period.trim();
 
@@ -107,6 +113,12 @@ export function FeesView({
                   <Settings2 className="size-4" aria-hidden />
                   Heads &amp; structures
                 </Link>
+              </Button>
+            ) : null}
+            {canDesignChallan && school ? (
+              <Button variant="outline" onClick={() => setDesigning(true)}>
+                <FileText className="size-4" aria-hidden />
+                Challan design
               </Button>
             ) : null}
             {canIssue ? (
@@ -302,6 +314,10 @@ export function FeesView({
           academicYear={academicYear}
           canCollect={canCollect}
         />
+      ) : null}
+
+      {canDesignChallan ? (
+        <ChallanDesignDialog open={designing} onOpenChange={setDesigning} school={school} />
       ) : null}
     </div>
   );

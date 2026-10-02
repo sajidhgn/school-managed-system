@@ -221,3 +221,103 @@ class PlatformAuditRead(BaseSchema):
     metadata: dict[str, Any] = Field(alias="audit_metadata")
     ip: str | None
     created_at: datetime
+    # Resolved server-side so the log reads as "who did what to whom" rather than
+    # three UUIDs. Null when the actor or organization no longer exists.
+    actor_email: str | None = None
+    target_organization_name: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Dashboard analytics
+# ---------------------------------------------------------------------------
+
+
+class CurrencyMrr(BaseSchema):
+    currency: str
+    mrr: Decimal
+    arr: Decimal
+
+
+class GrowthPoint(BaseSchema):
+    month: str
+    organizations: int
+    schools: int
+
+
+class RevenuePoint(BaseSchema):
+    month: str
+    collected: Decimal
+    succeeded: int
+    failed: int
+
+
+class PlanBreakdown(BaseSchema):
+    plan_id: UUID
+    code: str
+    name: str
+    currency: str
+    subscribers: int
+    paying: int
+    mrr: Decimal
+
+
+class OrganizationWatch(BaseSchema):
+    """One organization on a watch list: trials ending, or payment/limit trouble."""
+
+    organization_id: UUID
+    name: str
+    slug: str
+    plan_name: str | None
+    status: str | None = None
+    at: datetime | None
+
+
+class OrganizationUsageRank(BaseSchema):
+    organization_id: UUID
+    name: str
+    slug: str
+    plan_name: str | None
+    students: int
+    staff: int
+    schools: int
+
+
+class RecentOrganization(BaseSchema):
+    organization_id: UUID
+    name: str
+    slug: str
+    status: str
+    plan_name: str | None
+    created_at: datetime
+
+
+class PlatformAnalytics(BaseSchema):
+    """Everything the operator dashboard draws, in one read.
+
+    Money is per currency (`mrr_by_currency`) and the revenue series is in
+    `revenue_currency` only -- see `platform_admin/analytics.py` for why nothing
+    here sums across currencies.
+    """
+
+    generated_at: datetime
+    organizations_total: int
+    organizations_new_30d: int
+    organizations_new_prev_30d: int
+    organizations_by_status: dict[str, int]
+    subscriptions_by_status: dict[str, int]
+    paying_organizations: int
+    trialing_organizations: int
+    schools_total: int
+    students_total: int
+    staff_total: int
+    mrr_by_currency: list[CurrencyMrr]
+    failed_payments_30d: int
+    churn_rate: float
+    revenue_currency: str
+    growth: list[GrowthPoint]
+    revenue: list[RevenuePoint]
+    plans: list[PlanBreakdown]
+    trials_ending: list[OrganizationWatch]
+    at_risk: list[OrganizationWatch]
+    top_organizations: list[OrganizationUsageRank]
+    recent_organizations: list[RecentOrganization]

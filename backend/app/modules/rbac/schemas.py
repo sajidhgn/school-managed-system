@@ -92,6 +92,20 @@ class RolePermissionsUpdate(BaseSchema):
     codes: list[str] = Field(default_factory=list)
 
 
+class MemberClassAssignment(BaseSchema):
+    """One class a staff member is assigned to, for the staff table.
+
+    `section_name` is set for a class-teacher assignment (a section's register);
+    `subject_name` for a subject taught across the whole grade.
+    """
+
+    class_name: str
+    section_id: UUID | None = None
+    section_name: str | None = None
+    class_subject_id: UUID | None = None
+    subject_name: str | None = None
+
+
 class MemberRead(BaseSchema):
     membership_id: UUID
     user_id: UUID
@@ -105,6 +119,8 @@ class MemberRead(BaseSchema):
     is_primary: bool
     joined_at: datetime | None
     created_at: datetime
+    assigned_classes: list[MemberClassAssignment] = Field(default_factory=list)
+    """Filled by the list endpoint only; single-member responses leave it empty."""
 
 
 class TeacherOption(BaseSchema):
@@ -146,7 +162,8 @@ class MemberBranchAssign(BaseSchema):
 
 
 class MemberUpdate(BaseSchema):
-    """Change a member's role, their status, or both."""
+    """Change a member's name, role, status, or any combination."""
 
+    full_name: str | None = Field(default=None, min_length=1, max_length=200)
     role_id: UUID | None = None
     suspended: bool | None = None

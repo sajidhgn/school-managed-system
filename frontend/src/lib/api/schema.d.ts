@@ -553,6 +553,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analytics
+         * @description Growth, revenue, plan mix and watch lists for the operator dashboard.
+         */
+        get: operations["analytics_api_v1_platform_analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/audit-logs": {
         parameters: {
             query?: never;
@@ -563,6 +583,8 @@ export interface paths {
         /**
          * Platform Audit Logs
          * @description What operators have done, newest first (spec §8).
+         *
+         *     `action` matches a prefix, so `platform.plan_` returns every plan change.
          */
         get: operations["platform_audit_logs_api_v1_platform_audit_logs_get"];
         put?: never;
@@ -1251,7 +1273,7 @@ export interface paths {
         head?: never;
         /**
          * Update Member
-         * @description Change a member's role, suspend, or reactivate (spec §8).
+         * @description Rename a member, change their role, suspend, or reactivate (spec §8).
          *
          *     Two operations behind one PATCH because the members table exposes both as inline
          *     edits on the same row. Each is permission-checked separately: suspending needs
@@ -1325,6 +1347,29 @@ export interface paths {
          * @description Revoke a pending invitation. The token dies immediately; the seat is returned.
          */
         delete: operations["revoke_invitation_api_v1_schools__school_id__invitations__invitation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schools/{school_id}/invitations/{invitation_id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Invitation
+         * @description Delete an invitation outright. A pending one is revoked first (seat returned).
+         *
+         *     Rides on `invitation:revoke`: removing a row from the list is no more power
+         *     than killing its link, and the audit log keeps the record either way.
+         */
+        delete: operations["delete_invitation_api_v1_schools__school_id__invitations__invitation_id__permanent_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1449,6 +1494,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/children/{student_id}/diary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The homework diary of one child's class for a date
+         * @description Same per-child gate as `/children/{student_id}`: 404 for a child this
+         *     guardian may not view.
+         */
+        get: operations["child_diary_api_v1_portal_children__student_id__diary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -1512,6 +1578,29 @@ export interface paths {
          *     permission is renamed.
          */
         get: operations["config_api_v1_search_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Students, attendance, fees and exams at a glance
+         * @description The landing screen's numbers, in one round trip.
+         *
+         *     Sections the caller may not read come back as null. Scoped to the active campus,
+         *     or the whole organization for a principal with no campus open.
+         */
+        get: operations["analytics_api_v1_dashboard_analytics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2424,6 +2513,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diary/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every section, with what the caller may write on its diary
+         * @description The caller's own classes come first: class teacher, then subject teacher.
+         */
+        get: operations["list_sections_api_v1_diary_sections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diary/sections/{section_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One section's diary page for a date */
+        get: operations["get_page_api_v1_diary_sections__section_id__get"];
+        /**
+         * Write homework on a section's diary page
+         * @description Partial: subjects not named are untouched. A blank `content` clears that
+         *     subject. 403 `DIARY_NOT_ASSIGNED` if any named row is not the caller's to write;
+         *     nothing is saved in that case.
+         *
+         *     Guarded on `diary:read` and then on `diary:write` OR `diary:manage` in the
+         *     service: `require()` demands every code it is given, and a coordinator role may
+         *     reasonably hold `manage` without `write`.
+         */
+        put: operations["write_page_api_v1_diary_sections__section_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fees/summary": {
         parameters: {
             query?: never;
@@ -3053,6 +3189,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fees/vouchers/print": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download one printable challan covering several vouchers
+         * @description The term-at-a-time challan: several months, one page, one total.
+         *
+         *     Every voucher keeps its own number, status and receipts -- this combines the
+         *     PRINTING, not the billing. See `FeeService.challan_print_context` for the three
+         *     refusals that keep the page honest, and note the cap: a family billed for more
+         *     months than fit legibly on a shared A4 gets two challans, not an unreadable one.
+         */
+        get: operations["download_combined_challan_pdf_api_v1_fees_vouchers_print_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fees/vouchers/{voucher_id}": {
         parameters: {
             query?: never;
@@ -3079,7 +3240,7 @@ export interface paths {
         };
         /**
          * Download the printable challan
-         * @description One A4 page, three detachable copies (Bank / School / Student).
+         * @description One A4 page carrying the campus's detachable copies (Bank / School / Student).
          *
          *     The voucher is resolved through RLS and the school predicate BEFORE rendering, so
          *     the renderer itself performs no authorization and cannot be handed a foreign row.
@@ -3368,6 +3529,18 @@ export interface components {
             /** Breaches */
             breaches: components["schemas"]["PlanLimitBreach"][];
         };
+        /** AttendanceDay */
+        AttendanceDay: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Rate */
+            rate: number | null;
+            /** Marked */
+            marked: number;
+        };
         /**
          * AttendanceEntryInput
          * @description One student's status on a register.
@@ -3425,6 +3598,17 @@ export interface components {
              * @description Why a SUBMITTED register is being changed. Required for amendments and recorded in the audit trail; ignored while the register is still a draft.
              */
             reason?: string | null;
+        };
+        /** AttendancePulse */
+        AttendancePulse: {
+            today: components["schemas"]["AttendanceToday"];
+            /** Days */
+            days: components["schemas"]["AttendanceDay"][];
+            /** Rate 30D */
+            rate_30d: number | null;
+            /** Rate Prev 30D */
+            rate_prev_30d: number | null;
+            mix_30d: components["schemas"]["StatusMix"];
         };
         /**
          * AttendanceSessionDetail
@@ -3629,6 +3813,16 @@ export interface components {
          * @enum {string}
          */
         AttendanceStatus: "present" | "absent" | "late" | "excused" | "half_day";
+        /** AttendanceToday */
+        AttendanceToday: {
+            /** Sections Total */
+            sections_total: number;
+            /** Sections Submitted */
+            sections_submitted: number;
+            mix: components["schemas"]["StatusMix"];
+            /** Rate */
+            rate: number | null;
+        };
         /**
          * AuditLogRead
          * @description One audit entry.
@@ -3837,6 +4031,94 @@ export interface components {
              */
             contact_line?: string;
         };
+        /**
+         * ChallanDesignConfig
+         * @description A campus's printed fee challan -- the office's layout decisions.
+         *
+         *     Same contract as `CardDesignConfig`: every field defaults to how the challan
+         *     rendered before this feature existed, so a NULL `challan_design` and an empty
+         *     `{}` both mean "the standard challan" and saved designs stay valid as knobs are
+         *     added. Closed toggles, not free layout -- the renderer owns ONE audited grid,
+         *     and an office cannot express a challan that loses the amount or the due date.
+         */
+        ChallanDesignConfig: {
+            /**
+             * Copies
+             * @default [
+             *       "bank",
+             *       "school",
+             *       "student"
+             *     ]
+             */
+            copies?: ("bank" | "school" | "student")[];
+            /** Payment Accounts */
+            payment_accounts?: components["schemas"]["ChallanPaymentAccount"][];
+            /**
+             * Show Admission Number
+             * @default true
+             */
+            show_admission_number?: boolean;
+            /**
+             * Show Roll Number
+             * @default true
+             */
+            show_roll_number?: boolean;
+            /**
+             * Show Father Name
+             * @default true
+             */
+            show_father_name?: boolean;
+            /**
+             * Show Contact
+             * @default true
+             */
+            show_contact?: boolean;
+            /**
+             * Show Amount In Words
+             * @default true
+             */
+            show_amount_in_words?: boolean;
+            /**
+             * Show Signature Block
+             * @default true
+             */
+            show_signature_block?: boolean;
+            /**
+             * Footer Note
+             * @default
+             */
+            footer_note?: string;
+        };
+        /**
+         * ChallanPaymentAccount
+         * @description One "pay us here" line printed across the head of every fee challan.
+         *
+         *     A list rather than two fixed fields because a campus collects through whatever
+         *     it has arranged -- a bank account, an Easypaisa wallet, a second branch for the
+         *     afternoon shift -- and the count changes between schools and between terms. The
+         *     holder's name is separate from the number because that is the pair a bank
+         *     counter checks: a transfer to the right number under the wrong title bounces,
+         *     and a parent reading one string cannot tell which half was mistyped.
+         */
+        ChallanPaymentAccount: {
+            /**
+             * Label
+             * @example Easypaisa
+             * @example Meezan Bank
+             */
+            label: string;
+            /**
+             * Number
+             * @example 0324-6797307
+             */
+            number: string;
+            /**
+             * Holder
+             * @default
+             * @example M. Imtiaz
+             */
+            holder?: string;
+        };
         /** ClassCreate */
         ClassCreate: {
             /**
@@ -3850,6 +4132,15 @@ export interface components {
              * @example 10
              */
             level: number;
+        };
+        /** ClassHeadcount */
+        ClassHeadcount: {
+            /** Class Name */
+            class_name: string;
+            /** Level */
+            level: number;
+            /** Count */
+            count: number;
         };
         /** ClassRead */
         ClassRead: {
@@ -3992,6 +4283,15 @@ export interface components {
              */
             membership_id: string;
         };
+        /** CurrencyMrr */
+        CurrencyMrr: {
+            /** Currency */
+            currency: string;
+            /** Mrr */
+            mrr: string;
+            /** Arr */
+            arr: string;
+        };
         /** DailyOverview */
         DailyOverview: {
             /**
@@ -4007,6 +4307,130 @@ export interface components {
             sections_submitted: number;
             /** Sections Not Started */
             sections_not_started: number;
+        };
+        /** DashboardAnalytics */
+        DashboardAnalytics: {
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            students: components["schemas"]["StudentPulse"] | null;
+            attendance: components["schemas"]["AttendancePulse"] | null;
+            fees: components["schemas"]["FeePulse"] | null;
+            exams: components["schemas"]["ExamPulse"] | null;
+        };
+        /**
+         * DiaryAccess
+         * @description Why the caller sees a section in their diary list, strongest first.
+         * @enum {string}
+         */
+        DiaryAccess: "class_teacher" | "subject_teacher" | "manage" | "read";
+        /** DiaryEntryInput */
+        DiaryEntryInput: {
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+            /** Content */
+            content: string;
+        };
+        /** DiaryPage */
+        DiaryPage: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Class Teacher Name */
+            class_teacher_name: string | null;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Rows */
+            rows: components["schemas"]["DiaryRow"][];
+            /** Can Edit */
+            can_edit: boolean;
+        };
+        /**
+         * DiaryPageWrite
+         * @description The rows the caller changed. Subjects not named are left as they are, so two
+         *     subject teachers saving the same page at once never overwrite each other.
+         */
+        DiaryPageWrite: {
+            /** Entries */
+            entries: components["schemas"]["DiaryEntryInput"][];
+        };
+        /** DiaryRow */
+        DiaryRow: {
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+            /** Subject Code */
+            subject_code: string;
+            /** Subject Name */
+            subject_name: string;
+            /** Teacher Id */
+            teacher_id: string | null;
+            /** Teacher Name */
+            teacher_name: string | null;
+            /** Content */
+            content: string | null;
+            /** Written By Name */
+            written_by_name: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+        };
+        /**
+         * DiarySectionOption
+         * @description One section in the diary picker.
+         */
+        DiarySectionOption: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Class Level */
+            class_level: number;
+            /** Class Teacher Name */
+            class_teacher_name: string | null;
+            access: components["schemas"]["DiaryAccess"];
+            /**
+             * Filled Count
+             * @default 0
+             */
+            filled_count?: number;
+            /**
+             * Subject Count
+             * @default 0
+             */
+            subject_count?: number;
         };
         /**
          * EnrollmentBackfillResult
@@ -4228,6 +4652,15 @@ export interface components {
             max_marks?: number | null;
             /** Pass Marks */
             pass_marks?: number | null;
+        };
+        /** ExamPulse */
+        ExamPulse: {
+            /** Exam Name */
+            exam_name: string;
+            /** Exam Status */
+            exam_status: string;
+            /** Subjects */
+            subjects: components["schemas"]["SubjectScore"][];
         };
         /** ExamRead */
         ExamRead: {
@@ -4686,6 +5119,25 @@ export interface components {
          * @enum {string}
          */
         FeePaymentStatus: "recorded" | "reversed";
+        /** FeePulse */
+        FeePulse: {
+            /** Academic Year */
+            academic_year: string | null;
+            /** Currency */
+            currency: string;
+            /** Billed */
+            billed: string;
+            /** Collected */
+            collected: string;
+            /** Outstanding */
+            outstanding: string;
+            /** Overdue */
+            overdue: string;
+            /** Collection Rate */
+            collection_rate: number | null;
+            /** Months */
+            months: components["schemas"]["MonthCollection"][];
+        };
         /**
          * FeeRecurrence
          * @description How often a head is normally charged.
@@ -5099,6 +5551,22 @@ export interface components {
          * @enum {string}
          */
         Gender: "male" | "female" | "other";
+        /** GenderSlice */
+        GenderSlice: {
+            /** Gender */
+            gender: string;
+            /** Count */
+            count: number;
+        };
+        /** GrowthPoint */
+        GrowthPoint: {
+            /** Month */
+            month: string;
+            /** Organizations */
+            organizations: number;
+            /** Schools */
+            schools: number;
+        };
         /**
          * GuardianChildRead
          * @description One child, as the parent portal shows them.
@@ -6099,6 +6567,18 @@ export interface components {
             role_code: string | null;
             /** Permissions */
             permissions: string[];
+            /**
+             * Read Only
+             * @default false
+             */
+            read_only?: boolean;
+            /**
+             * Trial Expired
+             * @default false
+             */
+            trial_expired?: boolean;
+            /** Scheduled Deletion At */
+            scheduled_deletion_at?: string | null;
         };
         /**
          * MemberBranchAssign
@@ -6107,6 +6587,25 @@ export interface components {
         MemberBranchAssign: {
             /** School Ids */
             school_ids: string[];
+        };
+        /**
+         * MemberClassAssignment
+         * @description One class a staff member is assigned to, for the staff table.
+         *
+         *     `section_name` is set for a class-teacher assignment (a section's register);
+         *     `subject_name` for a subject taught across the whole grade.
+         */
+        MemberClassAssignment: {
+            /** Class Name */
+            class_name: string;
+            /** Section Id */
+            section_id?: string | null;
+            /** Section Name */
+            section_name?: string | null;
+            /** Class Subject Id */
+            class_subject_id?: string | null;
+            /** Subject Name */
+            subject_name?: string | null;
         };
         /**
          * MemberCreate
@@ -6166,12 +6665,16 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Assigned Classes */
+            assigned_classes?: components["schemas"]["MemberClassAssignment"][];
         };
         /**
          * MemberUpdate
-         * @description Change a member's role, their status, or both.
+         * @description Change a member's name, role, status, or any combination.
          */
         MemberUpdate: {
+            /** Full Name */
+            full_name?: string | null;
             /** Role Id */
             role_id?: string | null;
             /** Suspended */
@@ -6239,6 +6742,13 @@ export interface components {
             failed_payments_30d: number;
             /** Churn Rate */
             churn_rate: number;
+        };
+        /** MonthCollection */
+        MonthCollection: {
+            /** Month */
+            month: string;
+            /** Collected */
+            collected: string;
         };
         /** OrganizationDetail */
         OrganizationDetail: {
@@ -6414,6 +6924,47 @@ export interface components {
             logo_url?: string | null;
             /** Theme Colors */
             theme_colors?: string[] | null;
+        };
+        /** OrganizationUsageRank */
+        OrganizationUsageRank: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Students */
+            students: number;
+            /** Staff */
+            staff: number;
+            /** Schools */
+            schools: number;
+        };
+        /**
+         * OrganizationWatch
+         * @description One organization on a watch list: trials ending, or payment/limit trouble.
+         */
+        OrganizationWatch: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Status */
+            status?: string | null;
+            /** At */
+            at: string | null;
         };
         /** OtpRequest */
         OtpRequest: {
@@ -6675,6 +7226,26 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PlanBreakdown */
+        PlanBreakdown: {
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Currency */
+            currency: string;
+            /** Subscribers */
+            subscribers: number;
+            /** Paying */
+            paying: number;
+            /** Mrr */
+            mrr: string;
+        };
         /**
          * PlanImpactRequest
          * @description Proposed limits, for a dry run before saving (spec-adjacent, §6.2's spirit).
@@ -6886,6 +7457,67 @@ export interface components {
             /** Last Login At */
             last_login_at: string | null;
         };
+        /**
+         * PlatformAnalytics
+         * @description Everything the operator dashboard draws, in one read.
+         *
+         *     Money is per currency (`mrr_by_currency`) and the revenue series is in
+         *     `revenue_currency` only -- see `platform_admin/analytics.py` for why nothing
+         *     here sums across currencies.
+         */
+        PlatformAnalytics: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Organizations Total */
+            organizations_total: number;
+            /** Organizations New 30D */
+            organizations_new_30d: number;
+            /** Organizations New Prev 30D */
+            organizations_new_prev_30d: number;
+            /** Organizations By Status */
+            organizations_by_status: {
+                [key: string]: number;
+            };
+            /** Subscriptions By Status */
+            subscriptions_by_status: {
+                [key: string]: number;
+            };
+            /** Paying Organizations */
+            paying_organizations: number;
+            /** Trialing Organizations */
+            trialing_organizations: number;
+            /** Schools Total */
+            schools_total: number;
+            /** Students Total */
+            students_total: number;
+            /** Staff Total */
+            staff_total: number;
+            /** Mrr By Currency */
+            mrr_by_currency: components["schemas"]["CurrencyMrr"][];
+            /** Failed Payments 30D */
+            failed_payments_30d: number;
+            /** Churn Rate */
+            churn_rate: number;
+            /** Revenue Currency */
+            revenue_currency: string;
+            /** Growth */
+            growth: components["schemas"]["GrowthPoint"][];
+            /** Revenue */
+            revenue: components["schemas"]["RevenuePoint"][];
+            /** Plans */
+            plans: components["schemas"]["PlanBreakdown"][];
+            /** Trials Ending */
+            trials_ending: components["schemas"]["OrganizationWatch"][];
+            /** At Risk */
+            at_risk: components["schemas"]["OrganizationWatch"][];
+            /** Top Organizations */
+            top_organizations: components["schemas"]["OrganizationUsageRank"][];
+            /** Recent Organizations */
+            recent_organizations: components["schemas"]["RecentOrganization"][];
+        };
         /** PlatformAuditRead */
         PlatformAuditRead: {
             /**
@@ -6914,6 +7546,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Actor Email */
+            actor_email?: string | null;
+            /** Target Organization Name */
+            target_organization_name?: string | null;
         };
         /** PlatformLoginRequest */
         PlatformLoginRequest: {
@@ -7008,6 +7644,27 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** RecentOrganization */
+        RecentOrganization: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            /** Plan Name */
+            plan_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /**
          * RegisterRequest
          * @description Self-service signup: creates the person AND their organization (spec §4.3B).
@@ -7094,6 +7751,17 @@ export interface components {
             marks_obtained: string | null;
             /** Is Absent */
             is_absent: boolean;
+        };
+        /** RevenuePoint */
+        RevenuePoint: {
+            /** Month */
+            month: string;
+            /** Collected */
+            collected: string;
+            /** Succeeded */
+            succeeded: number;
+            /** Failed */
+            failed: number;
         };
         /** RoleCreate */
         RoleCreate: {
@@ -7222,6 +7890,8 @@ export interface components {
             address?: string | null;
             /** City */
             city?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
             /**
              * Academic Year Start Month
              * @default 4
@@ -7269,6 +7939,7 @@ export interface components {
             /** Theme Colors */
             theme_colors: string[] | null;
             card_design: components["schemas"]["CardDesignConfig"] | null;
+            challan_design: components["schemas"]["ChallanDesignConfig"] | null;
             /** Academic Year Start Month */
             academic_year_start_month: number;
             /** Timezone */
@@ -7300,6 +7971,7 @@ export interface components {
             /** Theme Colors */
             theme_colors?: string[] | null;
             card_design?: components["schemas"]["CardDesignConfig"] | null;
+            challan_design?: components["schemas"]["ChallanDesignConfig"] | null;
             /** Academic Year Start Month */
             academic_year_start_month?: number | null;
             /** Timezone */
@@ -7794,6 +8466,34 @@ export interface components {
          * @enum {string}
          */
         StationeryUnit: "piece" | "dozen" | "pack" | "set" | "pair" | "ream";
+        /** StatusMix */
+        StatusMix: {
+            /**
+             * Present
+             * @default 0
+             */
+            present?: number;
+            /**
+             * Late
+             * @default 0
+             */
+            late?: number;
+            /**
+             * Absent
+             * @default 0
+             */
+            absent?: number;
+            /**
+             * Excused
+             * @default 0
+             */
+            excused?: number;
+            /**
+             * Half Day
+             * @default 0
+             */
+            half_day?: number;
+        };
         /**
          * StudentAdmissionRequest
          * @description Public admissions form payload (PDF: "Digital Admissions Form").
@@ -8295,6 +8995,21 @@ export interface components {
             /** Entered */
             entered: boolean;
         };
+        /** StudentPulse */
+        StudentPulse: {
+            /** Active */
+            active: number;
+            /** Pending */
+            pending: number;
+            /** Joined Last 30 Days */
+            joined_last_30_days: number;
+            /** Gender */
+            gender: components["schemas"]["GenderSlice"][];
+            /** By Class */
+            by_class: components["schemas"]["ClassHeadcount"][];
+            /** Unplaced */
+            unplaced: number;
+        };
         /** StudentRead */
         StudentRead: {
             /**
@@ -8440,6 +9155,17 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** SubjectScore */
+        SubjectScore: {
+            /** Subject */
+            subject: string;
+            /** Average Pct */
+            average_pct: number;
+            /** Pass Rate */
+            pass_rate: number | null;
+            /** Sat */
+            sat: number;
         };
         /** SubjectUpdate */
         SubjectUpdate: {
@@ -10223,9 +10949,59 @@ export interface operations {
             };
         };
     };
+    analytics_api_v1_platform_analytics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAnalytics"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     platform_audit_logs_api_v1_platform_audit_logs_get: {
         parameters: {
             query?: {
+                action?: string | null;
+                organization_id?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -12434,6 +13210,55 @@ export interface operations {
             };
         };
     };
+    delete_invitation_api_v1_schools__school_id__invitations__invitation_id__permanent_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                school_id: string;
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_audit_logs_api_v1_schools__school_id__audit_logs_get: {
         parameters: {
             query?: {
@@ -12683,6 +13508,59 @@ export interface operations {
             };
         };
     };
+    child_diary_api_v1_portal_children__student_id__diary_get: {
+        parameters: {
+            query?: {
+                /** @description Defaults to today. */
+                date?: string | null;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     search_api_v1_search_get: {
         parameters: {
             query?: {
@@ -12804,6 +13682,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchConfigResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    analytics_api_v1_dashboard_analytics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardAnalytics"];
                 };
             };
             /** @description Bad Request */
@@ -16678,6 +17604,167 @@ export interface operations {
             };
         };
     };
+    list_sections_api_v1_diary_sections_get: {
+        parameters: {
+            query?: {
+                /** @description The diary's day. Defaults to today. */
+                date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiarySectionOption"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_page_api_v1_diary_sections__section_id__get: {
+        parameters: {
+            query?: {
+                /** @description The diary's day. Defaults to today. */
+                date?: string | null;
+            };
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    write_page_api_v1_diary_sections__section_id__put: {
+        parameters: {
+            query?: {
+                /** @description The diary's day. Defaults to today. */
+                date?: string | null;
+            };
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiaryPageWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     fee_summary_api_v1_fees_summary_get: {
         parameters: {
             query: {
@@ -18782,6 +19869,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeePaymentRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    download_combined_challan_pdf_api_v1_fees_vouchers_print_get: {
+        parameters: {
+            query: {
+                /** @description Vouchers to print on one challan. All must bill the same student. */
+                ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Bad Request */

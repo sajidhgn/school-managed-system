@@ -63,6 +63,7 @@ from app.modules.auth.schemas import (
     VerifyEmailRequest,
 )
 from app.modules.auth.service import AuthService, IssuedTokens
+from app.modules.billing.trial_retention import trial_deletion_date
 from app.modules.rbac.models import Membership
 from app.modules.tenancy.models import Organization, School
 
@@ -544,6 +545,13 @@ async def me(ctx: CurrentAuth, session: DbSession, settings: SettingsDep) -> MeR
         )
     ).scalar_one_or_none()
 
+    permissions = sorted(ctx.permissions)
+    read_only = ctx.organization_status == "suspended"
+    scheduled_deletion_at = None
+    if read_only:
+        permissions = [code for code in permissions if _usable_while_read_only(code)]
+        scheduled_deletion_at = await trial_deletion_date(session, ctx.organization_id, settings)
+
     return MeResponse(
         user_id=user.id,
         email=user.email,
@@ -558,8 +566,27 @@ async def me(ctx: CurrentAuth, session: DbSession, settings: SettingsDep) -> MeR
         school_id=ctx.school_id,
         school_name=membership.school.name if membership and membership.school else None,
         role_code=ctx.role_code,
-        permissions=sorted(ctx.permissions),
+        permissions=permissions,
+        read_only=read_only,
+        trial_expired=scheduled_deletion_at is not None,
+        scheduled_deletion_at=scheduled_deletion_at,
     )
+
+
+# Writes a suspended organization may still make. `billing:manage` is the only one:
+# choosing a plan is how a read-only account stops being read-only.
+_READ_ONLY_WRITES = frozenset({"billing:manage", "invoice:download"})
+
+
+def _usable_while_read_only(code: str) -> bool:
+    """Whether a permission still does anything for a suspended organization.
+
+    Narrowing `/auth/me` is what hides every create/edit/delete control in every
+    module at once: the UI already gates each one on `can(user, "...")`. The server
+    refuses the writes regardless (`require()` in api/deps.py); this only stops the
+    interface offering buttons that would fail.
+    """
+    return code.endswith(":read") or code in _READ_ONLY_WRITES
 
 
 def _attach_body_tokens(response: Response, tokens: IssuedTokens, settings: Settings) -> None:

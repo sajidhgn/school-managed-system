@@ -151,6 +151,12 @@ class MeResponse(BaseSchema):
     school_name: str | None
     role_code: str | None
     permissions: list[str]
+    read_only: bool = False
+    """The organization is suspended: `permissions` has been narrowed to reads (plus
+    `billing:manage`, the way out), so every create/edit/delete control hides."""
+    trial_expired: bool = False
+    scheduled_deletion_at: datetime | None = None
+    """When an expired trial will be permanently deleted, for the upgrade banner."""
 
 
 # ---------------------------------------------------------------------------

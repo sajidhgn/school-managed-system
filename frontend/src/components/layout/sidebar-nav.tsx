@@ -10,6 +10,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Layers,
+  NotebookPen,
   Receipt,
   ScrollText,
   Settings,
@@ -144,6 +145,13 @@ export function SidebarNav({
           // `attendance:read` alone, not `attendance:mark`: a head of year who
           // chases missing registers without ever marking one still needs the board.
           anyOf: [PERMISSIONS.attendanceRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/diary",
+          label: t.nav.diary,
+          icon: NotebookPen,
+          anyOf: [PERMISSIONS.diaryRead],
           requiresSchool: true,
         },
         {

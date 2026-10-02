@@ -356,6 +356,35 @@ class InvitationService:
         )
         return invitation
 
+    async def delete(self, *, ctx: AuthContext, invitation_id: UUID) -> None:
+        """Remove an invitation from the list for good, whatever its status.
+
+        A still-pending invitation is revoked on the way out -- its seat is
+        released exactly as `revoke` would, so deleting is never a way to leak a
+        staff seat. Accepted invitations can go too: the membership they created
+        lives on its own row and is untouched. The audit trail keeps who was
+        invited and when, so nothing an auditor needs disappears with the row.
+        """
+        invitation = await self._get(invitation_id, ctx)
+        if invitation.status is InvitationStatus.PENDING:
+            # Status still says pending until the sweep runs, even past
+            # `expires_at` -- and until then the seat is still held.
+            await self.entitlements.release(ctx.organization_id, "max_staff")
+
+        await record_audit(
+            self.session,
+            organization_id=ctx.organization_id,
+            school_id=invitation.school_id,
+            action=AuditAction.INVITATION_DELETED,
+            actor_user_id=ctx.user_id,
+            actor_membership_id=ctx.membership_id,
+            entity_type="invitation",
+            entity_id=invitation.id,
+            before={"email": invitation.email, "status": str(invitation.status)},
+        )
+        await self.session.delete(invitation)
+        await self.session.flush()
+
     async def list_for_school(self, school_id: UUID) -> list[Invitation]:
         rows = await self.session.execute(
             select(Invitation)

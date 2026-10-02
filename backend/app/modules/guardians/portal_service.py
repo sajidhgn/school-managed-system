@@ -23,6 +23,7 @@ INTERACTIONS
 
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import select
@@ -31,6 +32,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import GuardianContext
 from app.core.config import Settings, get_settings
 from app.core.exceptions import NotFoundError
+from app.modules.diary.schemas import DiaryPage
+from app.modules.diary.service import DiaryService
 from app.modules.guardians.models import Guardian, GuardianIdentity, GuardianStudent
 from app.modules.guardians.repository import GuardianStudentRepository
 from app.modules.guardians.schemas import GuardianChildRead, GuardianProfile
@@ -104,6 +107,23 @@ class GuardianPortalService:
                 school = await self.session.get(School, link.school_id)
                 return self._project(link, school.name if school else "School")
         raise NotFoundError("Child not found.")
+
+    async def child_diary(
+        self, ctx: GuardianContext, student_id: str, entry_date: date
+    ) -> DiaryPage:
+        """The diary page of the section this child sits in, read-only.
+
+        The child is resolved through `child()` -- the same link filter, not a
+        second authorisation path. A child with no section has no diary; that is a
+        404 rather than an empty page, because an empty page would read as "no
+        homework today", which is a different and wrong answer.
+        """
+        child = await self.child(ctx, student_id)
+        if child.section_id is None:
+            raise NotFoundError("This child is not placed in a class yet.")
+        return await DiaryService(self.session).page(
+            child.section_id, entry_date, user_id=None, may_write=False, may_manage=False
+        )
 
     # -- internals ----------------------------------------------------------
 
