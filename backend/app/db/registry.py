@@ -76,6 +76,9 @@ from app.modules.students import models as student_models
 # --- Tenancy: organizations (the RLS key) and schools -----------------------
 from app.modules.tenancy import models as tenancy_models
 
+# --- WhatsApp: class parents' groups, the monthly fee notice, the outbox ----
+from app.modules.whatsapp import models as whatsapp_models
+
 __all__ = [
     "Base",
     "academics_models",
@@ -90,4 +93,5 @@ __all__ = [
     "rbac_models",
     "student_models",
     "tenancy_models",
+    "whatsapp_models",
 ]

@@ -36,6 +36,14 @@ dependencies = [
     "reportlab>=4.4.0",
 ]
 
+[project.optional-dependencies]
+# Desktop-only: drives WhatsApp Web through the browser with simulated keystrokes,
+# so it needs a display and a logged-in session. Installed on the machine that runs
+# `python -m app.cli send-whatsapp`, never in the API image.
+whatsapp = [
+    "pywhatkit>=5.4",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.4.0",

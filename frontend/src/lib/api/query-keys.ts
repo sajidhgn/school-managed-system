@@ -70,6 +70,15 @@ export const queryKeys = {
     page: (sectionId: string, date: string) => ["diary", "page", sectionId, date] as const,
   },
 
+  whatsapp: {
+    all: ["whatsapp"] as const,
+    groups: ["whatsapp", "groups"] as const,
+    settings: ["whatsapp", "settings"] as const,
+    preview: (period: string) => ["whatsapp", "preview", period] as const,
+    messages: (params: PageParams & { status?: string }) =>
+      ["whatsapp", "messages", params] as const,
+  },
+
   attendance: {
     all: ["attendance"] as const,
     // The date is part of the key so yesterday's overview stays cached while today's

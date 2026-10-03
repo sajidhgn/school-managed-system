@@ -224,6 +224,16 @@ class AuditAction:
     # Monday?" under five lines for one click of Save.
     DIARY_UPDATED = "diary.updated"
 
+    # --- WhatsApp class groups ----------------------------------------------
+    # Sends are audited per BATCH (one row per "send to these 12 groups"), not per
+    # group: the outbox already holds every message individually.
+    WHATSAPP_GROUP_CREATED = "whatsapp_group.created"
+    WHATSAPP_GROUP_UPDATED = "whatsapp_group.updated"
+    WHATSAPP_GROUP_DELETED = "whatsapp_group.deleted"
+    WHATSAPP_SETTINGS_SET = "whatsapp_settings.set"
+    WHATSAPP_FEE_NOTICE_QUEUED = "whatsapp_fee_notice.queued"
+    WHATSAPP_MESSAGE_QUEUED = "whatsapp_message.queued"
+
     # --- Per-student fee arrangements ---------------------------------------
     #
     # `entity_type` is `student` rather than `student_fee_assignment`, deliberately:

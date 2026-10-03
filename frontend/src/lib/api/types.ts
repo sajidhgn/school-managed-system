@@ -158,6 +158,18 @@ export type DiaryPage = S["DiaryPage"];
 export type DiaryRow = S["DiaryRow"];
 export type DiaryPageWrite = S["DiaryPageWrite"];
 
+// --- WhatsApp class groups --------------------------------------------------
+export type WhatsAppGroupRead = S["WhatsAppGroupRead"];
+export type WhatsAppGroupWrite = S["WhatsAppGroupWrite"];
+export type WhatsAppSettingsRead = S["WhatsAppSettingsRead"];
+export type WhatsAppSettingsWrite = S["WhatsAppSettingsWrite"];
+export type WhatsAppMessageRead = S["WhatsAppMessageRead"];
+export type WhatsAppMessageStatus = S["WhatsAppMessageStatus"];
+export type FeeNoticePreview = S["FeeNoticePreview"];
+export type FeeNoticeQueueRequest = S["FeeNoticeQueueRequest"];
+export type CustomMessageRequest = S["CustomMessageRequest"];
+export type QueueResult = S["QueueResult"];
+
 // --- Exams -----------------------------------------------------------------
 export type ExamRead = S["ExamRead"];
 export type ExamCreate = S["ExamCreate"];
@@ -304,6 +316,11 @@ export const PERMISSIONS = {
   diaryRead: "diary:read",
   diaryWrite: "diary:write",
   diaryManage: "diary:manage",
+  // Class WhatsApp groups. `whatsappSend` posts; `whatsappManage` links groups and
+  // configures the monthly fee notice.
+  whatsappRead: "whatsapp:read",
+  whatsappSend: "whatsapp:send",
+  whatsappManage: "whatsapp:manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -180,6 +180,24 @@ class Settings(BaseSettings):
     new class in `common/sms/sender.py`; nothing else changes."""
     SMS_SENDER_ID: str = "EduCloud"
 
+    # --- WhatsApp class groups ----------------------------------------------
+    WHATSAPP_BACKEND: Literal["console", "null", "pywhatkit"] = "console"
+    """Which transport drains the WhatsApp outbox (`python -m app.cli send-whatsapp`).
+
+    `console` logs each message and marks it sent; `null` marks it sent and logs
+    nothing. `pywhatkit` really posts: it drives WhatsApp Web in a browser on a
+    DESKTOP where the school's number is logged in, typing into the group by
+    simulated keystrokes. It cannot run in the API container or any headless
+    server -- the API only ever QUEUES, and the dispatcher runs on that desktop.
+    Install it there with `uv sync --extra whatsapp`."""
+    WHATSAPP_PYWHATKIT_WAIT_SECONDS: int = 20
+    """How long pywhatkit waits for WhatsApp Web to open the group before typing.
+    Too short and the text is typed into nothing; raise it on a slow connection."""
+    WHATSAPP_DISPATCH_BATCH: int = 50
+    """Most messages one `send-whatsapp` pass sends. pywhatkit takes ~30s a message
+    and WhatsApp throttles numbers that post in bursts, so the outbox is drained in
+    bounded passes rather than all at once."""
+
     # --- Payments (spec §6.4) ----------------------------------------------
     # `mock` is an in-process adapter that approves everything -- correct for
     # development and tests, catastrophic in production, which

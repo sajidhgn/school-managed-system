@@ -7,7 +7,7 @@
 # same thing.
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo seed-superadmin verify-user reconcile maintenance reconcile-ledger mfa-enroll openapi db-reset db-tunnel db-tunnel-stop db-tunnel-status
+.PHONY: help install dev test test-cov lint format typecheck check migrate migration downgrade docker-up docker-down clean seed seed-demo seed-superadmin verify-user reconcile maintenance send-whatsapp reconcile-ledger mfa-enroll openapi db-reset db-tunnel db-tunnel-stop db-tunnel-status
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -118,6 +118,9 @@ reconcile: db-tunnel  ## Recompute organization usage counters from source table
 
 maintenance: db-tunnel  ## Daily pass: billing lifecycle, retention, scheduled challan generation, late fees
 	uv run python -m app.cli run-maintenance
+
+send-whatsapp: db-tunnel  ## Post queued WhatsApp group messages (pywhatkit: run on the logged-in desktop)
+	uv run python -m app.cli send-whatsapp
 
 reconcile-ledger: db-tunnel  ## Report students whose fee ledger disagrees with their vouchers
 	uv run python -m app.cli reconcile-ledger

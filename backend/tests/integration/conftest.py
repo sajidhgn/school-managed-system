@@ -89,6 +89,10 @@ _APP_TABLES = (
     "student_enrollments",
     # Before `subjects` (RESTRICT) and `classes` (CASCADE).
     "class_subjects",
+    # WhatsApp: groups reference classes/sections, the outbox references groups.
+    "whatsapp_messages",
+    "whatsapp_groups",
+    "whatsapp_settings",
     # Fees: `fee_vouchers.student_id` is ON DELETE RESTRICT, so these must go
     # before `students` even though TRUNCATE ... CASCADE would otherwise sort it out.
     #

@@ -10,6 +10,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Layers,
+  MessageCircle,
   NotebookPen,
   Receipt,
   ScrollText,
@@ -182,6 +183,13 @@ export function SidebarNav({
           label: t.nav.fees,
           icon: Receipt,
           anyOf: [PERMISSIONS.feeRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/whatsapp",
+          label: t.nav.whatsapp,
+          icon: MessageCircle,
+          anyOf: [PERMISSIONS.whatsappRead],
           requiresSchool: true,
         },
         {

@@ -8358,6 +8358,539 @@
         }
       }
     },
+    "/api/v1/whatsapp/groups": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Linked class groups",
+        "operationId": "list_groups_api_v1_whatsapp_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WhatsAppGroupRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Groups Api V1 Whatsapp Groups Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Link a WhatsApp group to a class",
+        "operationId": "create_group_api_v1_whatsapp_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppGroupWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppGroupRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/groups/{group_id}": {
+      "put": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Edit a linked group",
+        "operationId": "update_group_api_v1_whatsapp_groups__group_id__put",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppGroupWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppGroupRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Unlink a group; its queued messages are dropped",
+        "operationId": "delete_group_api_v1_whatsapp_groups__group_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/settings": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Monthly fee notice settings",
+        "operationId": "get_settings_api_v1_whatsapp_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppSettingsRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Configure the fee notice",
+        "operationId": "put_settings_api_v1_whatsapp_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppSettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppSettingsRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/fee-notices/preview": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "What each group would receive for a month, without queuing",
+        "operationId": "preview_fee_notices_api_v1_whatsapp_fee_notices_preview_get",
+        "parameters": [
+          {
+            "name": "period_label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Period Label"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FeeNoticePreview"
+                  },
+                  "title": "Response Preview Fee Notices Api V1 Whatsapp Fee Notices Preview Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/fee-notices": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Queue the month's fee notice now (once per group per month)",
+        "operationId": "queue_fee_notices_api_v1_whatsapp_fee_notices_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeeNoticeQueueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/messages": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Queue a custom message to chosen groups",
+        "operationId": "queue_custom_api_v1_whatsapp_messages_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "The outbox, newest first",
+        "operationId": "list_messages_api_v1_whatsapp_messages_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WhatsAppMessageStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_WhatsAppMessageRead_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/messages/{message_id}/retry": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Put a failed message back in the queue",
+        "operationId": "retry_message_api_v1_whatsapp_messages__message_id__retry_post",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/messages/{message_id}": {
+      "delete": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Cancel a message that has not been sent",
+        "operationId": "cancel_message_api_v1_whatsapp_messages__message_id__delete",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/fees/summary": {
       "get": {
         "tags": [
@@ -12999,6 +13532,36 @@
         ],
         "title": "CurrencyMrr"
       },
+      "CustomMessageRequest": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "group_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "CustomMessageRequest"
+      },
       "DailyOverview": {
         "properties": {
           "session_date": {
@@ -14735,6 +15298,83 @@
         ],
         "title": "FeeLineType",
         "description": "What a structure line or a challan line is pricing.\n\nTHE DISCRIMINATOR. A FEE line names a `fee_head` and carries a flat amount; a\nSTATIONERY line names a `stationery_item` and carries a quantity times a unit\nprice. The CHECK constraints on both item tables are written against this column,\nso a line can never claim to be one kind while pointing at the other.\n\nDefaulted to FEE everywhere, which is what makes the migration that introduced\nstationery a pure addition: every row that existed before it is a fee line, and\nreads it as one without a backfill."
+      },
+      "FeeNoticePreview": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Group Id"
+          },
+          "group_name": {
+            "type": "string",
+            "title": "Group Name"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "group_name",
+          "body",
+          "reason"
+        ],
+        "title": "FeeNoticePreview"
+      },
+      "FeeNoticeQueueRequest": {
+        "properties": {
+          "period_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Label"
+          },
+          "group_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Ids"
+          }
+        },
+        "type": "object",
+        "title": "FeeNoticeQueueRequest",
+        "description": "Queue this month's fee notice now, instead of waiting for the send day."
       },
       "FeePaymentCreate": {
         "properties": {
@@ -19719,6 +20359,26 @@
         ],
         "title": "Page[SubjectRead]"
       },
+      "Page_WhatsAppMessageRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WhatsAppMessageRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[WhatsAppMessageRead]"
+      },
       "PaperMarksRead": {
         "properties": {
           "paper": {
@@ -21012,6 +21672,26 @@
         ],
         "title": "PromotionSkip",
         "description": "One student the promotion could not move, and why.\n\nReturned rather than raised. A promotion is a bulk action over a whole section,\nand aborting the entire run because one student is already seated in the target\nwould make the feature unusable exactly when it is retried after a partial\nfailure."
+      },
+      "QueueResult": {
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "title": "Queued"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/FeeNoticePreview"
+            },
+            "type": "array",
+            "title": "Skipped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "queued"
+        ],
+        "title": "QueueResult"
       },
       "RecentOrganization": {
         "properties": {
@@ -25810,6 +26490,359 @@
           "reason"
         ],
         "title": "VoucherVoidRequest"
+      },
+      "WhatsAppGroupRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "invite_code": {
+            "type": "string",
+            "title": "Invite Code"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "send_fee_notice": {
+            "type": "boolean",
+            "title": "Send Fee Notice"
+          },
+          "last_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sent At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "class_id",
+          "class_name",
+          "section_id",
+          "section_name",
+          "name",
+          "invite_code",
+          "is_active",
+          "send_fee_notice",
+          "last_sent_at"
+        ],
+        "title": "WhatsAppGroupRead"
+      },
+      "WhatsAppGroupWrite": {
+        "properties": {
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "invite_link": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 6,
+            "title": "Invite Link"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "send_fee_notice": {
+            "type": "boolean",
+            "title": "Send Fee Notice",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_id",
+          "name",
+          "invite_link"
+        ],
+        "title": "WhatsAppGroupWrite"
+      },
+      "WhatsAppMessageKind": {
+        "type": "string",
+        "enum": [
+          "fee_notice",
+          "custom"
+        ],
+        "title": "WhatsAppMessageKind"
+      },
+      "WhatsAppMessageRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "group_name": {
+            "type": "string",
+            "title": "Group Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WhatsAppMessageKind"
+          },
+          "period_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Label"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WhatsAppMessageStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "group_id",
+          "group_name",
+          "kind",
+          "period_label",
+          "body",
+          "status",
+          "attempts",
+          "last_error",
+          "sent_at",
+          "created_at",
+          "created_by_name"
+        ],
+        "title": "WhatsAppMessageRead"
+      },
+      "WhatsAppMessageStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "sent",
+          "failed"
+        ],
+        "title": "WhatsAppMessageStatus"
+      },
+      "WhatsAppSettingsRead": {
+        "properties": {
+          "fee_notice_enabled": {
+            "type": "boolean",
+            "title": "Fee Notice Enabled"
+          },
+          "send_day": {
+            "type": "integer",
+            "maximum": 28.0,
+            "minimum": 1.0,
+            "title": "Send Day"
+          },
+          "fee_template": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Fee Template"
+          },
+          "monthly_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Note"
+          },
+          "placeholders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Placeholders"
+          },
+          "next_send_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Send On"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fee_notice_enabled",
+          "send_day",
+          "fee_template",
+          "placeholders",
+          "next_send_on"
+        ],
+        "title": "WhatsAppSettingsRead"
+      },
+      "WhatsAppSettingsWrite": {
+        "properties": {
+          "fee_notice_enabled": {
+            "type": "boolean",
+            "title": "Fee Notice Enabled"
+          },
+          "send_day": {
+            "type": "integer",
+            "maximum": 28.0,
+            "minimum": 1.0,
+            "title": "Send Day"
+          },
+          "fee_template": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Fee Template"
+          },
+          "monthly_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fee_notice_enabled",
+          "send_day",
+          "fee_template"
+        ],
+        "title": "WhatsAppSettingsWrite"
       }
     }
   }

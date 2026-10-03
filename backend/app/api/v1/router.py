@@ -57,6 +57,7 @@ from app.modules.rbac.router import members_router, permissions_router, roles_ro
 from app.modules.search.router import router as search_router
 from app.modules.students.router import router as students_router
 from app.modules.tenancy.router import org_router, schools_router
+from app.modules.whatsapp.router import router as whatsapp_router
 
 api_router = APIRouter()
 
@@ -144,6 +145,10 @@ api_router.include_router(exams_router, prefix="/exams", tags=["Exams"])
 # Diary: the daily homework page per section. Keyed by section and date like
 # attendance, and its own prefix for the same reason.
 api_router.include_router(diary_router, prefix="/diary", tags=["Diary"])
+
+# WhatsApp: class parents' groups -- the monthly fee notice and custom messages.
+# The API only queues; `app.cli send-whatsapp` posts (see `common/whatsapp`).
+api_router.include_router(whatsapp_router, prefix="/whatsapp", tags=["WhatsApp"])
 
 # Fees: what a school bills its STUDENTS. Deliberately not under `/billing`, which is
 # what the school owes EduCloud -- two different money flows between two different

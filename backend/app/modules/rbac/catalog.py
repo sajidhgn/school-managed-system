@@ -231,6 +231,16 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
         "Void a fee voucher or reverse a recorded payment.",
         dangerous=True,
     ),
+    # Class WhatsApp groups. `send` is split from `manage`: whoever posts today's
+    # holiday notice need not be whoever decides which groups exist and what the
+    # monthly fee notice says.
+    _school("whatsapp:read", "Communication", "View linked WhatsApp groups and sent messages."),
+    _school("whatsapp:send", "Communication", "Send messages to class WhatsApp groups."),
+    _school(
+        "whatsapp:manage",
+        "Communication",
+        "Link class WhatsApp groups and configure the monthly fee notice.",
+    ),
     _school("timetable:read", "Academics", "View the timetable."),
     _school("timetable:manage", "Academics", "Edit the timetable."),
 )
@@ -310,6 +320,9 @@ _ACCOUNTANT_PERMISSIONS: frozenset[str] = frozenset(
         "fee:manage",
         "fee:issue",
         "fee:collect",
+        # The fee reminder to class groups is the accountant's message to send.
+        "whatsapp:read",
+        "whatsapp:send",
         # `fee:void` is deliberately ABSENT. An accountant who mis-keys a receipt asks
         # a principal to reverse it, and that reversal carries both identities in the
         # audit trail. Customers who want their accountant to hold it grant it

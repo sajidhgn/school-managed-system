@@ -979,6 +979,7 @@ async def _run_maintenance() -> None:
         generate_scheduled_challans_for_organization,
     )
     from app.modules.invitations.service import expire_pending_invitations
+    from app.modules.whatsapp.jobs import queue_fee_notices_for_organization
 
     settings = get_settings()
     configure_logging(settings)
@@ -990,6 +991,7 @@ async def _run_maintenance() -> None:
     invitations_expired = 0
     challans_generated = 0
     late_fees_raised = 0
+    whatsapp_notices_queued = 0
     try:
         async with session_scope(None, platform_admin=True) as session:
             organization_ids = list(
@@ -1023,6 +1025,12 @@ async def _run_maintenance() -> None:
                     session, organization_id
                 )
                 challans_generated += created
+                # Straight after generation, so a campus that bills and announces on
+                # the same day does both in one pass. QUEUES only -- posting is
+                # `send-whatsapp`, which runs where the WhatsApp transport works.
+                whatsapp_notices_queued += await queue_fee_notices_for_organization(
+                    session, organization_id
+                )
                 # Last in the sequence on purpose: it is the only step that CHARGES a
                 # customer's customer, so it runs after the tenant's own subscription
                 # state has been settled. A suspended organization should not be
@@ -1038,7 +1046,49 @@ async def _run_maintenance() -> None:
             invitations_expired=invitations_expired,
             challans_generated=challans_generated,
             late_fees_raised=late_fees_raised,
+            whatsapp_notices_queued=whatsapp_notices_queued,
         )
+    finally:
+        await dispose_engine()
+
+
+async def _run_send_whatsapp() -> None:
+    """Drain the WhatsApp outbox through the configured transport.
+
+    Run it WHERE THE TRANSPORT WORKS. With `WHATSAPP_BACKEND=pywhatkit` that is a
+    desktop with WhatsApp Web logged in as the school, left untouched while it types
+    -- typically on a cron/Task Scheduler entry a few minutes after `run-maintenance`.
+    At most `WHATSAPP_DISPATCH_BATCH` messages per run; the rest wait for the next.
+    """
+    from app.common.whatsapp.sender import build_whatsapp_sender
+    from app.modules.whatsapp.jobs import dispatch_outbox
+
+    settings = get_settings()
+    configure_logging(settings)
+    init_engine(settings)
+    sender = build_whatsapp_sender(settings)
+    remaining = settings.WHATSAPP_DISPATCH_BATCH
+    sent = failed = 0
+    try:
+        async with session_scope(None, platform_admin=True) as session:
+            organization_ids = list(
+                (
+                    await session.execute(
+                        select(Organization.id).where(Organization.deleted_at.is_(None))
+                    )
+                ).scalars()
+            )
+        for organization_id in organization_ids:
+            if remaining <= 0:
+                break
+            org_sent, org_failed = await dispatch_outbox(
+                organization_id, sender, limit=remaining
+            )
+            sent += org_sent
+            failed += org_failed
+            remaining -= org_sent + org_failed
+        logger.info("whatsapp_dispatch_complete", sent=sent, failed=failed)
+        print(f"WhatsApp: {sent} sent, {failed} failed.")
     finally:
         await dispose_engine()
 
@@ -1232,6 +1282,13 @@ def main(argv: list[str] | None = None) -> int:
         "reconcile-ledger",
         help="Report students whose fee ledger balance disagrees with their vouchers.",
     )
+    sub.add_parser(
+        "send-whatsapp",
+        help=(
+            "Post queued WhatsApp group messages through WHATSAPP_BACKEND. With "
+            "pywhatkit, run it on the desktop where WhatsApp Web is logged in."
+        ),
+    )
     mfa_parser = sub.add_parser(
         "mfa-enroll", help="Enroll or rotate TOTP for a platform administrator."
     )
@@ -1256,6 +1313,8 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(_run_reconcile())
     elif args.command == "run-maintenance":
         asyncio.run(_run_maintenance())
+    elif args.command == "send-whatsapp":
+        asyncio.run(_run_send_whatsapp())
     elif args.command == "reconcile-ledger":
         asyncio.run(_run_reconcile_ledger())
     elif args.command == "mfa-enroll":
