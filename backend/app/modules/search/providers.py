@@ -28,9 +28,9 @@ ROLE-AWARENESS, THE PART THAT IS ACCESS CONTROL
 
     Concretely, out of the box (spec §5.2):
       * a PRINCIPAL holds every code, so they search all eleven kinds
-      * a TEACHER holds `student:read`, `class:read`, `member:read`, `school:read`
-        -- so vouchers, roles, invitations and the audit log are simply not part of
-        their search. Not hidden. Not empty. Not queried.
+      * a TEACHER holds `student:read`, `class:read`, `school:read` but not
+        `member:read` -- so staff, vouchers, roles, invitations and the audit log
+        are simply not part of their search. Not hidden. Not empty. Not queried.
       * an ACCOUNTANT holds `fee:read` and `student:read` but not `class:read`, so
         they search students, vouchers, fee heads and structures.
       * a CUSTOM role gets exactly the intersection its principal configured, with

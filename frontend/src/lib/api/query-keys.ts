@@ -1,10 +1,11 @@
 import type { StructureListParams, VoucherListParams } from "@/lib/api/resources/fees";
 import type { SessionListParams } from "@/lib/api/resources/attendance";
 import type { ExamListParams } from "@/lib/api/resources/exams";
+import type { PaperListParams, QuestionBankParams } from "@/lib/api/resources/papers";
 import type { SubjectListParams } from "@/lib/api/resources/subjects";
 import type { StudentListParams } from "@/lib/api/resources/students";
 import type { SchoolListParams } from "@/lib/api/resources/schools";
-import type { PageParams } from "@/lib/api/types";
+import type { DiaryAgentSettingsWrite, PageParams } from "@/lib/api/types";
 
 /**
  * Centralised TanStack Query keys.
@@ -64,10 +65,25 @@ export const queryKeys = {
     results: (examId: string, classId: string) => ["exams", examId, "results", classId] as const,
   },
 
-  diary: {
-    all: ["diary"] as const,
-    sections: (date: string) => ["diary", "sections", date] as const,
-    page: (sectionId: string, date: string) => ["diary", "page", sectionId, date] as const,
+  books: {
+    all: ["books"] as const,
+    list: (classId: string | null) => ["books", "list", classId] as const,
+    detail: (id: string) => ["books", "detail", id] as const,
+    // `version` is the chapter's `processed_at`: a run finishing in the background
+    // gives the pages a new key, so an open page list refetches by itself.
+    pages: (bookId: string, chapterId: string, version: string | null) =>
+      ["books", bookId, "pages", chapterId, version] as const,
+    // Not under `detail`: polling the book while a chapter is processed must not
+    // refetch every search the teacher already ran.
+    search: (bookId: string, q: string) => ["books-search", bookId, q] as const,
+  },
+
+  papers: {
+    all: ["papers"] as const,
+    list: (params: PaperListParams) => ["papers", "list", params] as const,
+    detail: (id: string) => ["papers", "detail", id] as const,
+    // Under `papers.all`: editing a question on a paper edits it in the bank too.
+    bank: (params: QuestionBankParams) => ["papers", "bank", params] as const,
   },
 
   whatsapp: {
@@ -77,6 +93,15 @@ export const queryKeys = {
     preview: (period: string) => ["whatsapp", "preview", period] as const,
     messages: (params: PageParams & { status?: string }) =>
       ["whatsapp", "messages", params] as const,
+    // Polled while the number is being linked; under `whatsapp.all` so saving a group
+    // refreshes the "N groups not reachable" count too.
+    connection: ["whatsapp", "connection"] as const,
+    qr: ["whatsapp", "connection", "qr"] as const,
+    diarySettings: ["whatsapp", "diary-agent", "settings"] as const,
+    // Keyed by the unsaved form values, so typing back to an earlier format is a cache hit.
+    diaryPreview: (body: DiaryAgentSettingsWrite) =>
+      ["whatsapp", "diary-agent", "preview", body] as const,
+    diaryDrafts: (params: PageParams) => ["whatsapp", "diary-agent", "drafts", params] as const,
   },
 
   attendance: {

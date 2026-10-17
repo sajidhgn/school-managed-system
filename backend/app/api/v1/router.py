@@ -42,8 +42,9 @@ from app.modules.auth.router import router as auth_router
 from app.modules.billing.router import public_router as public_plans_router
 from app.modules.billing.router import router as billing_router
 from app.modules.billing.router import webhook_router
+from app.modules.books.router import router as books_router
 from app.modules.dashboard.router import router as dashboard_router
-from app.modules.diary.router import router as diary_router
+from app.modules.diary_agent.router import router as diary_agent_router
 from app.modules.exams.router import exams_router
 from app.modules.fees.router import router as fees_router
 from app.modules.guardians.auth_router import router as guardian_auth_router
@@ -51,6 +52,7 @@ from app.modules.guardians.portal_router import router as guardian_portal_router
 from app.modules.guardians.router import router as guardians_router
 from app.modules.invitations.router import public_router as public_invitations_router
 from app.modules.invitations.router import school_router as school_invitations_router
+from app.modules.papers.router import router as papers_router
 from app.modules.platform_admin.router import router as platform_router
 from app.modules.rbac.audit_router import router as audit_router
 from app.modules.rbac.router import members_router, permissions_router, roles_router
@@ -58,6 +60,7 @@ from app.modules.search.router import router as search_router
 from app.modules.students.router import router as students_router
 from app.modules.tenancy.router import org_router, schools_router
 from app.modules.whatsapp.router import router as whatsapp_router
+from app.modules.whatsapp.router import webhook_router as whatsapp_webhook_router
 
 api_router = APIRouter()
 
@@ -142,13 +145,26 @@ api_router.include_router(attendance_router, prefix="/attendance", tags=["Attend
 # sits the mid-term), so nesting it under one class would misdescribe it.
 api_router.include_router(exams_router, prefix="/exams", tags=["Exams"])
 
-# Diary: the daily homework page per section. Keyed by section and date like
-# attendance, and its own prefix for the same reason.
-api_router.include_router(diary_router, prefix="/diary", tags=["Diary"])
+# Textbook library: books, their chapter lists, chapter uploads, and the agent that
+# reads, orders, verifies and indexes them (pgvector). Its own prefix: a book belongs
+# to a class, but the hot reads (the library grid, a book's search) are per book.
+api_router.include_router(books_router, prefix="/books", tags=["Textbook library"])
 
-# WhatsApp: class parents' groups -- the monthly fee notice and custom messages.
-# The API only queues; `app.cli send-whatsapp` posts (see `common/whatsapp`).
+# Test papers: questions written from chosen book chapters (English, Urdu or Arabic), checked
+# with the Decisions API, filed in the question bank. Generation is a worker job.
+api_router.include_router(papers_router, prefix="/papers", tags=["Test papers"])
+
+# WhatsApp: class parents' groups -- the monthly fee notice, custom messages and the
+# diary. The API queues; `app.cli send-whatsapp` posts (see `common/whatsapp`), and
+# with the WAHA gateway a confirmed diary is posted at once.
 api_router.include_router(whatsapp_router, prefix="/whatsapp", tags=["WhatsApp"])
+# Unauthenticated, HMAC-verified: incoming messages from the WAHA gateway.
+api_router.include_router(whatsapp_webhook_router, prefix="/whatsapp", tags=["WhatsApp"])
+
+# Diary agent: teachers photograph the day's diary and send it on WhatsApp; the agent
+# reads it, writes it in the campus's format and posts it to the class group once
+# the teacher confirms. These routes are the office's side -- format and history.
+api_router.include_router(diary_agent_router, prefix="/diary-agent", tags=["Diary agent"])
 
 # Fees: what a school bills its STUDENTS. Deliberately not under `/billing`, which is
 # what the school owes EduCloud -- two different money flows between two different

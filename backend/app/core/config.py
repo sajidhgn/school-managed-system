@@ -181,7 +181,7 @@ class Settings(BaseSettings):
     SMS_SENDER_ID: str = "EduCloud"
 
     # --- WhatsApp class groups ----------------------------------------------
-    WHATSAPP_BACKEND: Literal["console", "null", "pywhatkit"] = "console"
+    WHATSAPP_BACKEND: Literal["console", "null", "pywhatkit", "waha"] = "console"
     """Which transport drains the WhatsApp outbox (`python -m app.cli send-whatsapp`).
 
     `console` logs each message and marks it sent; `null` marks it sent and logs
@@ -189,7 +189,28 @@ class Settings(BaseSettings):
     DESKTOP where the school's number is logged in, typing into the group by
     simulated keystrokes. It cannot run in the API container or any headless
     server -- the API only ever QUEUES, and the dispatcher runs on that desktop.
-    Install it there with `uv sync --extra whatsapp`."""
+    Install it there with `uv sync --extra whatsapp`.
+
+    `waha` posts through a self-hosted WAHA gateway (`WAHA_*` below): one linked
+    WhatsApp session per campus, headless, and the only backend that also
+    RECEIVES -- which the diary agent needs. Unofficial: WAHA links the school's
+    number the way WhatsApp Web does, so a number that posts in bursts can be
+    banned by WhatsApp."""
+    WAHA_BASE_URL: str = "http://localhost:3001"
+    """Where the API reaches the WAHA gateway (inside compose: `http://waha:3000`)."""
+    WAHA_API_KEY: str = ""
+    """WAHA's `WHATSAPP_API_KEY`, sent as `X-Api-Key` on every call."""
+    WAHA_WEBHOOK_URL: str = ""
+    """Where WAHA posts incoming messages back to us -- this API's
+    `/api/v1/whatsapp/webhook`, as WAHA can reach it (inside compose:
+    `http://api:8000/api/v1/whatsapp/webhook`)."""
+    WAHA_WEBHOOK_SECRET: str = ""
+    """HMAC-SHA512 key WAHA signs each webhook with. Empty refuses every webhook:
+    an unsigned one could be anyone claiming to be a teacher."""
+    WAHA_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
+    WHATSAPP_DEFAULT_COUNTRY_CODE: str = "92"
+    """Dialling code assumed for a staff phone saved in national form (`0300...`),
+    so it can be matched to the international number WhatsApp reports."""
     WHATSAPP_PYWHATKIT_WAIT_SECONDS: int = 20
     """How long pywhatkit waits for WhatsApp Web to open the group before typing.
     Too short and the text is typed into nothing; raise it on a slow connection."""
@@ -197,6 +218,67 @@ class Settings(BaseSettings):
     """Most messages one `send-whatsapp` pass sends. pywhatkit takes ~30s a message
     and WhatsApp throttles numbers that post in bursts, so the outbox is drained in
     bounded passes rather than all at once."""
+
+    # --- Diary agent (WhatsApp photo -> formatted class diary) ---------------
+    DIARY_AGENT_MODEL: str = "gpt-5.4-mini"
+    """Reads the diary photo and applies a teacher's corrections (LangChain
+    `ChatOpenAI`, vision + structured output). Uses `OPENAI_API_KEY`."""
+    DIARY_DRAFT_TTL_MINUTES: int = Field(default=180, ge=5)
+    """How long a teacher has to answer OK / a correction before the draft lapses.
+    A reply after that starts over instead of posting a stale page."""
+    DIARY_MAX_IMAGE_MB: int = Field(default=15, ge=1, le=64)
+
+    # --- Textbook library (OpenAI page agent + pgvector) --------------------
+    OPENAI_API_KEY: str = ""
+    """Used by the book agent (`modules/books/agent.py`) and the diary agent
+    (`modules/diary_agent/agent.py`). Empty means uploads still work but processing
+    a chapter -- or reading a diary photo -- fails with a clear error."""
+    BOOKS_READ_MODEL: str = "gpt-5.4-mini"
+    """Vision transcription of scanned pages (Responses API). Pages whose PDF text
+    layer is usable never reach it."""
+    BOOKS_DECISION_MODEL: str = "gpt-6-luna"
+    """The Decisions API model: which chapter each page belongs to, whether the
+    upload is the chapter it was declared as, and where unnumbered pages go."""
+    BOOKS_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    """Requested at `BOOKS_EMBEDDING_DIMENSIONS`, which MUST match the `vector(n)`
+    column in the migration -- changing it means a new migration and a re-embed."""
+    BOOKS_EMBEDDING_DIMENSIONS: int = 1536
+    BOOKS_ANSWER_MODEL: str = "gpt-5.4-mini"
+    """Writes "Ask the library" answers from the passages search retrieved
+    (Responses API). Answers are built from those passages only."""
+    BOOKS_ASK_PASSAGES: int = Field(default=8, ge=1, le=20)
+    """Passages handed to the answer model -- more is better recall, more tokens."""
+    BOOKS_STORAGE_PATH: str = "storage/books"
+    """Local directory holding uploaded files and rendered page images."""
+    BOOKS_MAX_UPLOAD_MB: int = Field(default=50, ge=1, le=500)
+    """Per file. A chapter PDF is a few MB; a phone photo 2-6 MB."""
+    BOOKS_MAX_PAGES_PER_CHAPTER: int = Field(default=150, ge=1, le=1000)
+    BOOKS_BATCH_READS: bool = True
+    """Send scanned pages to the vision model through OpenAI's Batch API: half the
+    price, but a chapter waits in `reading` until the batch finishes (usually within
+    hours, at most 24 h). Off reads every page live, in minutes, at full price."""
+    BOOKS_BATCH_EMBEDDINGS: bool = True
+    """Embed a chapter's chunks through OpenAI's Batch API: half the price. The
+    chapter is saved (pages, report, review) at once; only its search entries wait
+    for the batch, at most 24 h. Search queries are always embedded live. Off
+    embeds every chunk live, in seconds."""
+    BOOKS_AI_CONCURRENCY: int = Field(default=4, ge=1, le=32)
+    """Parallel OpenAI calls while one chapter is processed."""
+    BOOKS_INLINE_PROCESSING: bool = False
+    """Process a chapter inside the API process right after "Process" is pressed,
+    instead of waiting for `python -m app.cli process-books`. Convenient locally;
+    in production run the worker so a deploy never kills a half-read chapter."""
+
+    # --- Test papers and question bank (`modules/papers`) -------------------
+    PAPERS_WRITE_MODEL: str = "gpt-5.5"
+    """Writes the questions (Responses API). Checks use `BOOKS_DECISION_MODEL`. A
+    paper is generated rarely and read by a whole class, so quality wins here."""
+    PAPERS_MAX_SOURCE_CHARS: int = Field(default=120_000, ge=10_000, le=600_000)
+    """Most chapter text one paper is written from (~30k tokens). Longer
+    selections use their first pages and the paper says so."""
+    PAPERS_INLINE_GENERATION: bool = False
+    """Generate a paper inside the API process right after it is requested,
+    instead of waiting for the `process-books` worker. Convenient locally."""
 
     # --- Payments (spec §6.4) ----------------------------------------------
     # `mock` is an in-process adapter that approves everything -- correct for

@@ -15,6 +15,8 @@ INTERACTIONS
       year's figures.
     * `EnrollmentService.roster` supplies who should be on the register.
     * `router.py` translates HTTP; nothing here imports fastapi.
+    * `teaching_scope` bounds every method to the caller's assigned sections when
+      the router passes a `teacher_id` (see "THE TEACHER'S BOUNDARY" below).
 
 =============================================================================
 THE TWO RULES THAT SHAPE EVERY METHOD BELOW
@@ -44,6 +46,16 @@ THE TWO RULES THAT SHAPE EVERY METHOD BELOW
     what truancy proceedings, fee concessions and safeguarding referrals are built
     on. It is the same separation `fee:collect` and `fee:void` draw across a cash
     drawer.
+
+=============================================================================
+THE TEACHER'S BOUNDARY
+=============================================================================
+    Every public method takes `teacher_id` -- None for a caller holding
+    `class:view_all`, otherwise the user whose assignments bound them. Lists drop
+    the untaught sections in SQL; a single register, section or student outside them
+    is a 404 with the SAME message an unknown id gets, so the response cannot be
+    used to probe which ids exist next door. Writes are bounded too: a teacher who
+    can mark 9-A must not be able to open, mark or discard 10-B's register by id.
 """
 
 from __future__ import annotations
@@ -53,7 +65,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
@@ -63,6 +75,7 @@ from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.modules.academics.models import SchoolClass, Section
 from app.modules.academics.service import AcademicCalendarService, AcademicsService
+from app.modules.academics.teaching_scope import taught_section_ids
 from app.modules.attendance.models import (
     WHOLE_DAY_PERIOD,
     AttendanceRecord,
@@ -115,7 +128,7 @@ class AttendanceService:
     # -- opening ------------------------------------------------------------
 
     async def open_session(
-        self, payload: AttendanceSessionOpen, *, actor_id: UUID
+        self, payload: AttendanceSessionOpen, *, actor_id: UUID, teacher_id: UUID | None = None
     ) -> AttendanceSessionDetail:
         """Open (or return) the register for one section, date and period.
 
@@ -126,6 +139,7 @@ class AttendanceService:
         turns it into the thing they wanted.
         """
         section = await self.academics.get_section(payload.section_id)
+        await self._assert_teaches(section.id, teacher_id, "Section not found.")
         session_date = payload.session_date or datetime.now(UTC).date()
         self._assert_markable_date(session_date)
 
@@ -206,14 +220,16 @@ class AttendanceService:
 
     # -- reading ------------------------------------------------------------
 
-    async def detail(self, session_id: UUID) -> AttendanceSessionDetail:
+    async def detail(
+        self, session_id: UUID, *, teacher_id: UUID | None = None
+    ) -> AttendanceSessionDetail:
         """One register with every line, in roll order.
 
         Roll order, not insertion order: a register is read aloud and checked
         against a printed list, and a teacher scanning for roll 17 in a list sorted
         by database insertion has to read all thirty names.
         """
-        register = await self._get_or_404(session_id)
+        register = await self._get_or_404(session_id, teacher_id)
         records = await self.records.list_for_session(session_id)
 
         student_ids = [r.student_id for r in records]
@@ -257,8 +273,11 @@ class AttendanceService:
         from_date: date | None = None,
         to_date: date | None = None,
         session_status: AttendanceSessionStatus | None = None,
+        teacher_id: UUID | None = None,
     ) -> Page[AttendanceSessionRead]:
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
+        if teacher_id is not None:
+            conditions.append(AttendanceSession.section_id.in_(taught_section_ids(teacher_id)))
         if section_id is not None:
             conditions.append(AttendanceSession.section_id == section_id)
         if from_date is not None:
@@ -275,7 +294,9 @@ class AttendanceService:
         ]
         return Page.create(items, total, params)
 
-    async def daily_overview(self, session_date: date | None = None) -> DailyOverview:
+    async def daily_overview(
+        self, session_date: date | None = None, *, teacher_id: UUID | None = None
+    ) -> DailyOverview:
         """Every section on the campus and whether its register has been taken.
 
         THE QUESTION THE SESSION TABLE EXISTS TO ANSWER. In a flat attendance table,
@@ -289,8 +310,11 @@ class AttendanceService:
         """
         day = session_date or datetime.now(UTC).date()
 
-        sections = await self._all_sections()
-        registers = await self.sessions.list_for_date(day)
+        sections = await self._all_sections(teacher_id)
+        # Registers of sections not on the screen are dropped before tallying -- for a
+        # teacher that is most of the campus, and counting it would be wasted work.
+        shown = {section.id for section, _ in sections}
+        registers = [r for r in await self.sessions.list_for_date(day) if r.section_id in shown]
         tallies = await self.sessions.tallies([r.id for r in registers])
 
         by_section: dict[UUID, AttendanceSession] = {}
@@ -351,6 +375,7 @@ class AttendanceService:
         *,
         actor_id: UUID,
         may_amend: bool,
+        teacher_id: UUID | None = None,
     ) -> AttendanceSessionDetail:
         """Set statuses for some of the students on a register.
 
@@ -360,7 +385,7 @@ class AttendanceService:
         SUBMITTED register is closed to `attendance:mark`, and every change to one
         is audited individually with the reason given.
         """
-        register = await self._get_or_404(session_id)
+        register = await self._get_or_404(session_id, teacher_id)
         is_amendment = register.status is AttendanceSessionStatus.SUBMITTED
 
         if is_amendment and not may_amend:
@@ -454,13 +479,15 @@ class AttendanceService:
         )
         return await self.detail(session_id)
 
-    async def submit(self, session_id: UUID, *, actor_id: UUID) -> AttendanceSessionDetail:
+    async def submit(
+        self, session_id: UUID, *, actor_id: UUID, teacher_id: UUID | None = None
+    ) -> AttendanceSessionDetail:
         """Assert that the register is complete and correct.
 
         From here it feeds reports and absence alerts, and further changes need
         `attendance:amend`.
         """
-        register = await self._get_or_404(session_id)
+        register = await self._get_or_404(session_id, teacher_id)
         if register.status is AttendanceSessionStatus.SUBMITTED:
             raise ConflictError("This register has already been submitted.")
 
@@ -485,10 +512,10 @@ class AttendanceService:
         return await self.detail(session_id)
 
     async def reopen(
-        self, session_id: UUID, *, reason: str, actor_id: UUID
+        self, session_id: UUID, *, reason: str, actor_id: UUID, teacher_id: UUID | None = None
     ) -> AttendanceSessionDetail:
         """Move a submitted register back to DRAFT. Requires `attendance:amend`."""
-        register = await self._get_or_404(session_id)
+        register = await self._get_or_404(session_id, teacher_id)
         if register.status is not AttendanceSessionStatus.SUBMITTED:
             raise ConflictError("Only a submitted register can be reopened.")
 
@@ -505,7 +532,9 @@ class AttendanceService:
         logger.info("attendance_session_reopened", session_id=str(session_id))
         return await self.detail(session_id)
 
-    async def discard(self, session_id: UUID, *, actor_id: UUID) -> None:
+    async def discard(
+        self, session_id: UUID, *, actor_id: UUID, teacher_id: UUID | None = None
+    ) -> None:
         """Delete a DRAFT register and its pre-filled lines.
 
         A hard delete, and only ever of a draft. A draft was never asserted, so it is
@@ -513,7 +542,7 @@ class AttendanceService:
         grow with mistakes. A SUBMITTED register is refused: correcting one is an
         amendment, which leaves a trail.
         """
-        register = await self._get_or_404(session_id)
+        register = await self._get_or_404(session_id, teacher_id)
         if register.status is not AttendanceSessionStatus.DRAFT:
             raise ConflictError(
                 "A submitted register cannot be discarded. Reopen and amend it instead."
@@ -535,7 +564,12 @@ class AttendanceService:
     # -- reports ------------------------------------------------------------
 
     async def student_summary(
-        self, student_id: UUID, from_date: date, to_date: date
+        self,
+        student_id: UUID,
+        from_date: date,
+        to_date: date,
+        *,
+        teacher_id: UUID | None = None,
     ) -> StudentAttendanceSummary:
         """One student's attendance rate over a range.
 
@@ -551,6 +585,9 @@ class AttendanceService:
         student = await self.students.get(student_id)
         if student is None:
             raise NotFoundError("Student not found.")
+        # Bounded by the student's CURRENT section: a teacher answers for the children
+        # in their classes now, not for every child who once passed through them.
+        await self._assert_teaches(student.section_id, teacher_id, "Student not found.")
 
         tally = await self.records.student_tally(student_id, from_date, to_date)
         total = sum(tally.values())
@@ -577,13 +614,19 @@ class AttendanceService:
         )
 
     async def section_report(
-        self, section_id: UUID, from_date: date, to_date: date
+        self,
+        section_id: UUID,
+        from_date: date,
+        to_date: date,
+        *,
+        teacher_id: UUID | None = None,
     ) -> SectionAttendanceReport:
         if to_date < from_date:
             raise ValidationError(
                 "`to_date` must not be before `from_date`.", code="INVALID_DATE_RANGE"
             )
         await self.academics.get_section(section_id)
+        await self._assert_teaches(section_id, teacher_id, "Section not found.")
 
         daily = await self.records.section_daily_tally(section_id, from_date, to_date)
 
@@ -621,13 +664,36 @@ class AttendanceService:
 
     # -- internals ----------------------------------------------------------
 
-    async def _get_or_404(self, session_id: UUID) -> AttendanceSession:
+    async def _get_or_404(
+        self, session_id: UUID, teacher_id: UUID | None = None
+    ) -> AttendanceSession:
         """A cross-tenant or cross-campus id is filtered out and lands here as None,
-        so it becomes a 404 -- never a 403, which would confirm the register exists."""
-        register = await self.sessions.get(session_id)
+        so it becomes a 404 -- never a 403, which would confirm the register exists.
+
+        A register of a section the teacher does not teach is filtered in the same
+        query, so it is indistinguishable from one that does not exist.
+        """
+        conditions: list[ColumnElement[bool]] = [AttendanceSession.id == session_id]
+        if teacher_id is not None:
+            conditions.append(AttendanceSession.section_id.in_(taught_section_ids(teacher_id)))
+        register = await self.sessions.find_one(*conditions)
         if register is None:
             raise NotFoundError("Attendance register not found.")
         return register
+
+    async def _assert_teaches(
+        self, section_id: UUID | None, teacher_id: UUID | None, message: str
+    ) -> None:
+        """404 with the caller's own not-found `message` unless the section is taught.
+
+        The message matches the unknown-id case on purpose: a different wording for
+        "exists but not yours" would confirm the id is real. A student with no
+        section is outside every teacher's classes.
+        """
+        if teacher_id is None:
+            return
+        if section_id is None or section_id not in await self.academics.taught_sections(teacher_id):
+            raise NotFoundError(message)
 
     @staticmethod
     def _assert_markable_date(session_date: date) -> None:
@@ -651,8 +717,11 @@ class AttendanceService:
                 code="DATE_TOO_OLD",
             )
 
-    async def _all_sections(self) -> list[tuple[Section, SchoolClass]]:
-        """Every section on the campus with its class, ordered for display.
+    async def _all_sections(
+        self, teacher_id: UUID | None = None
+    ) -> list[tuple[Section, SchoolClass]]:
+        """Every section on the campus (or that the teacher teaches) with its class,
+        ordered for display.
 
         ONE join, not a section query followed by a class lookup per row. The daily
         overview renders the whole school.
@@ -668,6 +737,8 @@ class AttendanceService:
         # span every section RLS lets them see rather than raising.
         if (school_id := get_school_id()) is not None:
             stmt = stmt.where(Section.school_id == school_id)
+        if teacher_id is not None:
+            stmt = stmt.where(Section.id.in_(taught_section_ids(teacher_id)))
         rows = (await self.session.execute(stmt)).all()
         return [(section, school_class) for section, school_class in rows]
 

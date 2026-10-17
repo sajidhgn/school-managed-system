@@ -17,7 +17,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
@@ -63,10 +63,20 @@ from app.modules.academics.schemas import (
     TermRead,
     TermUpdate,
 )
+from app.modules.academics.teaching_scope import (
+    taught_class_ids,
+    taught_section_ids,
+    teaches_subject,
+)
 from app.modules.rbac.models import Membership, MembershipStatus
 from app.modules.students.models import StudentEnrollment
 
 logger = get_logger(__name__)
+
+
+def _taught_classes(teacher_id: UUID | None) -> list[ColumnElement[bool]]:
+    """No condition for an unbound caller; their assigned classes for a teacher."""
+    return [] if teacher_id is None else [SchoolClass.id.in_(taught_class_ids(teacher_id))]
 
 
 class AcademicsService:
@@ -113,9 +123,29 @@ class AcademicsService:
             raise NotFoundError("Class not found.")
         return school_class
 
-    async def list_classes(self, params: PageParams, sort: SortParams) -> Page[ClassRead]:
-        rows, total = await self.classes.list(params=params, sort=sort)
+    async def list_classes(
+        self, params: PageParams, sort: SortParams, *, teacher_id: UUID | None = None
+    ) -> Page[ClassRead]:
+        conditions = _taught_classes(teacher_id)
+        rows, total = await self.classes.list(*conditions, params=params, sort=sort)
         return Page.create([ClassRead.model_validate(r) for r in rows], total, params)
+
+    async def get_visible_class(self, class_id: UUID, *, teacher_id: UUID | None) -> SchoolClass:
+        """`get_class` for a read, bounded to the teacher's classes when there is one.
+
+        A class they do not teach is a 404 like any other id they cannot see, not a
+        403 confirming it exists.
+        """
+        school_class = await self.get_class(class_id)
+        if teacher_id is not None:
+            taught = await self.session.scalar(
+                select(SchoolClass.id).where(
+                    SchoolClass.id == class_id, SchoolClass.id.in_(taught_class_ids(teacher_id))
+                )
+            )
+            if taught is None:
+                raise NotFoundError("Class not found.")
+        return school_class
 
     async def update_class(self, class_id: UUID, payload: ClassUpdate) -> ClassRead:
         school_class = await self.get_class(class_id)
@@ -180,10 +210,34 @@ class AcademicsService:
             raise NotFoundError("Section not found.")
         return section
 
-    async def list_sections(self, class_id: UUID) -> list[SectionRead]:
-        await self.get_class(class_id)  # 404 for an unknown or cross-tenant class
+    async def list_sections(
+        self, class_id: UUID, *, teacher_id: UUID | None = None
+    ) -> list[SectionRead]:
+        # 404 for an unknown, cross-tenant or (for a teacher) untaught class.
+        await self.get_visible_class(class_id, teacher_id=teacher_id)
         rows = await self.sections.list_for_class(class_id)
+        if teacher_id is not None:
+            taught = await self.taught_sections(teacher_id)
+            rows = [r for r in rows if r.id in taught]
         return [SectionRead.model_validate(r) for r in rows]
+
+    async def taught_sections(self, teacher_id: UUID) -> set[UUID]:
+        return set((await self.session.scalars(taught_section_ids(teacher_id))).all())
+
+    async def assert_teaches_section(
+        self, section_id: UUID | None, *, teacher_id: UUID | None, message: str = "Not found."
+    ) -> None:
+        """404 unless the teacher (if any) is assigned to this section.
+
+        `section_id` None -- a student not yet placed -- is outside every teacher's
+        classes, so it is refused too. Callers pass the SAME `message` as their
+        unknown-id 404: different wording would tell a teacher "this exists, it just
+        isn't yours".
+        """
+        if teacher_id is None:
+            return
+        if section_id is None or section_id not in await self.taught_sections(teacher_id):
+            raise NotFoundError(message)
 
     async def update_section(self, section_id: UUID, payload: SectionUpdate) -> SectionRead:
         section = await self.get_section(section_id)
@@ -238,7 +292,7 @@ class AcademicsService:
 
     # -- summaries dashboard ------------------------------------------------
 
-    async def summaries(self) -> list[ClassSummary]:
+    async def summaries(self, *, teacher_id: UUID | None = None) -> list[ClassSummary]:
         """Classes -> sections -> headcounts -> class teachers (PDF: "Class & Section
         Summaries").
 
@@ -252,11 +306,18 @@ class AcademicsService:
         precisely as a school grows -- which is why the counts are grouped and the
         teacher names are gathered up front rather than fetched per row.
         """
-        classes, _ = await self.classes.list(params=PageParams(page=1, size=100))
+        conditions = _taught_classes(teacher_id)
+        classes, _ = await self.classes.list(*conditions, params=PageParams(page=1, size=100))
         counts = await self.sections.headcounts()
 
         ordered = sorted(classes, key=lambda c: c.level)
         sections_by_class = {c.id: await self.sections.list_for_class(c.id) for c in ordered}
+        if teacher_id is not None:
+            # A class teacher of 5-B sees 5-B, not 5-A beside it.
+            taught = await self.taught_sections(teacher_id)
+            sections_by_class = {
+                cid: [s for s in rows if s.id in taught] for cid, rows in sections_by_class.items()
+            }
 
         # Every class-teacher on the screen resolved in one query, before the render
         # loop. Doing it inside the loop would be the N+1 this method already avoids
@@ -701,8 +762,21 @@ class AcademicCalendarService:
         )
 
 
+def _taught_subject_ids(teacher_id: UUID) -> Select[tuple[UUID]]:
+    """Subjects the teacher answers for in at least one class's curriculum."""
+    return select(ClassSubject.subject_id).where(
+        ClassSubject.deleted_at.is_(None),
+        teaches_subject(teacher_id, ClassSubject.class_id, ClassSubject.subject_id),
+    )
+
+
 class CurriculumService:
-    """Subjects, and which class studies which of them."""
+    """Subjects, and which class studies which of them.
+
+    The reads take `teacher_id` (see `teaching_scope`): a bound teacher sees the
+    subjects they answer for in some class -- every subject of a class they are
+    class teacher in, plus their own subject pairs -- and nothing else.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -738,9 +812,16 @@ class CurriculumService:
         return SubjectRead.model_validate(subject)
 
     async def list_subjects(
-        self, params: PageParams, sort: SortParams, *, search: str | None = None
+        self,
+        params: PageParams,
+        sort: SortParams,
+        *,
+        search: str | None = None,
+        teacher_id: UUID | None = None,
     ) -> Page[SubjectRead]:
         conditions = [self.subjects.search_filter(search)] if search else []
+        if teacher_id is not None:
+            conditions.append(Subject.id.in_(_taught_subject_ids(teacher_id)))
         rows, total = await self.subjects.list(*conditions, params=params, sort=sort)
         return Page.create([SubjectRead.model_validate(r) for r in rows], total, params)
 
@@ -748,6 +829,19 @@ class CurriculumService:
         subject = await self.subjects.get(subject_id)
         if subject is None:
             raise NotFoundError("Subject not found.")
+        return subject
+
+    async def get_visible_subject(self, subject_id: UUID, *, teacher_id: UUID | None) -> Subject:
+        """`get_subject` for a read: a subject the teacher does not teach is a 404."""
+        subject = await self.get_subject(subject_id)
+        if teacher_id is not None:
+            taught = await self.session.scalar(
+                select(Subject.id).where(
+                    Subject.id == subject_id, Subject.id.in_(_taught_subject_ids(teacher_id))
+                )
+            )
+            if taught is None:
+                raise NotFoundError("Subject not found.")
         return subject
 
     async def update_subject(
@@ -803,12 +897,27 @@ class CurriculumService:
 
     # -- curriculum ---------------------------------------------------------
 
-    async def list_curriculum(self, class_id: UUID) -> list[ClassSubjectRead]:
-        await self._get_class(class_id)  # 404 for an unknown or cross-tenant class
-        return [
-            self._to_read(link, subject)
-            for link, subject in await self.links.list_for_class(class_id)
-        ]
+    async def list_curriculum(
+        self, class_id: UUID, *, teacher_id: UUID | None = None
+    ) -> list[ClassSubjectRead]:
+        # 404 for an unknown, cross-tenant or (for a teacher) untaught class.
+        await AcademicsService(self.session).get_visible_class(class_id, teacher_id=teacher_id)
+        rows = await self.links.list_for_class(class_id)
+        if teacher_id is not None:
+            # A subject teacher sees their own lines; a class teacher, every line.
+            mine = set(
+                (
+                    await self.session.scalars(
+                        select(ClassSubject.subject_id).where(
+                            ClassSubject.class_id == class_id,
+                            ClassSubject.deleted_at.is_(None),
+                            teaches_subject(teacher_id, class_id, ClassSubject.subject_id),
+                        )
+                    )
+                ).all()
+            )
+            rows = [(link, subject) for link, subject in rows if subject.id in mine]
+        return [self._to_read(link, subject) for link, subject in rows]
 
     async def add_to_curriculum(
         self, class_id: UUID, payload: ClassSubjectCreate, *, actor_id: UUID

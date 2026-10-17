@@ -60,6 +60,26 @@ async function request<T>(
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/**
+ * Multipart POST (file uploads). The browser sets the multipart boundary itself, so
+ * no content-type is set here; the BFF forwards the form as it arrived.
+ */
+async function upload<T>(path: string, form: FormData, options: RequestOptions = {}): Promise<T> {
+  const url = `${BFF_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: options.headers,
+    body: form,
+    signal: options.signal,
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    throw new ApiError(await toProblem(response));
+  }
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 export const api = {
   get: <T>(path: string, options?: RequestOptions) => request<T>("GET", path, undefined, options),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
@@ -70,6 +90,8 @@ export const api = {
     request<T>("PUT", path, body, options),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>("DELETE", path, undefined, options),
+  upload: <T>(path: string, form: FormData, options?: RequestOptions) =>
+    upload<T>(path, form, options),
 };
 
 /**

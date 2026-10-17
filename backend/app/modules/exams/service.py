@@ -10,6 +10,13 @@ INTERACTIONS
     * `router.py` translates HTTP; this layer never imports fastapi.
     * Reads the academics tables (classes, subjects, terms) as dimensions but
       never writes them.
+
+TEACHING SCOPE
+    Every method that reads or writes papers, marks or results takes
+    `teacher_id` (None = unbounded; see `academics/teaching_scope.py`). The
+    rules themselves live in `repository.py`; here they become 404s: a paper,
+    exam or class outside the teacher's assignments is "not found", never a 403
+    confirming it exists.
 """
 
 from __future__ import annotations
@@ -18,20 +25,29 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.schemas import Page, PageParams, SortParams
 from app.core.context import require_organization_id, require_school_id
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import get_logger
 from app.modules.academics.models import SchoolClass, Subject
 from app.modules.academics.repository import ClassRepository, SubjectRepository, TermRepository
-from app.modules.exams.models import Exam, ExamPaper
+from app.modules.academics.service import AcademicsService
+from app.modules.academics.teaching_scope import teaches_subject
+from app.modules.exams.models import Exam, ExamMark, ExamPaper
 from app.modules.exams.repository import (
     ExamMarkRepository,
     ExamPaperRepository,
     ExamRepository,
+    visible_exam,
 )
 from app.modules.exams.schemas import (
     ExamClassResults,
@@ -87,30 +103,47 @@ class ExamService:
         return self._to_exam_read(exam)
 
     async def list_exams(
-        self, params: PageParams, sort: SortParams, *, search: str | None = None
+        self,
+        params: PageParams,
+        sort: SortParams,
+        *,
+        search: str | None = None,
+        teacher_id: UUID | None = None,
     ) -> Page[ExamRead]:
         conditions = [self.exams.search_filter(search)] if search else []
+        if teacher_id is not None:
+            conditions.append(visible_exam(teacher_id))
         rows, total = await self.exams.list(*conditions, params=params, sort=sort)
-        counts = await self.exams.paper_counts()
+        counts = await self.exams.paper_counts(teacher_id=teacher_id)
         return Page.create(
             [self._to_exam_read(r, paper_count=counts.get(r.id, 0)) for r in rows],
             total,
             params,
         )
 
-    async def get_exam(self, exam_id: UUID) -> Exam:
-        exam = await self.exams.get(exam_id)
+    async def get_exam(self, exam_id: UUID, *, teacher_id: UUID | None = None) -> Exam:
+        if teacher_id is None:
+            exam = await self.exams.get(exam_id)
+        else:
+            exam = await self.exams.find_one(Exam.id == exam_id, visible_exam(teacher_id))
         if exam is None:
             raise NotFoundError("Exam not found.")
         return exam
 
-    async def read_exam(self, exam_id: UUID) -> ExamRead:
-        exam = await self.get_exam(exam_id)
-        counts = await self.exams.paper_counts()
+    async def read_exam(self, exam_id: UUID, *, teacher_id: UUID | None = None) -> ExamRead:
+        exam = await self.get_exam(exam_id, teacher_id=teacher_id)
+        counts = await self.exams.paper_counts(teacher_id=teacher_id)
         return self._to_exam_read(exam, paper_count=counts.get(exam.id, 0))
 
-    async def update_exam(self, exam_id: UUID, payload: ExamUpdate, *, actor_id: UUID) -> ExamRead:
-        exam = await self.get_exam(exam_id)
+    async def update_exam(
+        self,
+        exam_id: UUID,
+        payload: ExamUpdate,
+        *,
+        actor_id: UUID,
+        teacher_id: UUID | None = None,
+    ) -> ExamRead:
+        exam = await self._get_exam_to_change(exam_id, teacher_id)
         values = payload.model_dump(exclude_unset=True)
 
         name = values.get("name")
@@ -134,17 +167,19 @@ class ExamService:
             before=before,
             after={k: str(v) for k, v in values.items()},
         )
-        counts = await self.exams.paper_counts()
+        counts = await self.exams.paper_counts(teacher_id=teacher_id)
         return self._to_exam_read(updated, paper_count=counts.get(exam_id, 0))
 
-    async def delete_exam(self, exam_id: UUID, *, actor_id: UUID) -> None:
+    async def delete_exam(
+        self, exam_id: UUID, *, actor_id: UUID, teacher_id: UUID | None = None
+    ) -> None:
         """Soft-delete an exam nobody has marked.
 
         An exam WITH marks is a term's academic record; deleting it would erase
         every report card built on it. The refusal names the fact rather than
         letting a cascade silently take the marks along.
         """
-        exam = await self.get_exam(exam_id)
+        exam = await self._get_exam_to_change(exam_id, teacher_id)
         if await self.papers.marks_exist(exam_id):
             raise ConflictError(
                 f"'{exam.name}' already has marks entered. "
@@ -161,28 +196,43 @@ class ExamService:
 
     # -- papers --------------------------------------------------------------
 
-    async def list_papers(self, exam_id: UUID) -> list[ExamPaperRead]:
-        await self.get_exam(exam_id)  # 404 for unknown or cross-tenant ids
-        entered = await self.papers.marks_entered_counts(exam_id)
+    async def list_papers(
+        self, exam_id: UUID, *, teacher_id: UUID | None = None
+    ) -> list[ExamPaperRead]:
+        # 404 for unknown, cross-tenant or (for a teacher) unrelated exams.
+        await self.get_exam(exam_id, teacher_id=teacher_id)
+        entered = await self.papers.marks_entered_counts(exam_id, teacher_id=teacher_id)
         return [
             self._to_paper_read(paper, subject, school_class, entered.get(paper.id, 0))
-            for paper, subject, school_class in await self.papers.list_for_exam(exam_id)
+            for paper, subject, school_class in await self.papers.list_for_exam(
+                exam_id, teacher_id=teacher_id
+            )
         ]
 
     async def add_paper(
-        self, exam_id: UUID, payload: ExamPaperCreate, *, actor_id: UUID
+        self,
+        exam_id: UUID,
+        payload: ExamPaperCreate,
+        *,
+        actor_id: UUID,
+        teacher_id: UUID | None = None,
     ) -> ExamPaperRead:
-        exam = await self.get_exam(exam_id)
+        exam = await self.get_exam(exam_id, teacher_id=teacher_id)
         school_class = await self.classes.get(payload.class_id)
         if school_class is None:
             raise NotFoundError("Class not found.")
         subject = await self.subjects.get(payload.subject_id)
         if subject is None:
             raise NotFoundError("Subject not found.")
+        # A teacher sets papers only for what they teach -- the same pair rule
+        # that decides which papers they see, so they never create one they
+        # could not then open.
+        if teacher_id is not None and not await self.session.scalar(
+            select(teaches_subject(teacher_id, payload.class_id, payload.subject_id))
+        ):
+            raise NotFoundError("Class not found.")
         if await self.papers.get_paper(exam_id, payload.class_id, payload.subject_id):
-            raise ConflictError(
-                f"{school_class.name} already sits '{subject.name}' in this exam."
-            )
+            raise ConflictError(f"{school_class.name} already sits '{subject.name}' in this exam.")
 
         paper = await self.papers.create(
             **payload.model_dump(),
@@ -200,9 +250,14 @@ class ExamService:
         return self._to_paper_read(paper, subject, school_class, 0)
 
     async def update_paper(
-        self, paper_id: UUID, payload: ExamPaperUpdate, *, actor_id: UUID
+        self,
+        paper_id: UUID,
+        payload: ExamPaperUpdate,
+        *,
+        actor_id: UUID,
+        teacher_id: UUID | None = None,
     ) -> ExamPaperRead:
-        paper = await self._get_paper(paper_id)
+        paper = await self._get_paper(paper_id, teacher_id)
         values = payload.model_dump(exclude_unset=True)
 
         max_marks = values.get("max_marks", paper.max_marks)
@@ -223,12 +278,14 @@ class ExamService:
         subject = await self.subjects.get(updated.subject_id)
         school_class = await self.classes.get(updated.class_id)
         assert subject is not None and school_class is not None  # FK-guaranteed
-        entered = await self.marks.count_for_paper(paper_id)
+        entered = await self.marks.count_for_paper(paper_id, teacher_id=teacher_id)
         return self._to_paper_read(updated, subject, school_class, entered)
 
-    async def remove_paper(self, paper_id: UUID, *, actor_id: UUID) -> None:
+    async def remove_paper(
+        self, paper_id: UUID, *, actor_id: UUID, teacher_id: UUID | None = None
+    ) -> None:
         """Remove a paper -- refused once marked, same reasoning as the exam."""
-        paper = await self._get_paper(paper_id)
+        paper = await self._get_paper(paper_id, teacher_id)
         if await self.marks.count_for_paper(paper_id) > 0:
             raise ConflictError(
                 "This paper already has marks entered. "
@@ -245,16 +302,23 @@ class ExamService:
 
     # -- marks ---------------------------------------------------------------
 
-    async def paper_marks(self, paper_id: UUID) -> PaperMarksRead:
+    async def paper_marks(
+        self, paper_id: UUID, *, teacher_id: UUID | None = None
+    ) -> PaperMarksRead:
         """The mark sheet: every enrolled student of the paper's class in roll
-        order, with whatever marks exist merged in."""
-        paper = await self._get_paper(paper_id)
+        order, with whatever marks exist merged in. For a teacher, only the
+        sections they teach -- both lists are bounded alike, so a student of
+        another section never resurfaces as a "departed" row."""
+        paper = await self._get_paper(paper_id, teacher_id)
         subject = await self.subjects.get(paper.subject_id)
         school_class = await self.classes.get(paper.class_id)
         assert subject is not None and school_class is not None  # FK-guaranteed
 
-        roster = await self.marks.class_roster(paper.class_id)
-        by_student = {m.student_id: m for m in await self.marks.list_for_paper(paper_id)}
+        roster = await self.marks.class_roster(paper.class_id, teacher_id=teacher_id)
+        by_student = {
+            m.student_id: m
+            for m in await self.marks.list_for_paper(paper_id, teacher_id=teacher_id)
+        }
 
         rows = []
         for student in roster:
@@ -294,24 +358,34 @@ class ExamService:
         )
 
     async def upsert_marks(
-        self, paper_id: UUID, payload: MarksUpsert, *, actor_id: UUID
+        self,
+        paper_id: UUID,
+        payload: MarksUpsert,
+        *,
+        actor_id: UUID,
+        teacher_id: UUID | None = None,
     ) -> MarksUpsertResult:
-        paper = await self._get_paper(paper_id)
+        paper = await self._get_paper(paper_id, teacher_id)
 
-        # Only students seated in the paper's class may be marked on it. Checked
-        # against the live roster in ONE set operation: a stray id here is
-        # either a typo or an attempt to write into another class's sheet.
-        seated = {s.id for s in await self.marks.class_roster(paper.class_id)}
-        already_marked = {m.student_id for m in await self.marks.list_for_paper(paper_id)}
-        allowed = seated | already_marked  # corrections for departed students stay legal
+        # Only students on the sheet the caller can READ may be marked on it:
+        # seated in the paper's class and, for a teacher, in a section they
+        # teach. Checked in ONE set operation: a stray id here is either a typo
+        # or an attempt to write into someone else's sheet, and both get the
+        # same 422 -- the message never says which, so it confirms nothing.
+        roster = await self.marks.class_roster(paper.class_id, teacher_id=teacher_id)
+        marked = await self.marks.list_for_paper(paper_id, teacher_id=teacher_id)
+        # Corrections for departed students stay legal.
+        allowed = {s.id for s in roster} | {m.student_id for m in marked}
         strays = [str(e.student_id) for e in payload.entries if e.student_id not in allowed]
         if strays:
             raise ValidationError(
-                f"{len(strays)} student(s) are not in this paper's class: {', '.join(strays[:5])}"
+                f"{len(strays)} student(s) are not on this paper's mark sheet: "
+                f"{', '.join(strays[:5])}"
             )
 
         over_max = [
-            e for e in payload.entries
+            e
+            for e in payload.entries
             if e.marks_obtained is not None and e.marks_obtained > paper.max_marks
         ]
         if over_max:
@@ -344,48 +418,55 @@ class ExamService:
 
     # -- results -------------------------------------------------------------
 
-    async def class_results(self, exam_id: UUID, class_id: UUID) -> ExamClassResults:
+    async def class_results(
+        self, exam_id: UUID, class_id: UUID, *, teacher_id: UUID | None = None
+    ) -> ExamClassResults:
         """The class result sheet: papers as columns, students as rows, ranked.
 
         Percentage is over the papers actually MARKED for each student (absent
         counts as 0 of that paper's max; unmarked papers do not count at all) --
         see `ExamResultRow.percentage` for why unmarked must not mean zero.
-        """
-        await self.get_exam(exam_id)
-        school_class = await self.classes.get(class_id)
-        if school_class is None:
-            raise NotFoundError("Class not found.")
 
-        triples = await self.papers.list_for_exam(exam_id, class_id=class_id)
-        entered = await self.papers.marks_entered_counts(exam_id)
+        For a teacher: their papers as columns, their sections' students as
+        rows. A subject teacher's ranking is therefore over their own subject
+        only -- the honest reading of what they may see, not a leak of the
+        other subjects through the totals.
+        """
+        await self.get_exam(exam_id, teacher_id=teacher_id)
+        school_class = await AcademicsService(self.session).get_visible_class(
+            class_id, teacher_id=teacher_id
+        )
+
+        triples = await self.papers.list_for_exam(exam_id, class_id=class_id, teacher_id=teacher_id)
+        entered = await self.papers.marks_entered_counts(exam_id, teacher_id=teacher_id)
         papers = [
             self._to_paper_read(paper, subject, klass, entered.get(paper.id, 0))
             for paper, subject, klass in triples
         ]
 
-        marks_by_student: dict[UUID, dict[UUID, Any]] = {}
-        for paper, _subject, _klass in triples:
-            for mark in await self.marks.list_for_paper(paper.id):
-                marks_by_student.setdefault(mark.student_id, {})[paper.id] = mark
+        marks_by_student: dict[UUID, dict[UUID, ExamMark]] = {}
+        for exam_paper, _subject, _klass in triples:
+            for entry in await self.marks.list_for_paper(exam_paper.id, teacher_id=teacher_id):
+                marks_by_student.setdefault(entry.student_id, {})[exam_paper.id] = entry
 
         max_by_paper = {p.id: p.max_marks for p in papers}
-        roster = await self.marks.class_roster(class_id)
+        roster = await self.marks.class_roster(class_id, teacher_id=teacher_id)
 
         unranked = []
         for student in roster:
             student_marks = marks_by_student.get(student.id, {})
             cells, obtained, max_counted = [], Decimal(0), 0
-            for paper in papers:
-                mark = student_marks.get(paper.id)
+            for paper_read in papers:
+                mark = student_marks.get(paper_read.id)
                 cells.append(
                     ResultCell(
-                        paper_id=paper.id,
+                        paper_id=paper_read.id,
                         marks_obtained=mark.marks_obtained if mark else None,
                         is_absent=mark.is_absent if mark else False,
                     )
                 )
                 if mark is not None:
-                    max_counted += max_by_paper[paper.id]
+                    max_counted += max_by_paper[paper_read.id]
                     if mark.marks_obtained is not None:
                         obtained += mark.marks_obtained
             percentage = (
@@ -424,11 +505,31 @@ class ExamService:
 
     # -- internals -----------------------------------------------------------
 
-    async def _get_paper(self, paper_id: UUID) -> ExamPaper:
-        paper = await self.papers.get(paper_id)
+    async def _get_paper(self, paper_id: UUID, teacher_id: UUID | None = None) -> ExamPaper:
+        if teacher_id is None:
+            paper = await self.papers.get(paper_id)
+        else:
+            paper = await self.papers.get_visible(paper_id, teacher_id)
         if paper is None:
             raise NotFoundError("Exam paper not found.")
         return paper
+
+    async def _get_exam_to_change(self, exam_id: UUID, teacher_id: UUID | None) -> Exam:
+        """The exam, if the caller may rename, re-status or delete it.
+
+        A teacher sees an exam their class sits, but the exam is shared by every
+        class sitting it: renaming or deleting it would change papers they cannot
+        see. So a teacher changes only an exam all of whose papers are theirs
+        (including a paperless one they just created). A 403, not a 404 -- the
+        exam itself is visible to them; the refusal is about the action.
+        """
+        exam = await self.get_exam(exam_id, teacher_id=teacher_id)
+        if teacher_id is not None and await self.papers.has_papers_outside(exam_id, teacher_id):
+            raise AuthorizationError(
+                "This exam includes classes or subjects you are not assigned to; "
+                "ask an administrator to change it."
+            )
+        return exam
 
     @staticmethod
     def _to_exam_read(exam: Exam, *, paper_count: int = 0) -> ExamRead:

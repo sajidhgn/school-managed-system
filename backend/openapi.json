@@ -3218,7 +3218,7 @@
           "Members"
         ],
         "summary": "Update Member",
-        "description": "Rename a member, change their role, suspend, or reactivate (spec \u00a78).\n\nTwo operations behind one PATCH because the members table exposes both as inline\nedits on the same row. Each is permission-checked separately: suspending needs\n`member:suspend` on top of `member:update`, since removing someone's access is a\nmaterially different act from correcting their job title.",
+        "description": "Edit a member: details, sign-in credentials, role, and status (spec \u00a78).\n\nSeveral operations behind one PATCH because the edit dialog saves them together.\nEach is permission-checked separately: suspending needs `member:suspend` and\nsetting a password needs `member:reset_password` on top of `member:update`,\nsince locking someone out -- or signing in as them -- is a materially different\nact from correcting their job title.",
         "operationId": "update_member_api_v1_schools__school_id__members__membership_id__patch",
         "parameters": [
           {
@@ -3856,70 +3856,6 @@
         }
       }
     },
-    "/api/v1/portal/children/{student_id}/diary": {
-      "get": {
-        "tags": [
-          "Guardian portal"
-        ],
-        "summary": "The homework diary of one child's class for a date",
-        "description": "Same per-child gate as `/children/{student_id}`: 404 for a child this\nguardian may not view.",
-        "operationId": "child_diary_api_v1_portal_children__student_id__diary_get",
-        "parameters": [
-          {
-            "name": "student_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Student Id"
-            }
-          },
-          {
-            "name": "date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Defaults to today.",
-              "title": "Date"
-            },
-            "description": "Defaults to today."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DiaryPage"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthenticated"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "422": {
-            "description": "Validation Error"
-          }
-        }
-      }
-    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -4451,7 +4387,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SectionRead"
+                    "$ref": "#/components/schemas/app__modules__academics__schemas__SectionRead"
                   },
                   "title": "Response List Sections Api V1 Classes  Class Id  Sections Get"
                 }
@@ -4506,7 +4442,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SectionRead"
+                  "$ref": "#/components/schemas/app__modules__academics__schemas__SectionRead"
                 }
               }
             }
@@ -4561,7 +4497,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SectionRead"
+                  "$ref": "#/components/schemas/app__modules__academics__schemas__SectionRead"
                 }
               }
             }
@@ -4816,7 +4752,7 @@
           "Classes & Sections"
         ],
         "summary": "The class register for a section, in roll order",
-        "description": "Gated on `student:read`, not `class:read`.\n\nThe response is a list of children with their guardian's phone number on it.\nThat is student data that happens to be reached through a section, and letting\n`class:read` -- which exists so staff can see the school's structure -- return it\nwould make the structure permission a back door into the directory.",
+        "description": "Gated on `student:read`, not `class:read`.\n\nThe response is a list of children with their guardian's phone number on it.\nThat is student data that happens to be reached through a section, and letting\n`class:read` -- which exists so staff can see the school's structure -- return it\nwould make the structure permission a back door into the directory.\n\nA teacher gets only the registers of sections they are assigned to.",
         "operationId": "section_roster_api_v1_classes_sections__section_id__roster_get",
         "parameters": [
           {
@@ -8162,33 +8098,47 @@
         }
       }
     },
-    "/api/v1/diary/sections": {
+    "/api/v1/books": {
       "get": {
         "tags": [
-          "Diary"
+          "Textbook library"
         ],
-        "summary": "Every section, with what the caller may write on its diary",
-        "description": "The caller's own classes come first: class teacher, then subject teacher.",
-        "operationId": "list_sections_api_v1_diary_sections_get",
+        "summary": "Books on the campus",
+        "operationId": "list_books_api_v1_books_get",
         "parameters": [
           {
-            "name": "date",
+            "name": "class_id",
             "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
                   "type": "string",
-                  "format": "date"
+                  "format": "uuid"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "The diary's day. Defaults to today.",
-              "title": "Date"
-            },
-            "description": "The diary's day. Defaults to today."
+              "title": "Class Id"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
           }
         ],
         "responses": {
@@ -8199,9 +8149,51 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/DiarySectionOption"
+                    "$ref": "#/components/schemas/BookRead"
                   },
-                  "title": "Response List Sections Api V1 Diary Sections Get"
+                  "title": "Response List Books Api V1 Books Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Add a book: Title, Class, Publisher, Version, and optionally its chapter list",
+        "description": "409 `DUPLICATE_BOOK` if the class already has that title/publisher/version.",
+        "operationId": "create_book_api_v1_books_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDetail"
                 }
               }
             }
@@ -8221,42 +8213,104 @@
         }
       }
     },
-    "/api/v1/diary/sections/{section_id}": {
+    "/api/v1/books/search": {
       "get": {
         "tags": [
-          "Diary"
+          "Textbook library"
         ],
-        "summary": "One section's diary page for a date",
-        "operationId": "get_page_api_v1_diary_sections__section_id__get",
+        "summary": "Hybrid (meaning + keyword) search across every book you can see",
+        "operationId": "search_library_api_v1_books_search_get",
         "parameters": [
           {
-            "name": "section_id",
-            "in": "path",
+            "name": "q",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "title": "Section Id"
+              "minLength": 2,
+              "maxLength": 500,
+              "title": "Q"
             }
           },
           {
-            "name": "date",
+            "name": "class_id",
             "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
                   "type": "string",
-                  "format": "date"
+                  "format": "uuid"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "The diary's day. Defaults to today.",
-              "title": "Date"
-            },
-            "description": "The diary's day. Defaults to today."
+              "title": "Class Id"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "name": "book_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chapter Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 8,
+              "title": "Limit"
+            }
           }
         ],
         "responses": {
@@ -8265,7 +8319,100 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DiaryPage"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryHit"
+                  },
+                  "title": "Response Search Library Api V1 Books Search Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/ask": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Ask the library: an answer written from your books, with page citations",
+        "description": "Narrow it with `class_id`, `subject_id`, `book_id` or `chapter_id`. `found` is\nfalse when the books do not cover the question -- the model is not allowed to\nanswer from its own knowledge.",
+        "operationId": "ask_library_api_v1_books_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "One book with its chapters",
+        "operationId": "get_book_api_v1_books__book_id__get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDetail"
                 }
               }
             }
@@ -8284,42 +8431,22 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
-          "Diary"
+          "Textbook library"
         ],
-        "summary": "Write homework on a section's diary page",
-        "description": "Partial: subjects not named are untouched. A blank `content` clears that\nsubject. 403 `DIARY_NOT_ASSIGNED` if any named row is not the caller's to write;\nnothing is saved in that case.\n\nGuarded on `diary:read` and then on `diary:write` OR `diary:manage` in the\nservice: `require()` demands every code it is given, and a coordinator role may\nreasonably hold `manage` without `write`.",
-        "operationId": "write_page_api_v1_diary_sections__section_id__put",
+        "summary": "Edit a book's details",
+        "operationId": "update_book_api_v1_books__book_id__patch",
         "parameters": [
           {
-            "name": "section_id",
+            "name": "book_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
               "format": "uuid",
-              "title": "Section Id"
+              "title": "Book Id"
             }
-          },
-          {
-            "name": "date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The diary's day. Defaults to today.",
-              "title": "Date"
-            },
-            "description": "The diary's day. Defaults to today."
           }
         ],
         "requestBody": {
@@ -8327,7 +8454,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DiaryPageWrite"
+                "$ref": "#/components/schemas/BookUpdate"
               }
             }
           }
@@ -8338,7 +8465,1465 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DiaryPage"
+                  "$ref": "#/components/schemas/BookDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Delete a book, its files and its index",
+        "operationId": "delete_book_api_v1_books__book_id__delete",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Add a chapter to the book's chapter list",
+        "operationId": "add_chapter_api_v1_books__book_id__chapters_post",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters/{chapter_id}": {
+      "patch": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Renumber or rename a chapter",
+        "operationId": "update_chapter_api_v1_books__book_id__chapters__chapter_id__patch",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Remove a chapter with its files and index",
+        "operationId": "delete_chapter_api_v1_books__book_id__chapters__chapter_id__delete",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/files": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Upload a chapter's pages: a PDF, or photos of the pages",
+        "description": "Photos may be uploaded in any order -- the agent orders them by printed page\nnumber. Uploading drops the chapter's previous pages and vectors; with\n`process=true` the agent is queued straight away.",
+        "operationId": "upload_files_api_v1_books__book_id__chapters__chapter_id__files_post",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/files/{file_id}": {
+      "delete": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Remove one uploaded file",
+        "operationId": "delete_file_api_v1_books__book_id__chapters__chapter_id__files__file_id__delete",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/files/{file_id}": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Download an uploaded file",
+        "operationId": "download_file_api_v1_books__book_id__files__file_id__get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/process": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Queue the agent to (re)read, order, verify and index a chapter",
+        "operationId": "process_api_v1_books__book_id__chapters__chapter_id__process_post",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/accept": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Accept a chapter the agent flagged for review",
+        "operationId": "accept_api_v1_books__book_id__chapters__chapter_id__accept_post",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/pages": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "A chapter's pages in the agent's order, with their text",
+        "operationId": "list_pages_api_v1_books__book_id__chapters__chapter_id__pages_get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageRead"
+                  },
+                  "title": "Response List Pages Api V1 Books  Book Id  Chapters  Chapter Id  Pages Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/pages/{page_id}/image": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "A page's image",
+        "operationId": "page_image_api_v1_books__book_id__pages__page_id__image_get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/{book_id}/search": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Semantic search over a book's indexed chapters (pgvector)",
+        "operationId": "search_api_v1_books__book_id__search_get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 500,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chapter Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 6,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BookSearchHit"
+                  },
+                  "title": "Response Search Api V1 Books  Book Id  Search Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers": {
+      "get": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Test papers on the campus",
+        "operationId": "list_papers_api_v1_papers_get",
+        "parameters": [
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class Id"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PaperStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaperRead"
+                  },
+                  "title": "Response List Papers Api V1 Papers Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Generate a test paper from a book's chapters",
+        "description": "Queues the paper. 422 `CHAPTER_NOT_READY` if a chapter has not been read.",
+        "operationId": "create_paper_api_v1_papers_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers/questions": {
+      "get": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "The question bank",
+        "operationId": "question_bank_api_v1_papers_questions_get",
+        "parameters": [
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class Id"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "name": "book_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "chapter_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chapter Id"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "difficulty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Difficulty"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Difficulty"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PaperLanguage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionRead"
+                  },
+                  "title": "Response Question Bank Api V1 Papers Questions Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers/{paper_id}": {
+      "get": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "One paper with its questions",
+        "operationId": "get_paper_api_v1_papers__paper_id__get",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Edit a paper's details",
+        "operationId": "update_paper_api_v1_papers__paper_id__patch",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Delete a paper (its questions stay in the bank)",
+        "operationId": "delete_paper_api_v1_papers__paper_id__delete",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers/{paper_id}/regenerate": {
+      "post": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Write the paper again from scratch",
+        "operationId": "regenerate_paper_api_v1_papers__paper_id__regenerate_post",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers/{paper_id}/questions": {
+      "post": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Add a question from the bank",
+        "operationId": "add_question_api_v1_papers__paper_id__questions_post",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperQuestionAdd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperQuestionRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers/{paper_id}/questions/{entry_id}": {
+      "patch": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Edit a question on the paper",
+        "description": "A question other papers also use is copied, so they do not change.",
+        "operationId": "edit_question_api_v1_papers__paper_id__questions__entry_id__patch",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Entry Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperQuestionRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Remove a question from the paper (it stays in the bank)",
+        "operationId": "remove_question_api_v1_papers__paper_id__questions__entry_id__delete",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Entry Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/papers/{paper_id}/questions/{entry_id}/replace": {
+      "post": {
+        "tags": [
+          "Test papers"
+        ],
+        "summary": "Have the AI write a different question for this place",
+        "description": "422 `REPLACEMENT_FAILED` when no new question passed the checks; 503\n`AI_FAILED` when OpenAI refused or failed (the message says which).",
+        "operationId": "replace_question_api_v1_papers__paper_id__questions__entry_id__replace_post",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Entry Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperQuestionRead"
                 }
               }
             }
@@ -8511,6 +10096,127 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/connection": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "The campus's linked WhatsApp number (WAHA)",
+        "operationId": "get_connection_api_v1_whatsapp_connection_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppConnectionRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Start linking the campus's number; then scan the QR code",
+        "operationId": "connect_api_v1_whatsapp_connection_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppConnectionRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Log the campus's number out of the gateway",
+        "operationId": "disconnect_api_v1_whatsapp_connection_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/whatsapp/connection/qr": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "The QR code to scan with the school's phone",
+        "operationId": "connection_qr_api_v1_whatsapp_connection_qr_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppQrRead"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request"
@@ -8875,6 +10581,181 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/diary-agent/settings": {
+      "get": {
+        "tags": [
+          "Diary agent"
+        ],
+        "summary": "The campus's diary format",
+        "operationId": "get_settings_api_v1_diary_agent_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryAgentSettingsRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Diary agent"
+        ],
+        "summary": "Change the diary format",
+        "operationId": "put_settings_api_v1_diary_agent_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiaryAgentSettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryAgentSettingsRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/diary-agent/preview": {
+      "post": {
+        "tags": [
+          "Diary agent"
+        ],
+        "summary": "A sample diary in a format, without saving it",
+        "operationId": "preview_api_v1_diary_agent_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiaryAgentSettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryPreviewRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/diary-agent/drafts": {
+      "get": {
+        "tags": [
+          "Diary agent"
+        ],
+        "summary": "Diaries teachers have sent, newest first",
+        "operationId": "list_drafts_api_v1_diary_agent_drafts_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DiaryDraftRead_"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request"
@@ -12085,6 +13966,69 @@
         "title": "AffectedOrganization",
         "description": "One organization the proposed limits would push into `over_limit`.\n\nThe field is named `organization_id` rather than aliased to `id`: an alias would\nmake the Python attribute and the JSON property disagree, and every reader of the\ngenerated TypeScript would then have to know about the mapping."
       },
+      "AskRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Question"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest"
+      },
       "AttendanceDay": {
         "properties": {
           "day": {
@@ -12897,6 +14841,436 @@
         ],
         "title": "Body_reopen_session_api_v1_attendance__session_id__reopen_post"
       },
+      "Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "PDF, JPEG, PNG or WebP files."
+          },
+          "process": {
+            "type": "boolean",
+            "title": "Process",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post"
+      },
+      "BookCreate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "publisher": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Publisher"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Version"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterInput"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Chapters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "class_id",
+          "publisher",
+          "version"
+        ],
+        "title": "BookCreate"
+      },
+      "BookDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Name"
+          },
+          "chapter_count": {
+            "type": "integer",
+            "title": "Chapter Count"
+          },
+          "ready_chapter_count": {
+            "type": "integer",
+            "title": "Ready Chapter Count"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterRead"
+            },
+            "type": "array",
+            "title": "Chapters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "publisher",
+          "version",
+          "class_id",
+          "class_name",
+          "subject_id",
+          "subject_name",
+          "chapter_count",
+          "ready_chapter_count",
+          "created_by_name",
+          "created_at",
+          "can_edit",
+          "chapters"
+        ],
+        "title": "BookDetail"
+      },
+      "BookRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Name"
+          },
+          "chapter_count": {
+            "type": "integer",
+            "title": "Chapter Count"
+          },
+          "ready_chapter_count": {
+            "type": "integer",
+            "title": "Ready Chapter Count"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "publisher",
+          "version",
+          "class_id",
+          "class_name",
+          "subject_id",
+          "subject_name",
+          "chapter_count",
+          "ready_chapter_count",
+          "created_by_name",
+          "created_at",
+          "can_edit"
+        ],
+        "title": "BookRead"
+      },
+      "BookSearchHit": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chunk Id"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chapter Id"
+          },
+          "chapter_number": {
+            "type": "integer",
+            "title": "Chapter Number"
+          },
+          "chapter_title": {
+            "type": "string",
+            "title": "Chapter Title"
+          },
+          "page_start": {
+            "type": "integer",
+            "title": "Page Start"
+          },
+          "page_end": {
+            "type": "integer",
+            "title": "Page End"
+          },
+          "printed_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed Start"
+          },
+          "printed_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed End"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "chapter_id",
+          "chapter_number",
+          "chapter_title",
+          "page_start",
+          "page_end",
+          "printed_start",
+          "printed_end",
+          "content",
+          "score"
+        ],
+        "title": "BookSearchHit"
+      },
+      "BookUpdate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "clear_subject": {
+            "type": "boolean",
+            "title": "Clear Subject",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "BookUpdate"
+      },
       "CancelRequest": {
         "properties": {
           "at_period_end": {
@@ -13170,6 +15544,352 @@
         ],
         "title": "ChallanPaymentAccount",
         "description": "One \"pay us here\" line printed across the head of every fee challan.\n\nA list rather than two fixed fields because a campus collects through whatever\nit has arranged -- a bank account, an Easypaisa wallet, a second branch for the\nafternoon shift -- and the count changes between schools and between terms. The\nholder's name is separate from the number because that is the pair a bank\ncounter checks: a transfer to the right number under the wrong title bounces,\nand a parent reading one string cannot tell which half was mistyped."
+      },
+      "ChapterFileRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FileKind"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "original_name",
+          "content_type",
+          "size_bytes",
+          "page_count",
+          "sort_order",
+          "created_at"
+        ],
+        "title": "ChapterFileRead"
+      },
+      "ChapterInput": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "maximum": 999.0,
+            "minimum": 1.0,
+            "title": "Number"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "title"
+        ],
+        "title": "ChapterInput"
+      },
+      "ChapterRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChapterStatus"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterFileRead"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChapterReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "indexing": {
+            "type": "boolean",
+            "title": "Indexing",
+            "default": false
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "title",
+          "status",
+          "page_count",
+          "files",
+          "report",
+          "error",
+          "processed_at",
+          "updated_at"
+        ],
+        "title": "ChapterRead"
+      },
+      "ChapterRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "title"
+        ],
+        "title": "ChapterRef"
+      },
+      "ChapterReport": {
+        "properties": {
+          "detected_chapter_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Chapter Number"
+          },
+          "detected_confidence": {
+            "type": "number",
+            "title": "Detected Confidence",
+            "default": 0.0
+          },
+          "matches_declared": {
+            "type": "boolean",
+            "title": "Matches Declared",
+            "default": false
+          },
+          "chapter_probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Chapter Probabilities"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReportIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "pages_total": {
+            "type": "integer",
+            "title": "Pages Total",
+            "default": 0
+          },
+          "vision_pages": {
+            "type": "integer",
+            "title": "Vision Pages",
+            "default": 0
+          },
+          "text_layer_pages": {
+            "type": "integer",
+            "title": "Text Layer Pages",
+            "default": 0
+          },
+          "batch_read_pages": {
+            "type": "integer",
+            "title": "Batch Read Pages",
+            "default": 0
+          },
+          "batch_fallback_pages": {
+            "type": "integer",
+            "title": "Batch Fallback Pages",
+            "default": 0
+          },
+          "chunks": {
+            "type": "integer",
+            "title": "Chunks",
+            "default": 0
+          },
+          "batch_embedded_chunks": {
+            "type": "integer",
+            "title": "Batch Embedded Chunks",
+            "default": 0
+          },
+          "batch_embed_fallback_chunks": {
+            "type": "integer",
+            "title": "Batch Embed Fallback Chunks",
+            "default": 0
+          },
+          "models": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Models"
+          },
+          "calls": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Calls"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens",
+            "default": 0
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens",
+            "default": 0
+          },
+          "accepted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By Name"
+          }
+        },
+        "type": "object",
+        "title": "ChapterReport",
+        "description": "What the agent found the last time it processed the chapter."
+      },
+      "ChapterStatus": {
+        "type": "string",
+        "enum": [
+          "empty",
+          "uploaded",
+          "queued",
+          "reading",
+          "processing",
+          "ready",
+          "needs_review",
+          "failed"
+        ],
+        "title": "ChapterStatus"
+      },
+      "ChapterUpdate": {
+        "properties": {
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 999.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "title": "ChapterUpdate"
       },
       "ClassCreate": {
         "properties": {
@@ -13657,143 +16377,106 @@
         ],
         "title": "DashboardAnalytics"
       },
-      "DiaryAccess": {
-        "type": "string",
-        "enum": [
-          "class_teacher",
-          "subject_teacher",
-          "manage",
-          "read"
-        ],
-        "title": "DiaryAccess",
-        "description": "Why the caller sees a section in their diary list, strongest first."
-      },
-      "DiaryEntryInput": {
+      "DiaryAgentSettingsRead": {
         "properties": {
-          "subject_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Subject Id"
-          },
-          "content": {
-            "type": "string",
-            "maxLength": 1000,
-            "title": "Content"
-          }
-        },
-        "type": "object",
-        "required": [
-          "subject_id",
-          "content"
-        ],
-        "title": "DiaryEntryInput"
-      },
-      "DiaryPage": {
-        "properties": {
-          "section_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Section Id"
-          },
-          "section_name": {
-            "type": "string",
-            "title": "Section Name"
-          },
-          "class_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Class Id"
-          },
-          "class_name": {
-            "type": "string",
-            "title": "Class Name"
-          },
-          "class_teacher_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Class Teacher Name"
-          },
-          "entry_date": {
-            "type": "string",
-            "format": "date",
-            "title": "Entry Date"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/DiaryRow"
-            },
-            "type": "array",
-            "title": "Rows"
-          },
-          "can_edit": {
+          "enabled": {
             "type": "boolean",
-            "title": "Can Edit"
-          }
-        },
-        "type": "object",
-        "required": [
-          "section_id",
-          "section_name",
-          "class_id",
-          "class_name",
-          "class_teacher_name",
-          "entry_date",
-          "rows",
-          "can_edit"
-        ],
-        "title": "DiaryPage"
-      },
-      "DiaryPageWrite": {
-        "properties": {
-          "entries": {
-            "items": {
-              "$ref": "#/components/schemas/DiaryEntryInput"
-            },
-            "type": "array",
-            "maxItems": 50,
-            "minItems": 1,
-            "title": "Entries"
-          }
-        },
-        "type": "object",
-        "required": [
-          "entries"
-        ],
-        "title": "DiaryPageWrite",
-        "description": "The rows the caller changed. Subjects not named are left as they are, so two\nsubject teachers saving the same page at once never overwrite each other."
-      },
-      "DiaryRow": {
-        "properties": {
-          "subject_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Subject Id"
+            "title": "Enabled"
           },
-          "subject_code": {
+          "template": {
             "type": "string",
-            "title": "Subject Code"
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Template"
           },
-          "subject_name": {
+          "entry_template": {
             "type": "string",
-            "title": "Subject Name"
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Entry Template"
           },
-          "teacher_id": {
+          "instructions": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "uuid"
+                "maxLength": 2000
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Teacher Id"
+            "title": "Instructions"
+          },
+          "placeholders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Placeholders"
+          },
+          "entry_placeholders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entry Placeholders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "template",
+          "entry_template",
+          "placeholders",
+          "entry_placeholders"
+        ],
+        "title": "DiaryAgentSettingsRead"
+      },
+      "DiaryAgentSettingsWrite": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "template": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Template"
+          },
+          "entry_template": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Entry Template"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "template",
+          "entry_template"
+        ],
+        "title": "DiaryAgentSettingsWrite"
+      },
+      "DiaryDraftRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
           },
           "teacher_name": {
             "anyOf": [
@@ -13806,84 +16489,22 @@
             ],
             "title": "Teacher Name"
           },
-          "content": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content"
+          "status": {
+            "$ref": "#/components/schemas/DiaryDraftStatus"
           },
-          "written_by_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Written By Name"
-          },
-          "updated_at": {
+          "diary_date": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "date-time"
+                "format": "date"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Updated At"
+            "title": "Diary Date"
           },
-          "can_edit": {
-            "type": "boolean",
-            "title": "Can Edit"
-          }
-        },
-        "type": "object",
-        "required": [
-          "subject_id",
-          "subject_code",
-          "subject_name",
-          "teacher_id",
-          "teacher_name",
-          "content",
-          "written_by_name",
-          "updated_at",
-          "can_edit"
-        ],
-        "title": "DiaryRow"
-      },
-      "DiarySectionOption": {
-        "properties": {
-          "section_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Section Id"
-          },
-          "section_name": {
-            "type": "string",
-            "title": "Section Name"
-          },
-          "class_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Class Id"
-          },
-          "class_name": {
-            "type": "string",
-            "title": "Class Name"
-          },
-          "class_level": {
-            "type": "integer",
-            "title": "Class Level"
-          },
-          "class_teacher_name": {
+          "class_hint": {
             "anyOf": [
               {
                 "type": "string"
@@ -13892,34 +16513,126 @@
                 "type": "null"
               }
             ],
-            "title": "Class Teacher Name"
+            "title": "Class Hint"
           },
-          "access": {
-            "$ref": "#/components/schemas/DiaryAccess"
+          "class_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Label"
           },
-          "filled_count": {
-            "type": "integer",
-            "title": "Filled Count",
-            "default": 0
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
           },
-          "subject_count": {
-            "type": "integer",
-            "title": "Subject Count",
-            "default": 0
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
           }
         },
         "type": "object",
         "required": [
-          "section_id",
-          "section_name",
-          "class_id",
-          "class_name",
-          "class_level",
-          "class_teacher_name",
-          "access"
+          "id",
+          "teacher_name",
+          "status",
+          "diary_date",
+          "class_hint",
+          "class_label",
+          "group_id",
+          "body",
+          "message_id",
+          "error",
+          "created_at",
+          "updated_at"
         ],
-        "title": "DiarySectionOption",
-        "description": "One section in the diary picker."
+        "title": "DiaryDraftRead"
+      },
+      "DiaryDraftStatus": {
+        "type": "string",
+        "enum": [
+          "reading",
+          "needs_class",
+          "awaiting_confirmation",
+          "posted",
+          "cancelled",
+          "failed"
+        ],
+        "title": "DiaryDraftStatus"
+      },
+      "DiaryPreviewRead": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "DiaryPreviewRead"
+      },
+      "Difficulty": {
+        "type": "string",
+        "enum": [
+          "easy",
+          "medium",
+          "hard"
+        ],
+        "title": "Difficulty"
       },
       "EnrollmentBackfillResult": {
         "properties": {
@@ -16552,6 +19265,14 @@
         ],
         "title": "FeeVoucherRead"
       },
+      "FileKind": {
+        "type": "string",
+        "enum": [
+          "pdf",
+          "image"
+        ],
+        "title": "FileKind"
+      },
       "ForgotPasswordRequest": {
         "properties": {
           "email": {
@@ -18511,6 +21232,136 @@
         "title": "LedgerEntryType",
         "description": "What moved a student's running balance.\n\nDEBIT (positive `amount`) increases what the family owes; CREDIT (negative)\nreduces it. One signed column rather than a debit column and a credit column,\nbecause every consumer of this table wants the net and a two-column ledger makes\nevery one of them write the same CASE expression."
       },
+      "LibraryAnswer": {
+        "properties": {
+          "found": {
+            "type": "boolean",
+            "title": "Found"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryHit"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "cited": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Cited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "found",
+          "answer",
+          "sources",
+          "cited"
+        ],
+        "title": "LibraryAnswer"
+      },
+      "LibraryHit": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chunk Id"
+          },
+          "book_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Book Id"
+          },
+          "book_title": {
+            "type": "string",
+            "title": "Book Title"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chapter Id"
+          },
+          "chapter_number": {
+            "type": "integer",
+            "title": "Chapter Number"
+          },
+          "chapter_title": {
+            "type": "string",
+            "title": "Chapter Title"
+          },
+          "page_start": {
+            "type": "integer",
+            "title": "Page Start"
+          },
+          "page_end": {
+            "type": "integer",
+            "title": "Page End"
+          },
+          "printed_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed Start"
+          },
+          "printed_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed End"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "matched_by": {
+            "type": "string",
+            "enum": [
+              "both",
+              "meaning",
+              "keywords"
+            ],
+            "title": "Matched By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "book_id",
+          "book_title",
+          "chapter_id",
+          "chapter_number",
+          "chapter_title",
+          "page_start",
+          "page_end",
+          "printed_start",
+          "printed_end",
+          "content",
+          "score",
+          "matched_by"
+        ],
+        "title": "LibraryHit",
+        "description": "A passage found by library-wide (hybrid) search."
+      },
       "LinkedStudentRead": {
         "properties": {
           "link_id": {
@@ -19062,6 +21913,17 @@
             "type": "string",
             "title": "Full Name"
           },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
           "school_id": {
             "anyOf": [
               {
@@ -19152,6 +22014,43 @@
             ],
             "title": "Full Name"
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
           "role_id": {
             "anyOf": [
               {
@@ -19178,7 +22077,7 @@
         },
         "type": "object",
         "title": "MemberUpdate",
-        "description": "Change a member's name, role, status, or any combination."
+        "description": "Change a member's details, sign-in credentials, role, status, or any combination.\n\n`email` and `password` are the member's SIGN-IN details. They live on the global\nuser row, so the service only lets an administrator change them for an account\nthat belongs to this organization alone -- see `RbacService._assert_can_manage_account`."
       },
       "MembershipSummary": {
         "properties": {
@@ -20099,6 +22998,114 @@
         "title": "PageMeta",
         "description": "Pagination metadata; everything a table UI needs to render its controls."
       },
+      "PageMethod": {
+        "type": "string",
+        "enum": [
+          "text_layer",
+          "vision"
+        ],
+        "title": "PageMethod"
+      },
+      "PagePlacement": {
+        "type": "string",
+        "enum": [
+          "printed_number",
+          "pdf_order",
+          "agent",
+          "upload_order"
+        ],
+        "title": "PagePlacement",
+        "description": "How the agent decided where a page goes."
+      },
+      "PageRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "printed_page_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed Page Number"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/PagePlacement"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PageMethod"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "has_image": {
+            "type": "boolean",
+            "title": "Has Image"
+          },
+          "file_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "File Id"
+          },
+          "source_index": {
+            "type": "integer",
+            "title": "Source Index"
+          },
+          "detected_chapter_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Chapter Number"
+          },
+          "chapter_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Confidence"
+          },
+          "opens_chapter": {
+            "type": "boolean",
+            "title": "Opens Chapter"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "position",
+          "printed_page_number",
+          "placement",
+          "method",
+          "text",
+          "has_image",
+          "file_id",
+          "source_index",
+          "detected_chapter_number",
+          "chapter_confidence",
+          "opens_chapter"
+        ],
+        "title": "PageRead"
+      },
       "Page_AcademicYearRead_": {
         "properties": {
           "items": {
@@ -20158,6 +23165,26 @@
           "meta"
         ],
         "title": "Page[ClassRead]"
+      },
+      "Page_DiaryDraftRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryDraftRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[DiaryDraftRead]"
       },
       "Page_ExamRead_": {
         "properties": {
@@ -20379,6 +23406,339 @@
         ],
         "title": "Page[WhatsAppMessageRead]"
       },
+      "PaperCreate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "book_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Book Id"
+          },
+          "chapter_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Chapter Ids"
+          },
+          "language": {
+            "$ref": "#/components/schemas/PaperLanguage",
+            "default": "en"
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/PaperDifficulty",
+            "default": "mixed"
+          },
+          "paper_type": {
+            "$ref": "#/components/schemas/PaperType"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionInput"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Sections"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 600.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "book_id",
+          "chapter_ids",
+          "paper_type",
+          "sections"
+        ],
+        "title": "PaperCreate"
+      },
+      "PaperDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Name"
+          },
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id"
+          },
+          "book_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Title"
+          },
+          "language": {
+            "$ref": "#/components/schemas/PaperLanguage"
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/PaperDifficulty"
+          },
+          "paper_type": {
+            "$ref": "#/components/schemas/PaperType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaperStatus"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count"
+          },
+          "total_marks": {
+            "type": "integer",
+            "title": "Total Marks"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterRef"
+            },
+            "type": "array",
+            "title": "Chapters"
+          },
+          "requested": {
+            "items": {
+              "$ref": "#/components/schemas/SectionInput"
+            },
+            "type": "array",
+            "title": "Requested"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/app__modules__papers__schemas__SectionRead"
+            },
+            "type": "array",
+            "title": "Sections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "class_id",
+          "class_name",
+          "subject_id",
+          "subject_name",
+          "book_id",
+          "book_title",
+          "language",
+          "difficulty",
+          "paper_type",
+          "status",
+          "question_count",
+          "total_marks",
+          "created_by_user_id",
+          "created_by_name",
+          "can_edit",
+          "created_at",
+          "generated_at",
+          "duration_minutes",
+          "instructions",
+          "chapters",
+          "requested",
+          "report",
+          "error",
+          "sections"
+        ],
+        "title": "PaperDetail"
+      },
+      "PaperDifficulty": {
+        "type": "string",
+        "enum": [
+          "easy",
+          "medium",
+          "hard",
+          "mixed"
+        ],
+        "title": "PaperDifficulty"
+      },
+      "PaperLanguage": {
+        "type": "string",
+        "enum": [
+          "en",
+          "ur",
+          "ar"
+        ],
+        "title": "PaperLanguage"
+      },
       "PaperMarksRead": {
         "properties": {
           "paper": {
@@ -20398,6 +23758,298 @@
           "rows"
         ],
         "title": "PaperMarksRead"
+      },
+      "PaperQuestionAdd": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "marks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id"
+        ],
+        "title": "PaperQuestionAdd"
+      },
+      "PaperQuestionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "marks": {
+            "type": "integer",
+            "title": "Marks"
+          },
+          "requested_difficulty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Difficulty"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question": {
+            "$ref": "#/components/schemas/QuestionRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "position",
+          "marks",
+          "requested_difficulty",
+          "question"
+        ],
+        "title": "PaperQuestionRead"
+      },
+      "PaperRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Name"
+          },
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id"
+          },
+          "book_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Title"
+          },
+          "language": {
+            "$ref": "#/components/schemas/PaperLanguage"
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/PaperDifficulty"
+          },
+          "paper_type": {
+            "$ref": "#/components/schemas/PaperType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaperStatus"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count"
+          },
+          "total_marks": {
+            "type": "integer",
+            "title": "Total Marks"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "class_id",
+          "class_name",
+          "subject_id",
+          "subject_name",
+          "book_id",
+          "book_title",
+          "language",
+          "difficulty",
+          "paper_type",
+          "status",
+          "question_count",
+          "total_marks",
+          "created_by_user_id",
+          "created_by_name",
+          "can_edit",
+          "created_at",
+          "generated_at"
+        ],
+        "title": "PaperRead"
+      },
+      "PaperStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "generating",
+          "ready",
+          "needs_review",
+          "failed"
+        ],
+        "title": "PaperStatus"
+      },
+      "PaperType": {
+        "type": "string",
+        "enum": [
+          "objective",
+          "subjective",
+          "mix"
+        ],
+        "title": "PaperType"
+      },
+      "PaperUpdate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 600.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          }
+        },
+        "type": "object",
+        "title": "PaperUpdate"
       },
       "ParsedQueryRead": {
         "properties": {
@@ -21673,6 +25325,262 @@
         "title": "PromotionSkip",
         "description": "One student the promotion could not move, and why.\n\nReturned rather than raised. A promotion is a bulk action over a whole section,\nand aborting the entire run because one student is already seated in the target\nwould make the feature unusable exactly when it is retried after a partial\nfailure."
       },
+      "QuestionOrigin": {
+        "type": "string",
+        "enum": [
+          "ai",
+          "manual"
+        ],
+        "title": "QuestionOrigin"
+      },
+      "QuestionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "type": {
+            "$ref": "#/components/schemas/QuestionType"
+          },
+          "difficulty": {
+            "$ref": "#/components/schemas/Difficulty"
+          },
+          "language": {
+            "$ref": "#/components/schemas/PaperLanguage"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "correct_option": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "marks": {
+            "type": "integer",
+            "title": "Marks"
+          },
+          "printed_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed Page"
+          },
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "chapter_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Number"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/QuestionOrigin"
+          },
+          "checks": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checks"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "difficulty",
+          "language",
+          "text",
+          "options",
+          "correct_option",
+          "answer",
+          "marks",
+          "printed_page",
+          "book_id",
+          "chapter_id",
+          "chapter_number",
+          "chapter_title",
+          "origin",
+          "checks",
+          "created_at"
+        ],
+        "title": "QuestionRead"
+      },
+      "QuestionType": {
+        "type": "string",
+        "enum": [
+          "mcq",
+          "true_false",
+          "fill_blank",
+          "short",
+          "long"
+        ],
+        "title": "QuestionType"
+      },
+      "QuestionUpdate": {
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "correct_option": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Difficulty"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "marks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks"
+          }
+        },
+        "type": "object",
+        "title": "QuestionUpdate",
+        "description": "Edit a question in place. Options and key are checked against its type."
+      },
       "QueueResult": {
         "properties": {
           "queued": {
@@ -21838,6 +25746,47 @@
         ],
         "title": "RegisterResponse",
         "description": "Signup result. Carries no token: login is blocked until email is verified."
+      },
+      "ReplaceRequest": {
+        "properties": {
+          "difficulty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Difficulty"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ReplaceRequest"
+      },
+      "ReportIssue": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "positions": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Positions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ReportIssue"
       },
       "ResendVerificationRequest": {
         "properties": {
@@ -23193,67 +27142,37 @@
         "title": "SectionDayStatus",
         "description": "One section's attendance state for one date.\n\nTHE POINT OF THE MODULE'S SESSION TABLE. A flat attendance table cannot tell\n\"nobody marked Grade 10-B today\" apart from \"Grade 10-B was fully present\",\nbecause both are an absence of rows. `session_id is None` is that distinction,\nand it is what the head teacher's morning chase list is built from."
       },
-      "SectionRead": {
+      "SectionInput": {
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
+          "type": {
+            "$ref": "#/components/schemas/QuestionType"
           },
-          "class_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Class Id"
+          "count": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Count"
           },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "capacity": {
+          "marks": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Capacity"
-          },
-          "class_teacher_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Class Teacher Id"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
+            "title": "Marks"
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "class_id",
-          "name",
-          "capacity",
-          "class_teacher_id",
-          "created_at",
-          "updated_at"
+          "type",
+          "count"
         ],
-        "title": "SectionRead"
+        "title": "SectionInput"
       },
       "SectionRosterEntry": {
         "properties": {
@@ -26491,6 +30410,66 @@
         ],
         "title": "VoucherVoidRequest"
       },
+      "WhatsAppConnectionRead": {
+        "properties": {
+          "backend": {
+            "type": "string",
+            "title": "Backend"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "push_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Push Name"
+          },
+          "unresolved_groups": {
+            "type": "integer",
+            "title": "Unresolved Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "backend",
+          "configured",
+          "status",
+          "phone",
+          "push_name",
+          "unresolved_groups"
+        ],
+        "title": "WhatsAppConnectionRead",
+        "description": "The campus's linked WhatsApp number, as the WAHA gateway sees it."
+      },
       "WhatsAppGroupRead": {
         "properties": {
           "id": {
@@ -26538,6 +30517,17 @@
             "type": "string",
             "title": "Invite Code"
           },
+          "chat_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Id"
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active"
@@ -26568,6 +30558,7 @@
           "section_name",
           "name",
           "invite_code",
+          "chat_id",
           "is_active",
           "send_fee_notice",
           "last_sent_at"
@@ -26628,7 +30619,8 @@
         "type": "string",
         "enum": [
           "fee_notice",
-          "custom"
+          "custom",
+          "diary"
         ],
         "title": "WhatsAppMessageKind"
       },
@@ -26746,6 +30738,24 @@
         ],
         "title": "WhatsAppMessageStatus"
       },
+      "WhatsAppQrRead": {
+        "properties": {
+          "mimetype": {
+            "type": "string",
+            "title": "Mimetype"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mimetype",
+          "data"
+        ],
+        "title": "WhatsAppQrRead"
+      },
       "WhatsAppSettingsRead": {
         "properties": {
           "fee_notice_enabled": {
@@ -26843,6 +30853,93 @@
           "fee_template"
         ],
         "title": "WhatsAppSettingsWrite"
+      },
+      "app__modules__academics__schemas__SectionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity"
+          },
+          "class_teacher_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "class_id",
+          "name",
+          "capacity",
+          "class_teacher_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SectionRead"
+      },
+      "app__modules__papers__schemas__SectionRead": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/QuestionType"
+          },
+          "marks": {
+            "type": "integer",
+            "title": "Marks"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/PaperQuestionRead"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "marks",
+          "questions"
+        ],
+        "title": "SectionRead"
       }
     }
   }

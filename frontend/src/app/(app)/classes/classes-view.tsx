@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { UNASSIGNED_DESCRIPTION, UNASSIGNED_TITLE, useAssignmentBound } from "@/hooks/use-assignment-bound";
 import { useClassSummary, useDeleteClass, useDeleteSection } from "@/hooks/use-classes";
 import type { ClassSummary, SectionSummary } from "@/lib/api/types";
 import { ClassFormDialog } from "./class-form-dialog";
@@ -80,6 +81,7 @@ export function ClassesView({
   schoolId: string | null;
 }) {
   const query = useClassSummary();
+  const bound = useAssignmentBound();
   const deleteClass = useDeleteClass();
   const deleteSection = useDeleteSection();
 
@@ -161,8 +163,12 @@ export function ClassesView({
         <Card>
           <EmptyState
             icon={Layers}
-            title="No classes yet"
-            description="Create your first class, then add the sections students will be seated in."
+            title={bound ? UNASSIGNED_TITLE : "No classes yet"}
+            description={
+              bound
+                ? UNASSIGNED_DESCRIPTION
+                : "Create your first class, then add the sections students will be seated in."
+            }
             action={
               canManage ? (
                 <Button size="sm" onClick={openCreateClass}>

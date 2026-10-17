@@ -1,0 +1,53 @@
+- generic [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "E EduCloud" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: E
+          - text: EduCloud
+        - navigation [ref=e8]:
+          - link "Plans" [ref=e9] [cursor=pointer]:
+            - /url: /pricing
+        - generic [ref=e10]:
+          - combobox "Language" [ref=e11]:
+            - option "English" [selected]
+            - option "اردو"
+          - link "Sign in" [ref=e12] [cursor=pointer]:
+            - /url: /login
+          - link "Get started" [ref=e13] [cursor=pointer]:
+            - /url: /signup
+    - main [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - heading "Sign in" [level=1] [ref=e17]
+          - paragraph [ref=e18]: Welcome back.
+          - generic [ref=e20]:
+            - generic [ref=e21]:
+              - generic [ref=e22]: Email address*
+              - textbox "Email address" [active] [ref=e23]
+            - generic [ref=e24]:
+              - generic [ref=e25]: Password*
+              - generic [ref=e26]:
+                - textbox "Password" [ref=e27]
+                - button "Show password" [ref=e28]
+            - button "Sign in" [ref=e32]
+            - paragraph [ref=e33]:
+              - link "Forgot your password?" [ref=e34] [cursor=pointer]:
+                - /url: /forgot-password
+        - paragraph [ref=e35]:
+          - text: Don't have an account?
+          - link "Get started" [ref=e36] [cursor=pointer]:
+            - /url: /signup
+    - contentinfo [ref=e37]:
+      - generic [ref=e38]:
+        - paragraph [ref=e39]: © 2026 EduCloud
+        - generic [ref=e40]:
+          - link "Plans" [ref=e41] [cursor=pointer]:
+            - /url: /pricing
+          - link "Operator console" [ref=e42] [cursor=pointer]:
+            - /url: /platform/login
+  - region "Notifications (F8)":
+    - list

@@ -93,6 +93,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.academics.models import SchoolClass, Section
+from app.modules.academics.teaching_scope import taught_class_ids, taught_section_ids
 from app.modules.auth.models import User
 from app.modules.fees.models import (
     FeeHead,
@@ -140,6 +141,11 @@ class SearchScope:
     school_id: UUID | None
     """None means every campus in the organization -- only reachable by an
     organization-level member. See `service.resolve_scope`."""
+
+    teacher_id: UUID | None = None
+    """Set for a teacher bound to their own classes (`academics.teaching_scope`):
+    students, classes and sections narrow to their assignments, exactly as the
+    list endpoints do."""
 
     @property
     def cross_school(self) -> bool:
@@ -544,6 +550,9 @@ def _build_student(parsed: ParsedQuery, scope: SearchScope) -> Select[Any] | Non
         [
             Student.deleted_at.is_(None),
             _scope_condition(Student.school_id, scope, nullable=False),
+            None
+            if scope.teacher_id is None
+            else Student.section_id.in_(taught_section_ids(scope.teacher_id)),
             _school_filter(parsed, Student.school_id),
             *text_conditions,
             _enum_condition(Student.status, StudentStatus, parsed.filter_values("status")),
@@ -674,6 +683,9 @@ def _build_class(parsed: ParsedQuery, scope: SearchScope) -> Select[Any] | None:
         [
             SchoolClass.deleted_at.is_(None),
             _scope_condition(SchoolClass.school_id, scope, nullable=False),
+            None
+            if scope.teacher_id is None
+            else SchoolClass.id.in_(taught_class_ids(scope.teacher_id)),
             _school_filter(parsed, SchoolClass.school_id),
             *text_conditions,
             # A class has no lifecycle state, so any `status:` at all rules it out.
@@ -712,6 +724,9 @@ def _build_section(parsed: ParsedQuery, scope: SearchScope) -> Select[Any] | Non
             Section.deleted_at.is_(None),
             SchoolClass.deleted_at.is_(None),
             _scope_condition(Section.school_id, scope, nullable=False),
+            None
+            if scope.teacher_id is None
+            else Section.id.in_(taught_section_ids(scope.teacher_id)),
             _school_filter(parsed, Section.school_id),
             *text_conditions,
             _like_any(

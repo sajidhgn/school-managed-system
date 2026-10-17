@@ -108,19 +108,31 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
   //   right headers and no body, which FastAPI reports as "not a valid dictionary".
   //   A string round-trips reliably.
   //
-  // Every payload on this API is JSON. File uploads would need a streaming path,
-  // and the retry would have to be rethought alongside it.
-  const raw =
-    request.method === "GET" || request.method === "HEAD"
-      ? undefined
-      : await request.text();
+  // MULTIPART (book chapter uploads) is the one exception, re-sent as `FormData`:
+  //   * it survives Next's fetch wrapper, which binary bodies do not (see above);
+  //   * it can be sent twice, so the 401 retry still replays the files intact;
+  //   * `content-type` is dropped so fetch writes a fresh multipart boundary that
+  //     matches the body it actually serialises.
+  const isMultipart = (request.headers.get("content-type") ?? "").startsWith(
+    "multipart/form-data",
+  );
+  let body: string | FormData | undefined;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    if (isMultipart) {
+      body = await request.formData();
+      headers.delete("content-type");
+    } else {
+      const raw = await request.text();
+      body = raw.length > 0 ? raw : undefined;
+    }
+  }
 
   const upstream = await fetchWithSession(
     `/${path}${request.nextUrl.search}`,
     {
       method: request.method,
       headers,
-      body: raw && raw.length > 0 ? raw : undefined,
+      body,
       redirect: "manual",
     },
     sessionKindFor(path),

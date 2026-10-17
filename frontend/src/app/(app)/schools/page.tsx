@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { SchoolsView } from "./schools-view";
 import { serverGet, serverGetRequired } from "@/lib/api/server";
@@ -7,7 +8,9 @@ import {
   type OrganizationRead,
   type SchoolRead,
   type UsageResponse,
+  SCHOOL_ADMIN_PERMISSIONS,
 } from "@/lib/api/types";
+import { canAny } from "@/lib/auth/permissions";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Schools" };
@@ -22,6 +25,7 @@ export const metadata: Metadata = { title: "Schools" };
  */
 export default async function SchoolsPage() {
   const user = await requireUser();
+  if (!canAny(user, ...SCHOOL_ADMIN_PERMISSIONS)) redirect("/dashboard");
 
   const [schools, usage, organization] = await Promise.all([
     serverGetRequired<SchoolRead[]>("/schools"),

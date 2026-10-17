@@ -357,12 +357,16 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
         ).scalar_one()
         await bind_tenant(session, organization.id)
         school = (
-            await session.execute(
-                select(School)
-                .where(School.organization_id == organization.id)
-                .order_by(School.created_at)
+            (
+                await session.execute(
+                    select(School)
+                    .where(School.organization_id == organization.id)
+                    .order_by(School.created_at)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         academics = await _seed_academics_demo(session, organization.id, school.id)
         await reconcile_usage(session, organization.id)
         return {
@@ -662,10 +666,36 @@ async def _seed_academics_demo(
         )
     ).scalar_one()
     first_names = [
-        "Ayesha", "Bilal", "Chandni", "Danish", "Eman", "Farhan", "Gulnaz", "Hamza",
-        "Iqra", "Junaid", "Khadija", "Laiba", "Mustafa", "Noor", "Osama", "Parisa",
-        "Qasim", "Rania", "Saad", "Tehreem", "Usman", "Vaneeza", "Wali", "Yusra",
-        "Zain", "Alina", "Burhan", "Dua", "Ehsan", "Fatima",
+        "Ayesha",
+        "Bilal",
+        "Chandni",
+        "Danish",
+        "Eman",
+        "Farhan",
+        "Gulnaz",
+        "Hamza",
+        "Iqra",
+        "Junaid",
+        "Khadija",
+        "Laiba",
+        "Mustafa",
+        "Noor",
+        "Osama",
+        "Parisa",
+        "Qasim",
+        "Rania",
+        "Saad",
+        "Tehreem",
+        "Usman",
+        "Vaneeza",
+        "Wali",
+        "Yusra",
+        "Zain",
+        "Alina",
+        "Burhan",
+        "Dua",
+        "Ehsan",
+        "Fatima",
     ]
     last_names = ["Khan", "Ahmed", "Malik", "Raza", "Sheikh", "Butt", "Qureshi", "Chaudhry"]
     if seated < 10 and sections:
@@ -730,7 +760,9 @@ async def _seed_academics_demo(
                 .group_by(Section.class_id)
             )
         }
-        target = next((c for c in sorted(classes, key=lambda c: -c.level) if counts.get(c.id)), None)
+        target = next(
+            (c for c in sorted(classes, key=lambda c: -c.level) if counts.get(c.id)), None
+        )
         if target is not None:
             exam = Exam(
                 **scope,
@@ -947,7 +979,15 @@ async def _run_seed(*, demo: bool) -> None:
                     print(f"  Invitations  : {len(result['pending_invitations'])} pending")
                     for inv in result["pending_invitations"]:
                         print(f"    {inv['email']}  ->  /invite/accept?token={inv['token']}")
-                for key in ("note", "students", "classes", "subjects", "exam", "exam_marks", "academics"):
+                for key in (
+                    "note",
+                    "students",
+                    "classes",
+                    "subjects",
+                    "exam",
+                    "exam_marks",
+                    "academics",
+                ):
                     if key in result:
                         print(f"  {key.replace('_', ' ').capitalize():<13}: {result[key]}")
     finally:
@@ -1052,13 +1092,18 @@ async def _run_maintenance() -> None:
         await dispose_engine()
 
 
-async def _run_send_whatsapp() -> None:
+async def _run_send_whatsapp(*, watch: bool = False, interval: float = 60.0) -> None:
     """Drain the WhatsApp outbox through the configured transport.
 
     Run it WHERE THE TRANSPORT WORKS. With `WHATSAPP_BACKEND=pywhatkit` that is a
     desktop with WhatsApp Web logged in as the school, left untouched while it types
     -- typically on a cron/Task Scheduler entry a few minutes after `run-maintenance`.
     At most `WHATSAPP_DISPATCH_BATCH` messages per run; the rest wait for the next.
+
+    With `WHATSAPP_BACKEND=waha` it runs anywhere; `--watch` keeps draining every
+    `interval` seconds, which is how the `whatsapp-worker` compose service runs it.
+    (A diary a teacher confirms is posted at once by the API; the worker carries
+    the fee notices, custom messages and anything that failed and was retried.)
     """
     from app.common.whatsapp.sender import build_whatsapp_sender
     from app.modules.whatsapp.jobs import dispatch_outbox
@@ -1067,28 +1112,66 @@ async def _run_send_whatsapp() -> None:
     configure_logging(settings)
     init_engine(settings)
     sender = build_whatsapp_sender(settings)
-    remaining = settings.WHATSAPP_DISPATCH_BATCH
-    sent = failed = 0
     try:
-        async with session_scope(None, platform_admin=True) as session:
-            organization_ids = list(
-                (
-                    await session.execute(
-                        select(Organization.id).where(Organization.deleted_at.is_(None))
-                    )
-                ).scalars()
-            )
-        for organization_id in organization_ids:
-            if remaining <= 0:
+        while True:
+            remaining = settings.WHATSAPP_DISPATCH_BATCH
+            sent = failed = 0
+            async with session_scope(None, platform_admin=True) as session:
+                organization_ids = list(
+                    (
+                        await session.execute(
+                            select(Organization.id).where(Organization.deleted_at.is_(None))
+                        )
+                    ).scalars()
+                )
+            for organization_id in organization_ids:
+                if remaining <= 0:
+                    break
+                org_sent, org_failed = await dispatch_outbox(
+                    organization_id, sender, limit=remaining
+                )
+                sent += org_sent
+                failed += org_failed
+                remaining -= org_sent + org_failed
+            if sent or failed or not watch:
+                logger.info("whatsapp_dispatch_complete", sent=sent, failed=failed)
+                print(f"WhatsApp: {sent} sent, {failed} failed.")
+            if not watch:
                 break
-            org_sent, org_failed = await dispatch_outbox(
-                organization_id, sender, limit=remaining
-            )
-            sent += org_sent
-            failed += org_failed
-            remaining -= org_sent + org_failed
-        logger.info("whatsapp_dispatch_complete", sent=sent, failed=failed)
-        print(f"WhatsApp: {sent} sent, {failed} failed.")
+            await asyncio.sleep(interval)
+    finally:
+        await dispose_engine()
+
+
+async def _run_process_books(*, watch: bool, limit: int, interval: float) -> None:
+    """Run the book agent on queued chapters (read, order, verify, index), then
+    generate queued test papers.
+
+    One pass by default -- right for a cron entry. `--watch` keeps polling every
+    `interval` seconds, which is how the `book-worker` compose service runs it.
+    Each chapter is claimed with `FOR UPDATE SKIP LOCKED`, so several workers can
+    run side by side without reading the same chapter twice.
+    """
+    from app.modules.books.jobs import process_pending
+    from app.modules.papers.jobs import process_pending_papers
+
+    settings = get_settings()
+    configure_logging(settings)
+    init_engine(settings)
+    try:
+        while True:
+            counts = await process_pending(limit=limit)
+            # Test papers share the loop: same OpenAI key, same deployment.
+            counts.update(await process_pending_papers(limit=limit))
+            if counts:
+                summary = ", ".join(f"{n} {status}" for status, n in sorted(counts.items()))
+                logger.info("books_processed", **counts)
+                print(f"Books: {summary}.")
+            elif not watch:
+                print("Books: nothing queued.")
+            if not watch:
+                break
+            await asyncio.sleep(interval)
     finally:
         await dispose_engine()
 
@@ -1282,12 +1365,28 @@ def main(argv: list[str] | None = None) -> int:
         "reconcile-ledger",
         help="Report students whose fee ledger balance disagrees with their vouchers.",
     )
-    sub.add_parser(
+    whatsapp_parser = sub.add_parser(
         "send-whatsapp",
         help=(
             "Post queued WhatsApp group messages through WHATSAPP_BACKEND. With "
             "pywhatkit, run it on the desktop where WhatsApp Web is logged in."
         ),
+    )
+    whatsapp_parser.add_argument("--watch", action="store_true", help="Keep draining.")
+    whatsapp_parser.add_argument(
+        "--interval", type=float, default=60.0, help="Seconds between passes with --watch."
+    )
+    books_parser = sub.add_parser(
+        "process-books",
+        help=(
+            "Run the book agent (OpenAI) on queued textbook chapters: read every page, "
+            "order the pages, check them against the chapter list, index them in pgvector."
+        ),
+    )
+    books_parser.add_argument("--watch", action="store_true", help="Keep polling.")
+    books_parser.add_argument("--limit", type=int, default=5, help="Chapters per pass.")
+    books_parser.add_argument(
+        "--interval", type=float, default=10.0, help="Seconds between passes with --watch."
     )
     mfa_parser = sub.add_parser(
         "mfa-enroll", help="Enroll or rotate TOTP for a platform administrator."
@@ -1314,7 +1413,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "run-maintenance":
         asyncio.run(_run_maintenance())
     elif args.command == "send-whatsapp":
-        asyncio.run(_run_send_whatsapp())
+        asyncio.run(_run_send_whatsapp(watch=args.watch, interval=args.interval))
+    elif args.command == "process-books":
+        asyncio.run(_run_process_books(watch=args.watch, limit=args.limit, interval=args.interval))
     elif args.command == "reconcile-ledger":
         asyncio.run(_run_reconcile_ledger())
     elif args.command == "mfa-enroll":

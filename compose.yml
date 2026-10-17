@@ -16,10 +16,24 @@ x-backend-environment: &backend-environment
   SECRET_KEY: local-development-secret-change-before-deploy
   CORS_ORIGINS: '["http://localhost:3000"]'
   FRONTEND_URL: http://localhost:3000
+  # Textbook library: the OpenAI book agent, and where uploads and page images live.
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  BOOKS_STORAGE_PATH: /data/books
+  # WhatsApp through the self-hosted WAHA gateway below: class groups, and the diary
+  # agent (teachers send a photo of the diary, the agent posts it to the class group).
+  WHATSAPP_BACKEND: ${WHATSAPP_BACKEND:-waha}
+  WAHA_BASE_URL: http://waha:3000
+  WAHA_API_KEY: ${WAHA_API_KEY:-local-waha-key-change-before-deploy}
+  WAHA_WEBHOOK_URL: http://api:8000/api/v1/whatsapp/webhook
+  WAHA_WEBHOOK_SECRET: ${WAHA_WEBHOOK_SECRET:-local-waha-webhook-secret-change-before-deploy}
 
 services:
   db:
-    image: postgres:16-alpine
+    # PostgreSQL 16 with the pgvector extension (textbook library embeddings).
+    # Switching an EXISTING `pgdata` volume over from postgres:16-alpine changes the C
+    # library behind text collation (musl -> glibc): run `REINDEX DATABASE
+    # school_manage_db;` once afterwards, or start from a fresh volume.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -67,11 +81,62 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      # The API stores uploads and serves page images; the worker writes them.
+      - books:/data/books
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 3s
       retries: 12
+
+  # Runs the book agent on queued chapters: reads the pages (OpenAI), orders them,
+  # checks them against the chapter list and indexes them in pgvector.
+  book-worker:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    environment:
+      <<: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["python", "-m", "app.cli", "process-books", "--watch"]
+    volumes:
+      - books:/data/books
+    restart: unless-stopped
+
+  # WAHA: links each campus's WhatsApp number (scan the QR on the WhatsApp page)
+  # and exposes it over HTTP. One container serves every campus, one session each.
+  # Unofficial -- see backend/app/common/whatsapp/waha.py before going live.
+  waha:
+    image: devlikeapro/waha:latest   # pin a dated tag (e.g. 2026.x.y) for production
+    environment:
+      WHATSAPP_API_KEY: ${WAHA_API_KEY:-local-waha-key-change-before-deploy}
+      WHATSAPP_DEFAULT_ENGINE: GOWS        # no browser inside: light and headless
+      WAHA_PRINT_QR: "false"
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"  # linked numbers come back after a restart
+    volumes:
+      - waha_sessions:/app/.sessions
+    ports:
+      - "3001:3000"   # WAHA's own dashboard/Swagger on the host; the API uses the network
+    restart: unless-stopped
+
+  # Drains the WhatsApp outbox through WAHA: fee notices, custom messages, retries.
+  # (A diary a teacher confirms is posted at once by the API itself.)
+  whatsapp-worker:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    environment:
+      <<: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      waha:
+        condition: service_started
+    command: ["python", "-m", "app.cli", "send-whatsapp", "--watch"]
+    restart: unless-stopped
 
   web:
     build:
@@ -92,3 +157,5 @@ services:
 
 volumes:
   pgdata:
+  books:
+  waha_sessions:

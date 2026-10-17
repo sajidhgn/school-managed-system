@@ -618,6 +618,16 @@ async def test_mark_alone_cannot_rewrite_a_submitted_register(
         ["school:read", "student:read", "class:read", "attendance:read", "attendance:mark"],
         code="marker_only",
     )
+    # Without `class:view_all` the marker only reaches registers of sections they are
+    # assigned to -- make them this section's class teacher so the 409 below is the
+    # separation-of-duties refusal, not the scope 404.
+    me = await tenant.client.get(f"{API}/auth/me", headers=marker)
+    assert me.status_code == 200, me.text
+    assigned = await campus.patch(
+        f"{API}/classes/sections/{campus.section_id}",
+        json={"class_teacher_id": me.json()["user_id"]},
+    )
+    assert assigned.status_code == 200, assigned.text
 
     blocked = await tenant.client.patch(
         f"{API}/attendance/{session_id}/entries",

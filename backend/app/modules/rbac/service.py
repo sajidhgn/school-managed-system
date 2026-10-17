@@ -49,7 +49,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, delete, func, select
+from sqlalchemy import ColumnElement, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -57,6 +57,7 @@ from app.api.deps import AuthContext
 from app.common.audit import AuditAction, record_audit
 from app.common.schemas import PageParams
 from app.core.cache import invalidate_role_permissions
+from app.core.context import get_organization_id, get_school_id
 from app.core.exceptions import (
     AuthorizationError,
     ConflictError,
@@ -66,7 +67,9 @@ from app.core.exceptions import (
 from app.core.logging import get_logger
 from app.core.passwords import validate_password
 from app.core.security import hash_password
+from app.db.session import bind_tenant
 from app.modules.academics.models import ClassSubject, SchoolClass, Section, Subject
+from app.modules.auth.models import Session as AuthSession
 from app.modules.auth.models import User, UserStatus
 from app.modules.billing.entitlements import EntitlementService
 from app.modules.rbac.catalog import TEACHING_PERMISSIONS, scope_violations, unknown_codes
@@ -849,6 +852,211 @@ class RbacService:
             entity_id=membership_id,
             before={"full_name": old_name},
             after={"full_name": user.full_name},
+        )
+        return membership
+
+    async def _assert_can_manage_account(self, ctx: AuthContext, membership: Membership) -> User:
+        """Guard an administrator changing someone else's SIGN-IN details.
+
+        =====================================================================
+        EMAIL AND PASSWORD ARE ACCOUNT TAKEOVER, NOT PROFILE EDITING
+        =====================================================================
+            Whoever sets a member's password can sign in as them. So this is held to
+            the same ceiling as granting a role (invariant 1): you may only take
+            over an account whose authority you already hold. Concretely, refuse if
+
+            * it is your own account -- your own password is changed with your
+              current one, through the reset flow, not by administrative fiat;
+            * the person holds the principal role anywhere in the organization;
+            * a school-scoped actor would reach a membership at ANOTHER campus;
+            * any of their roles here holds a permission the actor lacks;
+            * the account belongs to ANOTHER organization as well. The user row is
+              global (one row per human), so resetting it here would hand this
+              administrator a login into someone else's tenant.
+
+        Returns the user row, loaded once for the caller to edit.
+        """
+        if membership.id == ctx.membership_id or membership.user_id == ctx.user_id:
+            raise ConflictError(
+                "Change your own email or password from your account, not here.",
+                code="SELF_MODIFICATION",
+            )
+
+        user = await self.session.get(User, membership.user_id)
+        if user is None or user.deleted_at is not None:
+            raise NotFoundError("Member not found.")
+
+        here = list(
+            (
+                await self.session.execute(
+                    select(Membership)
+                    .options(joinedload(Membership.role))
+                    .where(
+                        Membership.user_id == user.id,
+                        Membership.organization_id == ctx.organization_id,
+                        Membership.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for m in here:
+            if m.role.code == SystemRole.PRINCIPAL.value:
+                raise AuthorizationError(
+                    "A principal's sign-in details can only be changed by the principal.",
+                    code="CANNOT_EDIT_OWNER_ACCOUNT",
+                )
+            if not ctx.is_org_level and m.school_id != ctx.school_id:
+                raise AuthorizationError(
+                    "This person also works at another branch. "
+                    "Ask the principal to change their sign-in details.",
+                    code="SCOPE_VIOLATION",
+                )
+            excess = await self.role_permission_codes(m.role_id) - ctx.permissions
+            if excess:
+                raise AuthorizationError(
+                    "You cannot change the sign-in details of someone with access you do "
+                    "not hold yourself.",
+                    code="PERMISSION_ESCALATION",
+                    details={"excess": sorted(excess)},
+                )
+
+        if await self._belongs_to_other_organization(user.id, ctx.organization_id):
+            raise ConflictError(
+                "This account is also used at another organization, so only its owner "
+                "can change its email or password.",
+                code="ACCOUNT_SHARED",
+            )
+        return user
+
+    async def _belongs_to_other_organization(self, user_id: UUID, organization_id: UUID) -> bool:
+        """Does `user_id` hold a live membership in any organization but this one?
+
+        Memberships are RLS-scoped to the bound organization, so the answer is
+        invisible from a tenant session. This arms the platform-admin GUC for ONE
+        existence query -- keyed on a user already verified to be a member here, and
+        returning only a boolean -- then restores the request's own binding, exactly
+        as `AuthService.list_memberships` does.
+        """
+        await bind_tenant(self.session, None, platform_admin=True)
+        try:
+            found = (
+                await self.session.execute(
+                    select(Membership.id)
+                    .where(
+                        Membership.user_id == user_id,
+                        Membership.organization_id != organization_id,
+                        Membership.deleted_at.is_(None),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        finally:
+            await bind_tenant(self.session, get_organization_id(), school_id=get_school_id())
+        return found is not None
+
+    async def update_member_contact(
+        self,
+        *,
+        ctx: AuthContext,
+        membership_id: UUID,
+        email: str | None,
+        phone: str | None,
+    ) -> Membership:
+        """Change a member's email (their sign-in name) and/or phone number.
+
+        The phone is contact detail, editable like the name. The email is how they
+        sign in, so changing it goes through `_assert_can_manage_account`.
+        """
+        membership = await self._get_member(ctx, membership_id)
+        before: dict[str, str | None] = {}
+        after: dict[str, str | None] = {}
+
+        user: User | None
+        if email is not None:
+            user = await self._assert_can_manage_account(ctx, membership)
+            if email.lower() != user.email.lower():
+                taken = (
+                    await self.session.execute(
+                        select(User.id).where(
+                            User.email == email, User.deleted_at.is_(None), User.id != user.id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if taken is not None:
+                    raise ConflictError(
+                        "Another account already uses this email.",
+                        code="EMAIL_TAKEN",
+                        details={"field": "email"},
+                    )
+                before["email"], after["email"] = user.email, email
+                user.email = email
+        else:
+            user = await self.session.get(User, membership.user_id)
+            if user is None:
+                raise NotFoundError("Member not found.")
+
+        if phone is not None:
+            new_phone = phone.strip() or None
+            if new_phone != user.phone:
+                before["phone"], after["phone"] = user.phone, new_phone
+                user.phone = new_phone
+
+        if after:
+            await record_audit(
+                self.session,
+                organization_id=ctx.organization_id,
+                school_id=membership.school_id,
+                action=AuditAction.MEMBER_DETAILS_UPDATED,
+                actor_user_id=ctx.user_id,
+                actor_membership_id=ctx.membership_id,
+                entity_type="membership",
+                entity_id=membership_id,
+                before=before,
+                after=after,
+            )
+        return membership
+
+    async def set_member_password(
+        self, *, ctx: AuthContext, membership_id: UUID, password: str
+    ) -> Membership:
+        """Set a new password for a member and sign them out everywhere.
+
+        For the teacher who forgot theirs and has no working inbox. Every existing
+        session is revoked for the same reason `AuthService.reset_password` does it:
+        if the password is being replaced because it leaked, a surviving refresh
+        token would leave the leak open. A lockout is cleared too, so the member can
+        sign in with the new password straight away.
+
+        The password itself is never audited -- only that it was changed, and by whom.
+        """
+        membership = await self._get_member(ctx, membership_id)
+        user = await self._assert_can_manage_account(ctx, membership)
+        validate_password(password, user_inputs=[user.full_name, user.email])
+
+        user.password_hash = hash_password(password)
+        user.failed_login_count = 0
+        user.locked_until = None
+        user.lockout_count = 0
+
+        now = datetime.now(UTC)
+        await self.session.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoked_reason="admin_password_reset")
+        )
+
+        await record_audit(
+            self.session,
+            organization_id=ctx.organization_id,
+            school_id=membership.school_id,
+            action=AuditAction.MEMBER_PASSWORD_RESET,
+            actor_user_id=ctx.user_id,
+            actor_membership_id=ctx.membership_id,
+            entity_type="membership",
+            entity_id=membership_id,
+            after={"sessions_revoked": True},
         )
         return membership
 

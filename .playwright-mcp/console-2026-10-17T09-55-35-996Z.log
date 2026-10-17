@@ -1,0 +1,5 @@
+[ 2858691ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3999/papers/p-ur/print?_rsc=0mAtlt4DVtNv08hx:0
+[ 2858691ms] [ERROR] Failed to fetch RSC payload for http://localhost:3999/papers/p-ur/print. Falling back to browser navigation. TypeError: Failed to fetch
+    at y (http://localhost:3999/_next/static/chunks/2977-aca668ce0da23996.js:1:8155)
+    at async _ (http://localhost:3999/_next/static/chunks/2977-aca668ce0da23996.js:1:7013)
+    at async Object.o [as task] (http://localhost:3999/_next/static/chunks/2977-aca668ce0da23996.js:1:80524) @ http://localhost:3999/_next/static/chunks/2977-aca668ce0da23996.js:0

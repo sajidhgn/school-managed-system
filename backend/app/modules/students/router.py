@@ -36,6 +36,7 @@ from app.api.deps import (
 from app.common.schemas import Page
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.core.rate_limit import enforce_rate_limit
+from app.modules.academics.teaching_scope import assigned_teacher
 from app.modules.students.models import StudentStatus
 from app.modules.students.schemas import (
     AdmissionResponse,
@@ -172,6 +173,7 @@ async def list_students(
     return await StudentService(db).list(
         params,
         sort,
+        teacher_id=assigned_teacher(ctx.user_id, ctx.permissions),
         search=search,
         section_id=section_id,
         status=student_status,
@@ -196,10 +198,11 @@ async def create_student(payload: StudentCreate, db: DbSession) -> StudentRead:
     "/{student_id}",
     response_model=StudentRead,
     summary="Get a student",
-    dependencies=[Depends(require("student:read"))],
 )
-async def get_student(student_id: UUID, db: DbSession) -> StudentRead:
-    return await StudentService(db).get(student_id)
+async def get_student(student_id: UUID, db: DbSession, ctx: StudentReadCtx) -> StudentRead:
+    return await StudentService(db).get(
+        student_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 @router.patch(
@@ -254,8 +257,11 @@ async def promote_students(
     summary="Where this student has sat, newest first",
 )
 async def student_enrollments(
-    student_id: UUID, db: DbSession, _ctx: StudentReadCtx
+    student_id: UUID, db: DbSession, ctx: StudentReadCtx
 ) -> list[EnrollmentRead]:
+    await StudentService(db).get(
+        student_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
     return await EnrollmentService(db).history(student_id)
 
 

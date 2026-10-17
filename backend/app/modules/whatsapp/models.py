@@ -11,7 +11,9 @@ RESPONSIBILITY
       * `whatsapp_groups`    which WhatsApp group belongs to which class (or section);
       * `whatsapp_settings`  one row per campus: is the monthly notice on, on which
                              day, and the template and standing note it is built from;
-      * `whatsapp_messages`  the OUTBOX -- every post, queued, then sent or failed.
+      * `whatsapp_messages`  the OUTBOX -- every post, queued, then sent or failed:
+                             fee notices, custom notices, and the diaries teachers
+                             send through the diary agent.
 
 WHY AN OUTBOX AND NOT A SEND
     The configured transport (`common/whatsapp/sender.py`) may be pywhatkit, which
@@ -71,6 +73,8 @@ class WhatsAppMessageKind(StrEnum):
     """The monthly challan notice, at most one per group per period."""
     CUSTOM = "custom"
     """Anything the office typed and chose groups for."""
+    DIARY = "diary"
+    """The day's diary a teacher photographed and confirmed (`modules/diary_agent`)."""
 
 
 class WhatsAppMessageStatus(StrEnum):
@@ -107,6 +111,11 @@ class WhatsAppGroup(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin,
     """The code from the group's invite link (`chat.whatsapp.com/<code>`). WhatsApp
     Web opens a group by it, so it is the group's address for the transport. Stored
     as the bare code; the service accepts the full link and strips it."""
+
+    chat_id: Mapped[str | None] = mapped_column(String(64))
+    """The group's WhatsApp id (`120363...@g.us`), which is how WAHA addresses it.
+    Resolved from `invite_code` once the campus's number is connected; cleared
+    whenever the invite link changes, so it can never point at the old group."""
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     """Off = receives nothing, automatic or custom, but keeps its link and history."""

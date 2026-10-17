@@ -20,8 +20,8 @@ dependencies = [
     "alembic>=1.17.0",
     # --- Security ---
     "pyjwt[crypto]>=2.11.0",          # NOT python-jose (unmaintained, CVE-prone).
-                                      # [crypto] pulls in `cryptography`, required for
-                                      # the RS256 signing the spec mandates in production.
+    # [crypto] pulls in `cryptography`, required for
+    # the RS256 signing the spec mandates in production.
     "pwdlib[argon2]>=0.3.0",          # NOT passlib (unmaintained, breaks on bcrypt>=4.1)
     "zxcvbn>=4.5.0",                  # password strength scoring; spec §4.4 requires score >= 3
     # --- Caching ---
@@ -34,6 +34,14 @@ dependencies = [
     "aiosmtplib>=3.0.0",
     "jinja2>=3.1.0",
     "reportlab>=4.4.0",
+    # --- Textbook library: the page agent and its vector index ---
+    "openai>=3.26.0",                 # Responses (vision), Decisions and Embeddings APIs
+    "pypdfium2>=5.14.0",              # PDF render + text layer. NOT PyMuPDF (AGPL)
+    "pillow>=12.3.0",                 # phone photos: EXIF rotation, resizing
+    "pgvector>=0.5.0",                # SQLAlchemy `Vector` type and distance operators
+    # --- Diary agent: reads a diary photo a teacher sends on WhatsApp ---
+    "langchain-core>=1.6.11",
+    "langchain-openai>=1.7.2",        # ChatOpenAI vision + structured output
 ]
 
 [project.optional-dependencies]
@@ -113,6 +121,11 @@ disallow_untyped_defs = false
 # single line rather than something that spreads.
 [[tool.mypy.overrides]]
 module = ["zxcvbn.*"]
+ignore_missing_imports = true
+
+# pypdfium2 ships no py.typed marker. Its use is confined to `books/ingest.py`.
+[[tool.mypy.overrides]]
+module = ["pypdfium2.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------

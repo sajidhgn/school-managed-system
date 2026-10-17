@@ -28,12 +28,19 @@ import {
   useRetryWhatsAppMessage,
   useSaveWhatsAppSettings,
   useSendCustomMessage,
+  useWhatsAppConnection,
   useWhatsAppGroups,
   useWhatsAppMessages,
   useWhatsAppSettings,
 } from "@/hooks/use-whatsapp";
-import type { WhatsAppGroupRead, WhatsAppMessageStatus } from "@/lib/api/types";
+import type {
+  WhatsAppGroupRead,
+  WhatsAppMessageRead,
+  WhatsAppMessageStatus,
+} from "@/lib/api/types";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { ConnectionCard } from "./connection-card";
+import { DiaryAgentPanel } from "./diary-agent-panel";
 import { GroupFormDialog } from "./group-form-dialog";
 
 function currentPeriod(): string {
@@ -50,12 +57,14 @@ export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canMana
     <div className="space-y-6">
       <PageHeader
         title="WhatsApp groups"
-        description="Post the monthly fee notice and your own messages to each class's parents' group."
+        description="Post the monthly fee notice, the daily diary and your own messages to each class's parents' group."
       />
+      <ConnectionCard canManage={canManage} />
       <Tabs defaultValue="groups">
         <TabsList>
           <TabsTrigger value="groups">Groups</TabsTrigger>
           <TabsTrigger value="fee-notice">Monthly fee notice</TabsTrigger>
+          <TabsTrigger value="diary">Diary</TabsTrigger>
           {canSend && <TabsTrigger value="send">Send message</TabsTrigger>}
           <TabsTrigger value="outbox">Outbox</TabsTrigger>
         </TabsList>
@@ -64,6 +73,9 @@ export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canMana
         </TabsContent>
         <TabsContent value="fee-notice">
           <FeeNoticePanel canManage={canManage} canSend={canSend} />
+        </TabsContent>
+        <TabsContent value="diary">
+          <DiaryAgentPanel canManage={canManage} />
         </TabsContent>
         {canSend && (
           <TabsContent value="send">
@@ -85,6 +97,8 @@ export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canMana
 function GroupsPanel({ canManage }: { canManage: boolean }) {
   const groups = useWhatsAppGroups();
   const remove = useDeleteWhatsAppGroup();
+  // Reachability only means something when the school's own number is on the gateway.
+  const gateway = useWhatsAppConnection().data?.configured ?? false;
   const [editing, setEditing] = React.useState<WhatsAppGroupRead | null>(null);
   const [open, setOpen] = React.useState(false);
 
@@ -127,7 +141,20 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
                   <TableRow key={group.id}>
                     <TableCell>
                       <div className="font-medium">{group.name}</div>
-                      {!group.is_active && <Badge variant="neutral">Paused</Badge>}
+                      <div className="flex flex-wrap gap-1">
+                        {!group.is_active && <Badge variant="neutral">Paused</Badge>}
+                        {gateway &&
+                          (group.chat_id ? (
+                            <Badge variant="success">Linked</Badge>
+                          ) : (
+                            <Badge
+                              variant="warning"
+                              title="The school's number isn't in this group yet. The gateway tries to join through the invite link."
+                            >
+                              Not reachable yet
+                            </Badge>
+                          ))}
+                      </div>
                     </TableCell>
                     <TableCell>{groupClassLabel(group)}</TableCell>
                     <TableCell>
@@ -450,6 +477,18 @@ function SendPanel() {
 // Outbox
 // ---------------------------------------------------------------------------
 
+function messageKindLabel(message: WhatsAppMessageRead): string {
+  const by = message.created_by_name ? ` · ${message.created_by_name}` : "";
+  switch (message.kind) {
+    case "fee_notice":
+      return `Fee notice ${message.period_label ?? ""}`;
+    case "diary":
+      return `Diary${by}`;
+    default:
+      return `Custom${by}`;
+  }
+}
+
 const STATUS_BADGE: Record<WhatsAppMessageStatus, "warning" | "success" | "destructive"> = {
   queued: "warning",
   sent: "success",
@@ -508,9 +547,7 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                       <TableCell className="align-top">
                         <div className="font-medium">{message.group_name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {message.kind === "fee_notice"
-                            ? `Fee notice ${message.period_label ?? ""}`
-                            : `Custom${message.created_by_name ? ` · ${message.created_by_name}` : ""}`}
+                          {messageKindLabel(message)}
                         </div>
                       </TableCell>
                       <TableCell className="max-w-md align-top">

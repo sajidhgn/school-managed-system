@@ -77,6 +77,7 @@ def _principal(ctx: CurrentAuth) -> SearchPrincipal:
     """
     return SearchPrincipal(
         organization_id=ctx.organization_id,
+        user_id=ctx.user_id,
         role_code=ctx.role_code,
         permissions=ctx.permissions,
         membership_school_id=ctx.school_id,

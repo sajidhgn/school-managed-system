@@ -84,6 +84,8 @@ class AuditAction:
     MEMBER_ROLE_CHANGED = "member.role_changed"
     MEMBER_CREATED = "member.created"
     MEMBER_RENAMED = "member.renamed"
+    MEMBER_DETAILS_UPDATED = "member.details_updated"
+    MEMBER_PASSWORD_RESET = "member.password_reset"
     MEMBER_SUSPENDED = "member.suspended"
     MEMBER_REACTIVATED = "member.reactivated"
     MEMBER_REMOVED = "member.removed"
@@ -217,13 +219,6 @@ class AuditAction:
     ATTENDANCE_SESSION_DISCARDED = "attendance_session.discarded"
     ATTENDANCE_AMENDED = "attendance_record.amended"
 
-    # --- Diary ---------------------------------------------------------------
-    #
-    # One row per SAVE, carrying every subject it changed with the text before and
-    # after. Per-subject rows would bury "who changed Grade 4-B's homework on
-    # Monday?" under five lines for one click of Save.
-    DIARY_UPDATED = "diary.updated"
-
     # --- WhatsApp class groups ----------------------------------------------
     # Sends are audited per BATCH (one row per "send to these 12 groups"), not per
     # group: the outbox already holds every message individually.
@@ -233,6 +228,38 @@ class AuditAction:
     WHATSAPP_SETTINGS_SET = "whatsapp_settings.set"
     WHATSAPP_FEE_NOTICE_QUEUED = "whatsapp_fee_notice.queued"
     WHATSAPP_MESSAGE_QUEUED = "whatsapp_message.queued"
+    WHATSAPP_CONNECTION_STARTED = "whatsapp_connection.started"
+    WHATSAPP_CONNECTION_LOGGED_OUT = "whatsapp_connection.logged_out"
+
+    # --- Diary agent ---------------------------------------------------------
+    # One row when a teacher confirms a diary and it is queued for the group; the
+    # draft itself (photo reading, revisions) lives in `diary_drafts`.
+    DIARY_AGENT_SETTINGS_SET = "diary_agent_settings.set"
+    DIARY_POSTED = "diary.posted"
+
+    # --- Textbook library ----------------------------------------------------
+    # `entity_type` is always `book`, with the chapter id in the payload: "what
+    # happened to this book?" is the question the trail answers.
+    BOOK_CREATED = "book.created"
+    BOOK_UPDATED = "book.updated"
+    BOOK_DELETED = "book.deleted"
+    BOOK_CHAPTER_CREATED = "book_chapter.created"
+    BOOK_CHAPTER_UPDATED = "book_chapter.updated"
+    BOOK_CHAPTER_DELETED = "book_chapter.deleted"
+    BOOK_CHAPTER_FILES_UPLOADED = "book_chapter.files_uploaded"
+    BOOK_CHAPTER_FILE_DELETED = "book_chapter.file_deleted"
+    BOOK_CHAPTER_QUEUED = "book_chapter.queued"
+    BOOK_CHAPTER_ACCEPTED = "book_chapter.accepted"
+
+    # --- Test papers ----------------------------------------------------------
+    PAPER_REQUESTED = "paper.requested"
+    PAPER_UPDATED = "paper.updated"
+    PAPER_DELETED = "paper.deleted"
+    PAPER_REGENERATED = "paper.regenerated"
+    PAPER_QUESTION_EDITED = "paper.question_edited"
+    PAPER_QUESTION_REPLACED = "paper.question_replaced"
+    PAPER_QUESTION_REMOVED = "paper.question_removed"
+    PAPER_QUESTION_ADDED = "paper.question_added"
 
     # --- Per-student fee arrangements ---------------------------------------
     #

@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { UNASSIGNED_DESCRIPTION, UNASSIGNED_TITLE, useAssignmentBound } from "@/hooks/use-assignment-bound";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExams } from "@/hooks/use-exams";
@@ -301,6 +302,7 @@ export function StudentsView({
     }
     return map;
   }, [classes]);
+  const bound = useAssignmentBound();
   const columnCount = (canManage ? 7 : 6) + (showDues ? 1 : 0) + (showResult ? 1 : 0);
 
   // Currency comes from the challans themselves rather than being assumed: the rows
@@ -523,11 +525,19 @@ export function StudentsView({
                     <TableCell colSpan={columnCount} className="p-0">
                       <EmptyState
                         icon={Users}
-                        title={hasFilters ? "No matching students" : "No students yet"}
+                        title={
+                          hasFilters
+                            ? "No matching students"
+                            : bound
+                              ? UNASSIGNED_TITLE
+                              : "No students yet"
+                        }
                         description={
                           hasFilters
                             ? "Try a different search term or clear the filters."
-                            : "Enroll your first student to start building the directory."
+                            : bound
+                              ? UNASSIGNED_DESCRIPTION
+                              : "Enroll your first student to start building the directory."
                         }
                         action={
                           hasFilters ? (

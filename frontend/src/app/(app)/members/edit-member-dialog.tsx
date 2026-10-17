@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
 import { ApiError } from "@/lib/api/errors";
@@ -29,7 +30,14 @@ import { PERMISSIONS, type MemberRead, type MemberUpdate, type RoleRead } from "
 type Assignment = MemberRead["assigned_classes"] extends (infer A)[] | undefined ? A : never;
 
 /**
- * Edit one staff member: their name, their role, and the classes they teach.
+ * Edit one staff member: name, contact details, sign-in password, role, and the
+ * classes they teach.
+ *
+ * Email and password are the member's SIGN-IN details. The server refuses to change
+ * them for a principal, for someone with more access than you, or for an account
+ * that also belongs to another organization; those refusals come back as inline
+ * errors rather than being second-guessed here. Setting a password needs
+ * `member:reset_password` and signs the member out on every device.
  *
  * Removing a class assignment does not touch the membership — it clears the
  * section's class teacher (or the curriculum row's teacher) through the classes
@@ -48,6 +56,12 @@ export function EditMemberDialog({
 }) {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [roleId, setRoleId] = useState("");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [saving, setSaving] = useState(false);
@@ -56,6 +70,12 @@ export function EditMemberDialog({
   useEffect(() => {
     if (!member) return;
     setFullName(member.full_name);
+    setEmail(member.email);
+    setPhone(member.phone ?? "");
+    setPassword("");
+    setConfirmPassword("");
+    setEmailError(null);
+    setPasswordError(null);
     setRoleId(member.role_id);
     setAssignments(member.assigned_classes ?? []);
   }, [member]);
@@ -73,9 +93,24 @@ export function EditMemberDialog({
 
   async function save() {
     if (!member) return;
+    setEmailError(null);
+    setPasswordError(null);
+    if (password && password !== confirmPassword) {
+      setPasswordError("The two passwords do not match.");
+      return;
+    }
+
     const body: MemberUpdate = {};
     const name = fullName.trim();
     if (name && name !== member.full_name) body.full_name = name;
+    const newEmail = email.trim();
+    if (!isOwner && newEmail && newEmail.toLowerCase() !== member.email.toLowerCase()) {
+      body.email = newEmail;
+    }
+    // An empty string clears the number on the server.
+    const newPhone = phone.trim();
+    if (newPhone !== (member.phone ?? "")) body.phone = newPhone;
+    if (!isOwner && password) body.password = password;
     if (!isOwner && roleId && roleId !== member.role_id) body.role_id = roleId;
     if (Object.keys(body).length === 0) {
       onClose();
@@ -84,10 +119,23 @@ export function EditMemberDialog({
     setSaving(true);
     try {
       await membersApi.update(schoolId, member.membership_id, body);
-      toast({ title: `${name || member.full_name} was updated.` });
+      toast({
+        title: `${name || member.full_name} was updated.`,
+        description: body.password ? "Their new password is set and they were signed out." : undefined,
+      });
       router.refresh();
       onClose();
     } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.code === "EMAIL_TAKEN") {
+          setEmailError(error.message);
+          return;
+        }
+        if (error.code === "WEAK_PASSWORD") {
+          setPasswordError(error.message);
+          return;
+        }
+      }
       fail(error);
     } finally {
       setSaving(false);
@@ -148,7 +196,93 @@ export function EditMemberDialog({
               ))}
             </NativeSelect>
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="member-email">Email (used to sign in)</Label>
+            <Input
+              id="member-email"
+              type="email"
+              autoComplete="off"
+              value={email}
+              maxLength={320}
+              disabled={isOwner}
+              aria-invalid={emailError ? true : undefined}
+              aria-describedby={emailError ? "member-email-error" : undefined}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setEmailError(null);
+              }}
+            />
+            {emailError ? (
+              <p id="member-email-error" className="text-sm text-destructive">
+                {emailError}
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="member-phone">Phone</Label>
+            <Input
+              id="member-phone"
+              type="tel"
+              autoComplete="off"
+              value={phone}
+              maxLength={32}
+              placeholder="Not set"
+              onChange={(event) => setPhone(event.target.value)}
+            />
+          </div>
         </div>
+
+        <Can permission={PERMISSIONS.memberResetPassword}>
+          <div className="grid gap-2 rounded-md border p-4">
+            <div>
+              <Label>Change password</Label>
+              <p className="text-sm text-muted-foreground">
+                {isOwner
+                  ? "The principal changes their own password from their account."
+                  : "Leave blank to keep the current password. Setting a new one signs them out on every device."}
+              </p>
+            </div>
+            {isOwner ? null : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="member-password">New password</Label>
+                  <PasswordInput
+                    id="member-password"
+                    autoComplete="new-password"
+                    value={password}
+                    maxLength={200}
+                    aria-invalid={passwordError ? true : undefined}
+                    aria-describedby={passwordError ? "member-password-error" : undefined}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setPasswordError(null);
+                    }}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="member-password-confirm">Confirm new password</Label>
+                  <PasswordInput
+                    id="member-password-confirm"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    maxLength={200}
+                    disabled={!password}
+                    aria-invalid={passwordError ? true : undefined}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+                      setPasswordError(null);
+                    }}
+                  />
+                </div>
+                {passwordError ? (
+                  <p id="member-password-error" className="text-sm text-destructive sm:col-span-2">
+                    {passwordError}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </Can>
 
         <div className="grid gap-2">
           <Label>Classes assigned</Label>
@@ -206,7 +340,10 @@ export function EditMemberDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={saving || fullName.trim() === ""}>
+          <Button
+            onClick={save}
+            disabled={saving || fullName.trim() === "" || (!isOwner && email.trim() === "")}
+          >
             {saving ? "Saving…" : "Save changes"}
           </Button>
         </DialogFooter>

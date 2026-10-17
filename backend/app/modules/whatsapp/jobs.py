@@ -6,7 +6,9 @@ TWO JOBS, RUN IN TWO DIFFERENT PLACES -- ON PURPOSE
       on the 1st does both in one pass. It only writes rows; it can run anywhere.
     * `dispatch_outbox` actually posts, and is run by `app.cli send-whatsapp` on the
       machine where the transport works. For pywhatkit that is a desktop with
-      WhatsApp Web logged in -- see `common/whatsapp/sender.py`.
+      WhatsApp Web logged in -- see `common/whatsapp/sender.py`. For WAHA it is
+      anywhere, and the diary agent also calls it with `only=` right after a
+      teacher confirms, so a diary does not wait for the next pass.
 
     Keeping them apart is what lets the server keep its nightly schedule while the
     posting happens wherever a logged-in browser exists.
@@ -18,6 +20,7 @@ CONTEXTVARS
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from uuid import UUID
 
@@ -34,7 +37,7 @@ from app.core.context import (
 from app.core.logging import get_logger
 from app.db.session import session_scope
 from app.modules.tenancy.models import School
-from app.modules.whatsapp.models import WhatsAppMessageStatus, WhatsAppSettings
+from app.modules.whatsapp.models import WhatsAppGroup, WhatsAppMessageStatus, WhatsAppSettings
 from app.modules.whatsapp.repository import WhatsAppMessageRepository
 from app.modules.whatsapp.service import WhatsAppService
 
@@ -80,17 +83,27 @@ async def queue_fee_notices_for_organization(
 
 
 async def dispatch_outbox(
-    organization_id: UUID, sender: WhatsAppSender, *, limit: int
+    organization_id: UUID,
+    sender: WhatsAppSender,
+    *,
+    limit: int,
+    only: Sequence[UUID] | None = None,
 ) -> tuple[int, int]:
     """Send up to `limit` queued messages for one organization. Returns (sent, failed).
+
+    `only` sends just those messages -- the diary agent posting the diary a teacher
+    has just confirmed, without draining the rest of the queue on that request.
 
     ONE TRANSACTION PER MESSAGE. A pywhatkit post takes half a minute; holding one
     transaction across fifty of them would keep every row locked for half an hour,
     and a crash at message 49 would roll back the record of 48 posts that really
     happened -- and the next run would post them all again.
     """
-    async with session_scope(organization_id) as session:
-        ids = await WhatsAppMessageRepository(session).queued_ids(limit)
+    if only is not None:
+        ids = list(only)[:limit]
+    else:
+        async with session_scope(organization_id) as session:
+            ids = await WhatsAppMessageRepository(session).queued_ids(limit)
 
     sent = failed = 0
     for message_id in ids:
@@ -99,12 +112,19 @@ async def dispatch_outbox(
             if message is None:
                 continue  # another dispatcher took it, or it was cancelled
             message.attempts += 1
+            group = await session.get(WhatsAppGroup, message.group_id) if message.group_id else None
             try:
                 await sender.send(
                     WhatsAppGroupMessage(
                         group_code=message.invite_code,
                         body=message.body,
                         purpose=message.kind.value,
+                        # Only while the group still has the link the message was
+                        # queued for -- a changed link means a different group.
+                        chat_id=group.chat_id
+                        if group is not None and group.invite_code == message.invite_code
+                        else None,
+                        school_id=message.school_id,
                     )
                 )
             except Exception as exc:  # any transport failure fails ONE message

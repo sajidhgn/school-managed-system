@@ -5,6 +5,12 @@ AUTHORISATION SHAPE
     catalog seeded them ahead of this module landing (see the note above
     `ACADEMIC_PERMISSIONS`), so teachers can already read AND enter marks and
     every custom role a customer built keeps working on the day exams appear.
+
+TEACHING SCOPE
+    Every endpoint passes `assigned_teacher(...)` down: a caller without
+    `class:view_all` sees and marks only the papers, sections and classes they
+    are assigned to (see `service.py`). Exam CREATE alone is unbounded -- a new
+    exam has no papers, so nothing in it belongs to anyone's class yet.
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import AuthContext, DbSession, Pagination, SearchQuery, Sorting, require
 from app.common.schemas import Page
+from app.modules.academics.teaching_scope import assigned_teacher
 from app.modules.exams.schemas import (
     ExamClassResults,
     ExamCreate,
@@ -36,6 +43,10 @@ GradeReadCtx = Annotated[AuthContext, Depends(require("grade:read"))]
 GradeManageCtx = Annotated[AuthContext, Depends(require("grade:manage"))]
 
 
+def _teacher(ctx: AuthContext) -> UUID | None:
+    return assigned_teacher(ctx.user_id, ctx.permissions)
+
+
 # ---------------------------------------------------------------------------
 # Papers and marks -- declared BEFORE `/{exam_id}` so "papers" is never parsed
 # as an exam id (Starlette matches in declaration order).
@@ -47,8 +58,8 @@ GradeManageCtx = Annotated[AuthContext, Depends(require("grade:manage"))]
     response_model=PaperMarksRead,
     summary="The mark sheet for one paper: every student of the class, marks merged in",
 )
-async def paper_marks(paper_id: UUID, db: DbSession, _ctx: GradeReadCtx) -> PaperMarksRead:
-    return await ExamService(db).paper_marks(paper_id)
+async def paper_marks(paper_id: UUID, db: DbSession, ctx: GradeReadCtx) -> PaperMarksRead:
+    return await ExamService(db).paper_marks(paper_id, teacher_id=_teacher(ctx))
 
 
 @exams_router.put(
@@ -59,7 +70,9 @@ async def paper_marks(paper_id: UUID, db: DbSession, _ctx: GradeReadCtx) -> Pape
 async def upsert_marks(
     paper_id: UUID, payload: MarksUpsert, db: DbSession, ctx: GradeManageCtx
 ) -> MarksUpsertResult:
-    return await ExamService(db).upsert_marks(paper_id, payload, actor_id=ctx.user_id)
+    return await ExamService(db).upsert_marks(
+        paper_id, payload, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @exams_router.patch(
@@ -70,7 +83,9 @@ async def upsert_marks(
 async def update_paper(
     paper_id: UUID, payload: ExamPaperUpdate, db: DbSession, ctx: GradeManageCtx
 ) -> ExamPaperRead:
-    return await ExamService(db).update_paper(paper_id, payload, actor_id=ctx.user_id)
+    return await ExamService(db).update_paper(
+        paper_id, payload, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @exams_router.delete(
@@ -79,7 +94,7 @@ async def update_paper(
     summary="Remove an unmarked paper from its exam",
 )
 async def remove_paper(paper_id: UUID, db: DbSession, ctx: GradeManageCtx) -> None:
-    await ExamService(db).remove_paper(paper_id, actor_id=ctx.user_id)
+    await ExamService(db).remove_paper(paper_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +111,10 @@ async def list_exams(
     db: DbSession,
     params: Pagination,
     sort: Sorting,
-    _ctx: GradeReadCtx,
+    ctx: GradeReadCtx,
     search: SearchQuery = None,
 ) -> Page[ExamRead]:
-    return await ExamService(db).list_exams(params, sort, search=search)
+    return await ExamService(db).list_exams(params, sort, search=search, teacher_id=_teacher(ctx))
 
 
 @exams_router.post(
@@ -117,8 +132,8 @@ async def create_exam(payload: ExamCreate, db: DbSession, ctx: GradeManageCtx) -
     response_model=ExamRead,
     summary="Get an exam",
 )
-async def get_exam(exam_id: UUID, db: DbSession, _ctx: GradeReadCtx) -> ExamRead:
-    return await ExamService(db).read_exam(exam_id)
+async def get_exam(exam_id: UUID, db: DbSession, ctx: GradeReadCtx) -> ExamRead:
+    return await ExamService(db).read_exam(exam_id, teacher_id=_teacher(ctx))
 
 
 @exams_router.patch(
@@ -129,7 +144,9 @@ async def get_exam(exam_id: UUID, db: DbSession, _ctx: GradeReadCtx) -> ExamRead
 async def update_exam(
     exam_id: UUID, payload: ExamUpdate, db: DbSession, ctx: GradeManageCtx
 ) -> ExamRead:
-    return await ExamService(db).update_exam(exam_id, payload, actor_id=ctx.user_id)
+    return await ExamService(db).update_exam(
+        exam_id, payload, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @exams_router.delete(
@@ -138,7 +155,7 @@ async def update_exam(
     summary="Delete an exam no marks have been entered for",
 )
 async def delete_exam(exam_id: UUID, db: DbSession, ctx: GradeManageCtx) -> None:
-    await ExamService(db).delete_exam(exam_id, actor_id=ctx.user_id)
+    await ExamService(db).delete_exam(exam_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +168,8 @@ async def delete_exam(exam_id: UUID, db: DbSession, ctx: GradeManageCtx) -> None
     response_model=list[ExamPaperRead],
     summary="The papers of an exam, in class-then-subject order",
 )
-async def list_papers(exam_id: UUID, db: DbSession, _ctx: GradeReadCtx) -> list[ExamPaperRead]:
-    return await ExamService(db).list_papers(exam_id)
+async def list_papers(exam_id: UUID, db: DbSession, ctx: GradeReadCtx) -> list[ExamPaperRead]:
+    return await ExamService(db).list_papers(exam_id, teacher_id=_teacher(ctx))
 
 
 @exams_router.post(
@@ -164,7 +181,9 @@ async def list_papers(exam_id: UUID, db: DbSession, _ctx: GradeReadCtx) -> list[
 async def add_paper(
     exam_id: UUID, payload: ExamPaperCreate, db: DbSession, ctx: GradeManageCtx
 ) -> ExamPaperRead:
-    return await ExamService(db).add_paper(exam_id, payload, actor_id=ctx.user_id)
+    return await ExamService(db).add_paper(
+        exam_id, payload, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @exams_router.get(
@@ -173,6 +192,6 @@ async def add_paper(
     summary="The result sheet for one class: papers as columns, students ranked",
 )
 async def class_results(
-    exam_id: UUID, class_id: UUID, db: DbSession, _ctx: GradeReadCtx
+    exam_id: UUID, class_id: UUID, db: DbSession, ctx: GradeReadCtx
 ) -> ExamClassResults:
-    return await ExamService(db).class_results(exam_id, class_id)
+    return await ExamService(db).class_results(exam_id, class_id, teacher_id=_teacher(ctx))

@@ -19,6 +19,15 @@ WHY A GROUP CAN BE SKIPPED
     notice the night after they are issued -- unless the challans are already past
     due, at which point a "please pay by" message would be wrong rather than late.
 
+THE CONNECTION (WAHA only)
+    With `WHATSAPP_BACKEND=waha` each campus links its own number by scanning a QR
+    code (`connect` -> `qr`). Groups are then addressed by their WhatsApp id, which
+    is resolved from the invite link as soon as the number is connected -- when a
+    group is linked, and again whenever the connection is looked at, so a group
+    linked before connecting is picked up without anyone re-saving it. Resolving
+    may JOIN the group through its invite link: the number must be a member to post
+    there, and the office linking the group is the decision that it should be.
+
 INTERACTIONS
     * Reads classes/sections, fee vouchers and structures; never writes them.
     * Writes only `whatsapp_*` tables. Sending is `jobs.dispatch_outbox`'s job.
@@ -37,8 +46,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.schemas import Page, PageParams
+from app.common.whatsapp.waha import WahaClient, WahaError, session_name
 from app.core.context import require_organization_id, require_school_id
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    ConflictError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import get_logger
 from app.modules.academics.models import SchoolClass, Section
 from app.modules.tenancy.models import School
@@ -62,9 +77,11 @@ from app.modules.whatsapp.schemas import (
     FeeNoticePreview,
     FeeNoticeQueueRequest,
     QueueResult,
+    WhatsAppConnectionRead,
     WhatsAppGroupRead,
     WhatsAppGroupWrite,
     WhatsAppMessageRead,
+    WhatsAppQrRead,
     WhatsAppSettingsRead,
     WhatsAppSettingsWrite,
 )
@@ -114,8 +131,9 @@ def _month_name(period_label: str) -> str:
 
 
 class WhatsAppService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, waha: WahaClient | None = None) -> None:
         self.session = session
+        self.waha = waha or WahaClient()
         self.groups = WhatsAppGroupRepository(session)
         self.settings = WhatsAppSettingsRepository(session)
         self.messages = WhatsAppMessageRepository(session)
@@ -154,6 +172,7 @@ class WhatsAppService:
             actor_id,
             after={"name": group.name, "class_id": str(group.class_id)},
         )
+        await self._resolve_chat_id(group)
         return self._group_read(group, school_class, section, None)
 
     async def update_group(
@@ -175,6 +194,8 @@ class WhatsAppService:
                     section_id=section.id if section else None,
                     name=payload.name,
                     invite_code=code,
+                    # A new link is a different group until proven otherwise.
+                    chat_id=group.chat_id if code == group.invite_code else None,
                     is_active=payload.is_active,
                     send_fee_notice=payload.send_fee_notice,
                 )
@@ -192,6 +213,7 @@ class WhatsAppService:
                 "is_active": group.is_active,
             },
         )
+        await self._resolve_chat_id(group)
         last = await self.messages.last_sent([group.id])
         return self._group_read(group, school_class, section, last.get(group.id))
 
@@ -209,6 +231,101 @@ class WhatsAppService:
             actor_id,
             before={"name": group.name, "invite_code": group.invite_code},
         )
+
+    # -- the connection (WAHA) ---------------------------------------------
+
+    async def connection(self) -> WhatsAppConnectionRead:
+        """The campus's linked number. Looking also finishes linking groups: once the
+        session is WORKING, any group without a WhatsApp id is resolved now."""
+        info = None
+        if self.waha.configured:
+            try:
+                info = await self.waha.session_info(session_name(require_school_id()))
+            except WahaError as exc:
+                raise ExternalServiceError(str(exc), code="WHATSAPP_GATEWAY_ERROR") from exc
+            if info is not None and info.status == "WORKING":
+                for group, _, _ in await self.groups.all_with_class():
+                    if group.is_active and group.chat_id is None:
+                        await self._resolve_chat_id(group)
+        unresolved = sum(
+            1 for g, _, _ in await self.groups.all_with_class() if g.is_active and not g.chat_id
+        )
+        return WhatsAppConnectionRead(
+            backend=self.waha.settings.WHATSAPP_BACKEND,
+            configured=self.waha.configured,
+            status=info.status if info else None,
+            phone=info.phone if info else None,
+            push_name=info.push_name if info else None,
+            unresolved_groups=unresolved,
+        )
+
+    async def connect(self, *, actor_id: UUID) -> WhatsAppConnectionRead:
+        """Create (or restart) the campus's session; the screen then shows its QR."""
+        self._require_waha()
+        school_id = require_school_id()
+        try:
+            await self.waha.ensure_session(
+                session_name(school_id),
+                organization_id=require_organization_id(),
+                school_id=school_id,
+            )
+        except WahaError as exc:
+            raise ExternalServiceError(str(exc), code="WHATSAPP_GATEWAY_ERROR") from exc
+        await self._audit(
+            AuditAction.WHATSAPP_CONNECTION_STARTED, "whatsapp_connection", None, actor_id
+        )
+        return await self.connection()
+
+    async def qr(self) -> WhatsAppQrRead:
+        self._require_waha()
+        name = session_name(require_school_id())
+        try:
+            info = await self.waha.session_info(name)
+            if info is None or info.status != "SCAN_QR_CODE":
+                raise ConflictError(
+                    "There is no QR code to scan right now. Connect first, or the number "
+                    "is already linked.",
+                    code="NO_QR_CODE",
+                )
+            qr = await self.waha.qr(name)
+        except WahaError as exc:
+            raise ExternalServiceError(str(exc), code="WHATSAPP_GATEWAY_ERROR") from exc
+        return WhatsAppQrRead(mimetype=qr.mimetype, data=qr.data)
+
+    async def disconnect(self, *, actor_id: UUID) -> None:
+        """Log the number out. Groups keep their ids; a reconnect to the same number
+        posts to them again without re-resolving."""
+        self._require_waha()
+        try:
+            await self.waha.logout(session_name(require_school_id()))
+        except WahaError as exc:
+            raise ExternalServiceError(str(exc), code="WHATSAPP_GATEWAY_ERROR") from exc
+        await self._audit(
+            AuditAction.WHATSAPP_CONNECTION_LOGGED_OUT, "whatsapp_connection", None, actor_id
+        )
+
+    def _require_waha(self) -> None:
+        if not self.waha.configured:
+            raise ConflictError(
+                "WhatsApp is not connected through the gateway on this server "
+                "(WHATSAPP_BACKEND=waha).",
+                code="WHATSAPP_GATEWAY_NOT_CONFIGURED",
+            )
+
+    async def _resolve_chat_id(self, group: WhatsAppGroup) -> None:
+        """Best effort: a gateway that is down or not linked yet leaves the id empty,
+        and the next look at the connection (or the send itself) tries again."""
+        if not self.waha.configured or group.chat_id:
+            return
+        try:
+            chat_id = await self.waha.group_chat_id(
+                session_name(group.school_id), group.invite_code
+            )
+        except WahaError as exc:
+            logger.info("whatsapp_group_unresolved", group_id=str(group.id), error=str(exc))
+            return
+        group.chat_id = chat_id
+        await self.session.flush()
 
     # -- settings -----------------------------------------------------------
 
@@ -363,6 +480,17 @@ class WhatsAppService:
         )
         return QueueResult(queued=len(targets))
 
+    # -- the diary --------------------------------------------------------
+
+    async def queue_diary(
+        self, group: WhatsAppGroup, body: str, *, actor_id: UUID
+    ) -> WhatsAppMessage:
+        """Queue the diary a teacher confirmed (`modules/diary_agent`) for one group."""
+        message = self._message(group, WhatsAppMessageKind.DIARY, body, actor_id, None)
+        self.session.add(message)
+        await self.session.flush()
+        return message
+
     # -- the outbox -------------------------------------------------------
 
     async def list_messages(
@@ -508,6 +636,7 @@ class WhatsAppService:
             section_name=section.name if section else None,
             name=group.name,
             invite_code=group.invite_code,
+            chat_id=group.chat_id,
             is_active=group.is_active,
             send_fee_notice=group.send_fee_notice,
             last_sent_at=last_sent_at,

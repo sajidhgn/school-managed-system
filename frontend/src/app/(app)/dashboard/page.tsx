@@ -15,6 +15,7 @@ import {
   type Page,
   type SchoolRead,
   type UsageResponse,
+  SCHOOL_ADMIN_PERMISSIONS,
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
@@ -77,7 +78,7 @@ export default async function DashboardPage() {
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Can permission={PERMISSIONS.schoolRead}>
+        <Can anyOf={SCHOOL_ADMIN_PERMISSIONS}>
           <StatCard icon={Building2} label={t.nav.schools} value={schools.length} href="/schools" />
         </Can>
         {schoolId ? (

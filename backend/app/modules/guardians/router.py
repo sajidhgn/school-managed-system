@@ -18,16 +18,23 @@ WHY THE STUDENT-SIDE ROUTE LIVES HERE AND NOT IN `students/router.py`
     `guardian:read`. Mounting it in the students module would put a route secured with
     one module's permission inside another module's file, which is exactly how a route
     ends up guarded by the wrong one after a refactor.
+
+WHAT A TEACHER SEES
+    The reads are bounded by `teaching_scope`: without `class:view_all`, a caller
+    sees only the guardians of children in the sections they are assigned to, and
+    any other guardian or child is a 404.
 """
 
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import AuthContext, DbSession, Pagination, SearchQuery, Sorting, require
 from app.common.schemas import Page
+from app.modules.academics.teaching_scope import assigned_teacher
 from app.modules.guardians.schemas import (
     GuardianCreate,
     GuardianDetail,
@@ -44,6 +51,10 @@ from app.modules.guardians.service import GuardianService
 
 router = APIRouter()
 
+# The reads carry the context, not just the check, so they can be bounded to the
+# caller's assigned sections.
+ReadCtx = Annotated[AuthContext, Depends(require("guardian:read"))]
+
 
 # ---------------------------------------------------------------------------
 # Contacts for one student
@@ -58,11 +69,14 @@ router = APIRouter()
     "/students/{student_id}",
     response_model=list[StudentGuardianRead],
     summary="List the guardians of one student",
-    dependencies=[Depends(require("guardian:read"))],
 )
-async def guardians_of_student(student_id: UUID, db: DbSession) -> list[StudentGuardianRead]:
+async def guardians_of_student(
+    student_id: UUID, db: DbSession, ctx: ReadCtx
+) -> list[StudentGuardianRead]:
     """The contact card: every linked guardian, primary contact first."""
-    return await GuardianService(db).list_for_student(student_id)
+    return await GuardianService(db).list_for_student(
+        student_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -74,19 +88,23 @@ async def guardians_of_student(student_id: UUID, db: DbSession) -> list[StudentG
     "",
     response_model=Page[GuardianRead],
     summary="List guardians",
-    dependencies=[Depends(require("guardian:read"))],
 )
 async def list_guardians(
     db: DbSession,
     params: Pagination,
     sort: Sorting,
+    ctx: ReadCtx,
     search: SearchQuery = None,
     student_id: UUID | None = Query(
         default=None, description="Only guardians linked to this student."
     ),
 ) -> Page[GuardianRead]:
     return await GuardianService(db).list_guardians(
-        params=params, sort=sort, search=search, student_id=student_id
+        params=params,
+        sort=sort,
+        search=search,
+        student_id=student_id,
+        teacher_id=assigned_teacher(ctx.user_id, ctx.permissions),
     )
 
 
@@ -116,10 +134,11 @@ async def register_guardian(
     "/{guardian_id}",
     response_model=GuardianDetail,
     summary="Get a guardian with their children",
-    dependencies=[Depends(require("guardian:read"))],
 )
-async def get_guardian(guardian_id: UUID, db: DbSession) -> GuardianDetail:
-    return await GuardianService(db).detail(guardian_id)
+async def get_guardian(guardian_id: UUID, db: DbSession, ctx: ReadCtx) -> GuardianDetail:
+    return await GuardianService(db).detail(
+        guardian_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 @router.patch(

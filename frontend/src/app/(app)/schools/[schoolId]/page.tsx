@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { SchoolDetailView } from "./school-detail-view";
 import { serverGet, serverGetOrNull } from "@/lib/api/server";
@@ -10,7 +10,9 @@ import {
   type Page,
   type RoleRead,
   type SchoolRead,
+  SCHOOL_ADMIN_PERMISSIONS,
 } from "@/lib/api/types";
+import { canAny } from "@/lib/auth/permissions";
 import { getActiveSchoolId, hasPermission, requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "School" };
@@ -35,6 +37,7 @@ export default async function SchoolDetailPage({
 }) {
   const { schoolId } = await params;
   const user = await requireUser();
+  if (!canAny(user, ...SCHOOL_ADMIN_PERMISSIONS)) redirect("/dashboard");
 
   const school = await serverGetOrNull<SchoolRead>(`/schools/${schoolId}`);
   // 404 rather than an empty shell: a school id that does not exist, or belongs to

@@ -50,8 +50,11 @@ from app.modules.auth import models as auth_models
 # --- Billing: subscriptions, invoices, usage counters, webhook ledger -------
 from app.modules.billing import models as billing_models
 
-# --- Diary: the daily homework page per section and subject -----------------
-from app.modules.diary import models as diary_models
+# --- Textbook library: books, chapters, uploads, pages, pgvector chunks -----
+from app.modules.books import models as book_models
+
+# --- Diary agent: each campus's diary format, and the drafts teachers confirm --
+from app.modules.diary_agent import models as diary_agent_models
 
 # --- Fees: what a school bills its students (NOT the SaaS subscription) -----
 # After `academics` and before `students` in spirit -- `fee_structures.class_id`
@@ -65,6 +68,9 @@ from app.modules.guardians import models as guardian_models
 
 # --- Invitations: the only entry path into an existing organization ---------
 from app.modules.invitations import models as invitation_models
+
+# --- Test papers and the question bank, written from book chapters ---------
+from app.modules.papers import models as paper_models
 
 # --- Platform (no RLS): operators, plan catalog, platform audit -------------
 from app.modules.platform_admin import models as platform_models
@@ -85,10 +91,12 @@ __all__ = [
     "attendance_models",
     "auth_models",
     "billing_models",
-    "diary_models",
+    "book_models",
+    "diary_agent_models",
     "fees_models",
     "guardian_models",
     "invitation_models",
+    "paper_models",
     "platform_models",
     "rbac_models",
     "student_models",

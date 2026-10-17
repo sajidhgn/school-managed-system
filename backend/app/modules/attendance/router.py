@@ -25,6 +25,11 @@ WHY MARKING IS A PATCH ON THE REGISTER AND NOT A POST PER STUDENT
     request carrying the changed entries is atomic, retryable, and produces one
     audit batch.
 
+TEACHERS SEE THEIR OWN SECTIONS
+    A caller without `class:view_all` is bound to the sections they are assigned to
+    (`academics/teaching_scope.py`). Every handler passes `teacher_id` -- None for
+    an unbound caller -- and the service turns anything outside it into a 404.
+
 ROUTE ORDER IS LOAD-BEARING
     Starlette matches in declaration order. Every literal segment (`/today`,
     `/students/...`, `/sections/...`) is declared BEFORE the `/{session_id}` pattern
@@ -41,6 +46,7 @@ from fastapi import APIRouter, Body, Depends, Query, status
 
 from app.api.deps import AuthContext, DbSession, Pagination, Sorting, require
 from app.common.schemas import Page
+from app.modules.academics.teaching_scope import assigned_teacher
 from app.modules.attendance.models import AttendanceSessionStatus
 from app.modules.attendance.schemas import (
     AttendanceMarkRequest,
@@ -60,6 +66,10 @@ MarkCtx = Annotated[AuthContext, Depends(require("attendance:mark"))]
 AmendCtx = Annotated[AuthContext, Depends(require("attendance:amend"))]
 
 
+def _teacher(ctx: AuthContext) -> UUID | None:
+    return assigned_teacher(ctx.user_id, ctx.permissions)
+
+
 # ---------------------------------------------------------------------------
 # Registers
 # ---------------------------------------------------------------------------
@@ -72,7 +82,7 @@ AmendCtx = Annotated[AuthContext, Depends(require("attendance:amend"))]
 )
 async def daily_overview(
     db: DbSession,
-    _ctx: ReadCtx,
+    ctx: ReadCtx,
     session_date: date | None = Query(default=None, alias="date", description="Defaults to today."),
 ) -> DailyOverview:
     """The head teacher's morning chase list.
@@ -80,7 +90,7 @@ async def daily_overview(
     `session_id: null` means nobody has opened that section's register -- a state a
     flat attendance table cannot distinguish from "everybody was present".
     """
-    return await AttendanceService(db).daily_overview(session_date)
+    return await AttendanceService(db).daily_overview(session_date, teacher_id=_teacher(ctx))
 
 
 @router.get(
@@ -92,7 +102,7 @@ async def list_sessions(
     db: DbSession,
     params: Pagination,
     sort: Sorting,
-    _ctx: ReadCtx,
+    ctx: ReadCtx,
     section_id: UUID | None = Query(default=None, description="Filter by section."),
     from_date: date | None = Query(default=None, description="Inclusive lower bound."),
     to_date: date | None = Query(default=None, description="Inclusive upper bound."),
@@ -109,6 +119,7 @@ async def list_sessions(
         from_date=from_date,
         to_date=to_date,
         session_status=session_status,
+        teacher_id=_teacher(ctx),
     )
 
 
@@ -130,7 +141,9 @@ async def open_session(
     Every student on the roster is written in as `present`; the teacher then flips
     the exceptions. See `AttendanceService` for why the register is pre-filled.
     """
-    return await AttendanceService(db).open_session(payload, actor_id=ctx.user_id)
+    return await AttendanceService(db).open_session(
+        payload, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @router.get(
@@ -138,8 +151,8 @@ async def open_session(
     response_model=AttendanceSessionDetail,
     summary="One register with every line, in roll order",
 )
-async def get_session(session_id: UUID, db: DbSession, _ctx: ReadCtx) -> AttendanceSessionDetail:
-    return await AttendanceService(db).detail(session_id)
+async def get_session(session_id: UUID, db: DbSession, ctx: ReadCtx) -> AttendanceSessionDetail:
+    return await AttendanceService(db).detail(session_id, teacher_id=_teacher(ctx))
 
 
 @router.patch(
@@ -162,6 +175,7 @@ async def mark_attendance(
         payload,
         actor_id=ctx.user_id,
         may_amend=ctx.has("attendance:amend"),
+        teacher_id=_teacher(ctx),
     )
 
 
@@ -173,7 +187,9 @@ async def mark_attendance(
 async def submit_session(session_id: UUID, db: DbSession, ctx: MarkCtx) -> AttendanceSessionDetail:
     """From here the register feeds reports and absence alerts, and further changes
     need `attendance:amend`."""
-    return await AttendanceService(db).submit(session_id, actor_id=ctx.user_id)
+    return await AttendanceService(db).submit(
+        session_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @router.post(
@@ -192,7 +208,9 @@ async def reopen_session(
     The reason is required, not optional: an audit row saying only that a register
     was reopened answers none of the questions asked of it later.
     """
-    return await AttendanceService(db).reopen(session_id, reason=reason, actor_id=ctx.user_id)
+    return await AttendanceService(db).reopen(
+        session_id, reason=reason, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+    )
 
 
 @router.delete(
@@ -203,7 +221,7 @@ async def reopen_session(
 async def discard_session(session_id: UUID, db: DbSession, ctx: MarkCtx) -> None:
     """Only a DRAFT. A submitted register is corrected by amendment, which leaves a
     trail; deleting one would not."""
-    await AttendanceService(db).discard(session_id, actor_id=ctx.user_id)
+    await AttendanceService(db).discard(session_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -224,13 +242,15 @@ async def discard_session(session_id: UUID, db: DbSession, ctx: MarkCtx) -> None
 async def student_summary(
     student_id: UUID,
     db: DbSession,
-    _ctx: ReadCtx,
+    ctx: ReadCtx,
     from_date: Annotated[date, Query(description="Inclusive lower bound.")],
     to_date: Annotated[date, Query(description="Inclusive upper bound.")],
 ) -> StudentAttendanceSummary:
     """Counts only SUBMITTED registers, and excludes EXCUSED absences from the
     denominator. `percentage` is null -- not 0 -- when nothing countable exists."""
-    return await AttendanceService(db).student_summary(student_id, from_date, to_date)
+    return await AttendanceService(db).student_summary(
+        student_id, from_date, to_date, teacher_id=_teacher(ctx)
+    )
 
 
 @router.get(
@@ -241,8 +261,10 @@ async def student_summary(
 async def section_report(
     section_id: UUID,
     db: DbSession,
-    _ctx: ReadCtx,
+    ctx: ReadCtx,
     from_date: Annotated[date, Query(description="Inclusive lower bound.")],
     to_date: Annotated[date, Query(description="Inclusive upper bound.")],
 ) -> SectionAttendanceReport:
-    return await AttendanceService(db).section_report(section_id, from_date, to_date)
+    return await AttendanceService(db).section_report(
+        section_id, from_date, to_date, teacher_id=_teacher(ctx)
+    )

@@ -47,6 +47,7 @@ from app.core.context import get_school_id, require_organization_id
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.phone import normalise_phone
+from app.modules.academics.service import AcademicsService
 from app.modules.guardians.models import (
     Guardian,
     GuardianIdentity,
@@ -197,17 +198,25 @@ class GuardianService:
         sort: SortParams,
         search: str | None = None,
         student_id: UUID | None = None,
+        teacher_id: UUID | None = None,
     ) -> Page[GuardianRead]:
         rows, total = await self.guardians.list_for_scope(
-            params=params, sort=sort, search=search, student_id=student_id
+            params=params, sort=sort, search=search, student_id=student_id, teacher_id=teacher_id
         )
         counts = await self.guardians.student_counts([g.id for g in rows])
         items = [self._to_read(g, g.identity, counts.get(g.id, 0)) for g in rows]
         return Page.create(items, total, params)
 
-    async def detail(self, guardian_id: UUID) -> GuardianDetail:
+    async def detail(self, guardian_id: UUID, *, teacher_id: UUID | None = None) -> GuardianDetail:
         guardian = await self.get(guardian_id)
-        links = await self.links.list_for_guardian(guardian_id)
+        links = list(await self.links.list_for_guardian(guardian_id))
+        if teacher_id is not None:
+            # A teacher reaches a parent through a child they teach, and sees only
+            # those children -- a sibling in another class is not theirs to read.
+            taught = await AcademicsService(self.session).taught_sections(teacher_id)
+            links = [link for link in links if link.student.section_id in taught]
+            if not links:
+                raise NotFoundError("Guardian not found.")
         base = self._to_read(guardian, guardian.identity, len(links))
         return GuardianDetail(
             **base.model_dump(),
@@ -489,9 +498,15 @@ class GuardianService:
             before={"guardian_id": str(guardian_id)},
         )
 
-    async def list_for_student(self, student_id: UUID) -> list[StudentGuardianRead]:
+    async def list_for_student(
+        self, student_id: UUID, *, teacher_id: UUID | None = None
+    ) -> list[StudentGuardianRead]:
         """The contact card for one child: every guardian, primary first."""
-        await self._get_student(student_id)
+        student = await self._get_student(student_id)
+        # A child outside the teacher's sections is a 404, like the student read.
+        await AcademicsService(self.session).assert_teaches_section(
+            student.section_id, teacher_id=teacher_id, message="Student not found."
+        )
         links = await self.links.list_for_student(student_id)
         return [
             StudentGuardianRead(

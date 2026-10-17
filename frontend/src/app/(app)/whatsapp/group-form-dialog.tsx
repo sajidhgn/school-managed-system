@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useClassSummary } from "@/hooks/use-classes";
-import { useSaveWhatsAppGroup } from "@/hooks/use-whatsapp";
+import { useSaveWhatsAppGroup, useWhatsAppConnection } from "@/hooks/use-whatsapp";
 import type { WhatsAppGroupRead } from "@/lib/api/types";
 
 /** Link a new group, or edit one. The invite link is how the group is addressed. */
@@ -30,6 +30,7 @@ export function GroupFormDialog({
 }) {
   const classes = useClassSummary();
   const save = useSaveWhatsAppGroup();
+  const gateway = useWhatsAppConnection().data?.configured ?? false;
 
   const [classId, setClassId] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
@@ -157,6 +158,13 @@ export function GroupFormDialog({
             />
             Active (uncheck to pause all messages)
           </label>
+          {gateway && group && !group.chat_id && (
+            <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-xs">
+              Not reachable yet: the school&apos;s number isn&apos;t a member of this group. The
+              gateway tries to join through the invite link — check that the link is current, or
+              ask a group admin to add the school&apos;s number.
+            </p>
+          )}
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

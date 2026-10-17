@@ -6,8 +6,9 @@ WHY THIS FILE EXISTS
     WHAT to post and queues it; this file is the seam that decides HOW it leaves.
 
     Same shape as `common/sms/sender.py`: a Protocol the dispatcher depends on, and
-    swappable transports behind `build_whatsapp_sender`. A hosted gateway (Whapi,
-    Green-API, WAHA...) is a new class and a config value -- nothing upstream moves.
+    swappable transports behind `build_whatsapp_sender`. A hosted gateway is a new
+    class and a config value -- nothing upstream moves. `WahaSender` is the one for
+    a server: a self-hosted WAHA gateway, see `common/whatsapp/waha.py`.
 
 =============================================================================
 PYWHATKIT IS A DESKTOP AUTOMATION, NOT AN API -- AND THAT SHAPES EVERYTHING
@@ -34,7 +35,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
+from app.common.whatsapp.waha import WahaClient, WahaError, session_name
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 
@@ -52,6 +55,10 @@ class WhatsAppGroupMessage:
     group_code: str
     body: str
     purpose: str = "generic"
+    chat_id: str | None = None
+    """The group's `...@g.us` id when already resolved (WAHA addresses groups by it)."""
+    school_id: UUID | None = None
+    """Which campus's linked number posts it -- WAHA has one session per campus."""
 
 
 class WhatsAppSender(Protocol):
@@ -111,6 +118,25 @@ class PyWhatKitSender:
         )
 
 
+class WahaSender:
+    """Posts through the campus's WAHA session. Headless; runs anywhere WAHA is reachable.
+
+    A group linked before the campus connected WhatsApp has no chat id yet; it is
+    resolved from the invite code here, at send time, rather than failing the post.
+    """
+
+    def __init__(self, client: WahaClient) -> None:
+        self.client = client
+
+    async def send(self, message: WhatsAppGroupMessage) -> None:
+        if message.school_id is None:
+            raise WahaError("No campus on the message; cannot pick a WhatsApp session.")
+        session = session_name(message.school_id)
+        chat_id = message.chat_id or await self.client.group_chat_id(session, message.group_code)
+        await self.client.send_text(session, chat_id, message.body)
+        logger.info("whatsapp_waha_dispatch", chat_id=chat_id, purpose=message.purpose)
+
+
 def build_whatsapp_sender(settings: Settings | None = None) -> WhatsAppSender:
     """Pick the transport named by `WHATSAPP_BACKEND`. Unknown values drop, like SMS."""
     settings = settings or get_settings()
@@ -119,5 +145,7 @@ def build_whatsapp_sender(settings: Settings | None = None) -> WhatsAppSender:
             return ConsoleWhatsAppSender()
         case "pywhatkit":
             return PyWhatKitSender(settings.WHATSAPP_PYWHATKIT_WAIT_SECONDS)
+        case "waha":
+            return WahaSender(WahaClient(settings))
         case _:
             return NullWhatsAppSender()

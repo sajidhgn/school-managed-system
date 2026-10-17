@@ -7,6 +7,11 @@ AUTHORISATION IS PER SECTION, NOT PER ROUTE
     permission its own module's list endpoint uses, and a section the caller may not
     read is returned as None -- never computed and then hidden.
 
+    A teacher bound to their assignments (no `class:view_all`) gets the students,
+    attendance and exams sections counted over their own sections only; the
+    narrowing lives in `DashboardRepository`. Fees are not narrowed: the fee screen
+    is campus-wide by nature, and a role that grants `fee:read` is trusted with it.
+
     Fee totals are delegated to `FeeService.summary` rather than recomputed, so the
     collection rate on the dashboard and the one on the Fees screen cannot disagree.
 """
@@ -15,6 +20,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,10 +66,16 @@ def _month_starts(today: date, count: int) -> list[str]:
 
 
 class DashboardService:
-    def __init__(self, session: AsyncSession, permissions: frozenset[str]) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        permissions: frozenset[str],
+        *,
+        teacher_id: UUID | None = None,
+    ) -> None:
         self.session = session
         self.permissions = permissions
-        self.repo = DashboardRepository(session)
+        self.repo = DashboardRepository(session, teacher_id)
 
     async def analytics(self, today: date | None = None) -> DashboardAnalytics:
         today = today or date.today()

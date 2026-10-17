@@ -111,6 +111,14 @@ PEOPLE_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("member:invite", "People & access", "Invite new staff members."),
     _school("member:update", "People & access", "Change a member's role."),
     _school("member:suspend", "People & access", "Suspend a member's access."),
+    # Separate from `member:update` for the same reason as `member:suspend`: setting
+    # someone's password lets you sign in as them, which is not "correcting a name".
+    _school(
+        "member:reset_password",
+        "People & access",
+        "Set a new password for a member and sign them out.",
+        dangerous=True,
+    ),
     _school("member:remove", "People & access", "Remove a member.", dangerous=True),
     _school("role:read", "People & access", "View roles."),
     _school("role:create", "People & access", "Create custom roles."),
@@ -185,6 +193,16 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("class:create", "Academics", "Create classes and sections."),
     _school("class:update", "Academics", "Edit classes and sections."),
     _school("class:delete", "Academics", "Delete classes and sections.", dangerous=True),
+    # The assignment boundary. WITHOUT this code a role sees only the classes it is
+    # assigned to -- sections it is class teacher of, classes it teaches a subject
+    # in -- and the students, registers, marks and diaries inside them (see
+    # `academics/teaching_scope.py`). The principal grants it to any role that should
+    # look across the whole campus; the seeded teacher role does not hold it.
+    _school(
+        "class:view_all",
+        "Academics",
+        "See every class, section and student -- not only the ones assigned.",
+    ),
     _school("teacher:read", "Academics", "View teaching staff assignments."),
     _school("teacher:manage", "Academics", "Assign teachers to classes."),
     _school("attendance:read", "Academics", "View attendance records."),
@@ -208,13 +226,15 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
     _school("calendar:manage", "Academics", "Define academic years and terms."),
     _school("subject:read", "Academics", "View subjects and class curricula."),
     _school("subject:manage", "Academics", "Define subjects and assign them to classes."),
-    # The daily homework diary. `write` is bounded by ASSIGNMENT in the service (your
-    # class as class teacher, your subjects as subject teacher); `manage` is the
-    # coordinator's override for covering an absent teacher, and is the only one
-    # that writes on a page the holder is not assigned to.
-    _school("diary:read", "Academics", "View class diaries."),
-    _school("diary:write", "Academics", "Write the diary for your own classes and subjects."),
-    _school("diary:manage", "Academics", "Write any class's diary, assigned or not."),
+    # The textbook library. `write` is bounded by OWNERSHIP in the service (books you
+    # uploaded); `manage` changes or deletes anyone's.
+    _school("book:read", "Academics", "View the textbook library and search books."),
+    _school("book:write", "Academics", "Upload books and manage the books you uploaded."),
+    _school("book:manage", "Academics", "Change or delete any book in the library."),
+    # Test papers and the question bank -- `write` is bounded by ownership like books.
+    _school("paper:read", "Academics", "View test papers and the question bank."),
+    _school("paper:write", "Academics", "Generate test papers and change the ones you made."),
+    _school("paper:manage", "Academics", "Change or delete any test paper."),
     _school("grade:read", "Academics", "View grades."),
     _school("grade:manage", "Academics", "Enter and edit grades."),
     # FIVE fee codes, not one. `fee:collect` and `fee:void` are separate because the
@@ -240,6 +260,14 @@ ACADEMIC_PERMISSIONS: tuple[PermissionDef, ...] = (
         "whatsapp:manage",
         "Communication",
         "Link class WhatsApp groups and configure the monthly fee notice.",
+    ),
+    # The diary agent: a teacher photographs the day's diary page and sends it to the
+    # school's WhatsApp number. Bounded by ASSIGNMENT in the service -- the classes
+    # you teach -- unless the role also holds `class:view_all`.
+    _school(
+        "whatsapp:diary",
+        "Communication",
+        "Post the class diary to parents' WhatsApp groups by sending a photo of it.",
     ),
     _school("timetable:read", "Academics", "View the timetable."),
     _school("timetable:manage", "Academics", "Edit the timetable."),
@@ -280,13 +308,13 @@ SCHOOL_SCOPED_CODES: frozenset[str] = ALL_CODES - ORG_SCOPED_CODES
 # ones that would be catastrophic to hand out, so they stay individually named.
 _PRINCIPAL_PERMISSIONS: frozenset[str] = ALL_CODES
 
-# Deliberately minimal. Spec §5.2 gives the teacher `member:read` plus academic
-# access; the academic reads are included because a teacher who cannot see the class
-# list cannot do the job, while every write beyond attendance and grades is left for
-# the principal to grant explicitly.
+# Deliberately minimal: academic access only. The academic reads are included
+# because a teacher who cannot see the class list cannot do the job, while every
+# write beyond attendance and grades is left for the principal to grant explicitly.
+# `member:read` is NOT here: the staff directory (emails, roles, branches) is an
+# administrator's view. Teacher pickers run on `teacher:read`, not on this.
 _TEACHER_PERMISSIONS: frozenset[str] = frozenset(
     {
-        "member:read",
         "school:read",
         "student:read",
         # A teacher phoning a parent about an absence needs the number. Read only:
@@ -302,8 +330,11 @@ _TEACHER_PERMISSIONS: frozenset[str] = frozenset(
         "grade:read",
         "grade:manage",
         "timetable:read",
-        "diary:read",
-        "diary:write",
+        "whatsapp:diary",
+        "book:read",
+        "book:write",
+        "paper:read",
+        "paper:write",
     }
 )
 
@@ -312,6 +343,8 @@ _ACCOUNTANT_PERMISSIONS: frozenset[str] = frozenset(
         "member:read",
         "school:read",
         "student:read",
+        # Fees are billed to the whole roll, not to the classes someone teaches.
+        "class:view_all",
         # The name on the challan and the number a fee reminder goes to.
         "guardian:read",
         "calendar:read",

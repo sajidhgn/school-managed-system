@@ -33,6 +33,9 @@ class WhatsAppGroupRead(BaseSchema):
     section_name: str | None
     name: str
     invite_code: str
+    chat_id: str | None
+    """The resolved WhatsApp group id; null until the campus's number is connected
+    (WAHA) and has found the group. Irrelevant to the other transports."""
     is_active: bool
     send_fee_notice: bool
     last_sent_at: datetime | None
@@ -95,3 +98,27 @@ class WhatsAppMessageRead(BaseSchema):
     sent_at: datetime | None
     created_at: datetime
     created_by_name: str | None
+
+
+class WhatsAppConnectionRead(BaseSchema):
+    """The campus's linked WhatsApp number, as the WAHA gateway sees it."""
+
+    backend: str
+    """`WHATSAPP_BACKEND`. Only `waha` has a connection to manage."""
+    configured: bool
+    """False when the backend is not WAHA -- the screen then explains the setup."""
+    status: str | None
+    """WAHA's session status: STOPPED, STARTING, SCAN_QR_CODE, WORKING or FAILED.
+    Null when the campus has never connected."""
+    phone: str | None
+    push_name: str | None
+    unresolved_groups: int
+    """Active groups whose WhatsApp id is not known yet. Non-zero while WORKING
+    means the linked number is not a member of those groups."""
+
+
+class WhatsAppQrRead(BaseSchema):
+    mimetype: str
+    data: str
+    """Base64 image: render as `data:{mimetype};base64,{data}` and scan it with the
+    school's phone (WhatsApp -> Linked devices -> Link a device)."""

@@ -20,6 +20,7 @@ and `python -m app.cli send-whatsapp` (`make send-whatsapp`) drains it through
 | `console` (default) | logs each message and marks it sent |
 | `null` | marks it sent, logs nothing |
 | `pywhatkit` | really posts, by driving WhatsApp Web in a browser |
+| `waha` | really posts **and receives**, through a self-hosted WAHA gateway (headless, one linked session per campus). Required by the [diary agent](diary-agent.md). |
 
 **pywhatkit runs on a desktop only.** It opens `web.whatsapp.com`, opens the
 group from its invite code and types the message with simulated keystrokes.
@@ -47,6 +48,13 @@ Known limits of pywhatkit:
 
 The sender sits behind a Protocol (`app/common/whatsapp/sender.py`), so a
 hosted gateway can replace pywhatkit as one new class.
+
+**WAHA** (`WHATSAPP_BACKEND=waha`) is that gateway. Each campus links its number
+from the WhatsApp page (**Connect WhatsApp**, then scan the QR code). Groups are
+then addressed by their WhatsApp id, resolved from the invite link. Run
+`send-whatsapp --watch` (the `whatsapp-worker` service in `compose.yml`) to drain
+the outbox continuously. It carries the same terms-of-service risk as pywhatkit.
+See [diary-agent.md](diary-agent.md#whatsapp-the-waha-gateway).
 
 ## The fee notice
 

@@ -5,10 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/use-toast";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
-import { whatsappApi, type WhatsAppMessageListParams } from "@/lib/api/resources/whatsapp";
+import {
+  diaryAgentApi,
+  whatsappApi,
+  type WhatsAppMessageListParams,
+} from "@/lib/api/resources/whatsapp";
 import type {
   CustomMessageRequest,
+  DiaryAgentSettingsWrite,
   FeeNoticeQueueRequest,
+  PageParams,
   QueueResult,
   WhatsAppGroupWrite,
   WhatsAppSettingsWrite,
@@ -141,5 +147,100 @@ export function useCancelWhatsAppMessage() {
       toast.success("Message cancelled");
     },
     onError: (error) => toast.error("Couldn't cancel", errorMessage(error)),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The school's WhatsApp number (WAHA gateway session)
+// ---------------------------------------------------------------------------
+
+/** Session states that settle by themselves — poll until they do. */
+const TRANSIENT_STATUSES = new Set(["STARTING", "SCAN_QR_CODE"]);
+
+export function useWhatsAppConnection() {
+  return useQuery({
+    queryKey: queryKeys.whatsapp.connection,
+    queryFn: () => whatsappApi.connection(),
+    refetchInterval: (query) =>
+      TRANSIENT_STATUSES.has(query.state.data?.status ?? "") ? 3_000 : false,
+  });
+}
+
+/** The pairing QR. WhatsApp rotates it every ~20s, so it is refetched on that cadence. */
+export function useWhatsAppQr(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.whatsapp.qr,
+    queryFn: () => whatsappApi.qr(),
+    enabled,
+    refetchInterval: enabled ? 20_000 : false,
+    // A 409 NO_QR_CODE just means the session moved on; the status poll catches up.
+    retry: false,
+    gcTime: 0,
+  });
+}
+
+export function useConnectWhatsApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => whatsappApi.connect(),
+    onSuccess: (connection) => {
+      queryClient.setQueryData(queryKeys.whatsapp.connection, connection);
+      toast.success("Starting WhatsApp", "The QR code appears in a few seconds.");
+    },
+    onError: (error) => toast.error("Couldn't start WhatsApp", errorMessage(error)),
+  });
+}
+
+export function useDisconnectWhatsApp() {
+  const invalidate = useInvalidateWhatsApp();
+  return useMutation({
+    mutationFn: () => whatsappApi.disconnect(),
+    onSuccess: () => {
+      void invalidate();
+      toast.success("WhatsApp disconnected");
+    },
+    onError: (error) => toast.error("Couldn't disconnect", errorMessage(error)),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Diary agent
+// ---------------------------------------------------------------------------
+
+export function useDiaryAgentSettings() {
+  return useQuery({
+    queryKey: queryKeys.whatsapp.diarySettings,
+    queryFn: () => diaryAgentApi.settings(),
+  });
+}
+
+/** A sample diary in the (unsaved) format. Pass debounced values — this hits the server. */
+export function useDiaryAgentPreview(body: DiaryAgentSettingsWrite, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.whatsapp.diaryPreview(body),
+    queryFn: () => diaryAgentApi.preview(body),
+    enabled: enabled && body.template.trim() !== "",
+    placeholderData: (previous) => previous,
+    retry: false,
+  });
+}
+
+export function useDiaryDrafts(params: PageParams) {
+  return useQuery({
+    queryKey: queryKeys.whatsapp.diaryDrafts(params),
+    queryFn: () => diaryAgentApi.drafts(params),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useSaveDiaryAgentSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DiaryAgentSettingsWrite) => diaryAgentApi.saveSettings(body),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(queryKeys.whatsapp.diarySettings, settings);
+      toast.success("Diary format saved");
+    },
+    onError: (error) => toast.error("Couldn't save the diary format", errorMessage(error)),
   });
 }

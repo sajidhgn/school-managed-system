@@ -221,6 +221,7 @@ def _member_read(membership: Membership) -> MemberRead:
         user_id=membership.user_id,
         email=membership.user.email,
         full_name=membership.user.full_name,
+        phone=membership.user.phone,
         school_id=membership.school_id,
         role_id=membership.role_id,
         role_code=membership.role.code,
@@ -341,19 +342,41 @@ async def update_member(
     session: DbSession,
     ctx: Annotated[AuthContext, Depends(require("member:update"))],
 ) -> MemberRead:
-    """Rename a member, change their role, suspend, or reactivate (spec §8).
+    """Edit a member: details, sign-in credentials, role, and status (spec §8).
 
-    Two operations behind one PATCH because the members table exposes both as inline
-    edits on the same row. Each is permission-checked separately: suspending needs
-    `member:suspend` on top of `member:update`, since removing someone's access is a
-    materially different act from correcting their job title.
+    Several operations behind one PATCH because the edit dialog saves them together.
+    Each is permission-checked separately: suspending needs `member:suspend` and
+    setting a password needs `member:reset_password` on top of `member:update`,
+    since locking someone out -- or signing in as them -- is a materially different
+    act from correcting their job title.
     """
     _assert_school_scope(ctx, school_id)
     service = RbacService(session)
 
-    if payload.full_name is None and payload.role_id is None and payload.suspended is None:
+    fields = (
+        payload.full_name,
+        payload.email,
+        payload.phone,
+        payload.password,
+        payload.role_id,
+        payload.suspended,
+    )
+    if all(f is None for f in fields):
         raise ValidationError(
-            "Provide full_name, role_id, suspended, or a combination.", code="EMPTY_UPDATE"
+            "Provide full_name, email, phone, password, role_id, suspended, or a combination.",
+            code="EMPTY_UPDATE",
+        )
+    if payload.password is not None and not ctx.has("member:reset_password"):
+        raise AuthorizationError(
+            "You do not have permission to change a member's password.",
+            code="FORBIDDEN",
+            details={"required": ["member:reset_password"]},
+        )
+    if payload.suspended is not None and not ctx.has("member:suspend"):
+        raise AuthorizationError(
+            "You do not have permission to change a member's status.",
+            code="FORBIDDEN",
+            details={"required": ["member:suspend"]},
         )
 
     membership = None
@@ -363,17 +386,22 @@ async def update_member(
         membership = await service.rename_member(
             ctx=ctx, membership_id=membership_id, full_name=payload.full_name
         )
+    if payload.email is not None or payload.phone is not None:
+        membership = await service.update_member_contact(
+            ctx=ctx,
+            membership_id=membership_id,
+            email=str(payload.email) if payload.email is not None else None,
+            phone=payload.phone,
+        )
+    if payload.password is not None:
+        membership = await service.set_member_password(
+            ctx=ctx, membership_id=membership_id, password=payload.password
+        )
     if payload.role_id is not None:
         membership = await service.change_member_role(
             ctx=ctx, membership_id=membership_id, new_role_id=payload.role_id
         )
     if payload.suspended is not None:
-        if not ctx.has("member:suspend"):
-            raise AuthorizationError(
-                "You do not have permission to change a member's status.",
-                code="FORBIDDEN",
-                details={"required": ["member:suspend"]},
-            )
         membership = await service.set_member_status(
             ctx=ctx, membership_id=membership_id, suspended=payload.suspended
         )

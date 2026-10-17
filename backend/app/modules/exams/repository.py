@@ -3,21 +3,70 @@
 Organization isolation comes from PostgreSQL RLS; campus isolation from the
 shared repository injecting the active school. The aggregate queries below apply
 the same scope explicitly, mirroring `academics/repository.py`.
+
+TEACHING SCOPE
+    Reads that list papers or marks take `teacher_id` (from `assigned_teacher`):
+    None is "no bound"; a user id narrows the WHERE to what that teacher answers
+    for. Two rules, applied everywhere so every count matches its sheet:
+      * a PAPER is visible when its (class, subject) is one they teach;
+      * a MARK is visible when its paper is, and the student's CURRENT section is
+        one they teach -- so a class teacher of 9-A keys only 9-A's column of the
+        Grade 9 maths sheet, while the maths teacher keys every section's.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, Select, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.common.repository import BaseRepository
 from app.core.context import get_school_id
 from app.modules.academics.models import SchoolClass, Section, Subject
+from app.modules.academics.teaching_scope import (
+    taught_class_ids,
+    taught_section_ids,
+    teaches_subject,
+)
 from app.modules.exams.models import Exam, ExamMark, ExamPaper
 from app.modules.students.models import Student, StudentStatus
+
+
+def visible_paper(teacher_id: UUID) -> ColumnElement[bool]:
+    """The paper's (class, subject) is one the teacher answers for."""
+    return teaches_subject(teacher_id, ExamPaper.class_id, ExamPaper.subject_id)
+
+
+def taught_students(teacher_id: UUID) -> Select[tuple[UUID]]:
+    """Students currently seated in a section the teacher teaches."""
+    return select(Student.id).where(Student.section_id.in_(taught_section_ids(teacher_id)))
+
+
+def visible_exam(teacher_id: UUID) -> ColumnElement[bool]:
+    """An exam a bound teacher may open: one a class of theirs sits, or one with
+    no papers yet.
+
+    By CLASS, not by paper: "Mid-Term" is an event Grade 9 sits, and its Grade 9
+    maths teacher needs it in the list to add the maths paper even while only the
+    Urdu paper exists -- the papers list then bounds what they see inside it. A
+    paperless exam names no class, so it carries nothing to bound; hiding it would
+    lose a teacher the exam they just created.
+    """
+    papers = select(ExamPaper.id).where(
+        ExamPaper.exam_id == Exam.id, ExamPaper.deleted_at.is_(None)
+    )
+    return or_(
+        ~exists(papers),
+        exists(papers.where(ExamPaper.class_id.in_(taught_class_ids(teacher_id)))),
+    )
+
+
+def _bound_to_papers[S: Select[Any]](stmt: S, teacher_id: UUID | None) -> S:
+    """Narrow a query already joined to `ExamPaper` to the teacher's papers."""
+    return stmt if teacher_id is None else stmt.where(visible_paper(teacher_id))
 
 
 class ExamRepository(BaseRepository[Exam]):
@@ -30,15 +79,18 @@ class ExamRepository(BaseRepository[Exam]):
     def search_filter(self, term: str):  # type: ignore[no-untyped-def]
         return Exam.name.ilike(f"%{term}%")
 
-    async def paper_counts(self) -> dict[UUID, int]:
+    async def paper_counts(self, *, teacher_id: UUID | None = None) -> dict[UUID, int]:
         """Papers per exam for the whole (RLS-scoped) school, in ONE grouped
         query -- the exams list prints a count per row, and counting per exam
-        would be an N+1 that grows with the school's history."""
+        would be an N+1 that grows with the school's history. For a teacher,
+        their papers only, so the count matches the papers list they open."""
         stmt = (
             select(ExamPaper.exam_id, func.count(ExamPaper.id))
             .where(ExamPaper.deleted_at.is_(None))
             .group_by(ExamPaper.exam_id)
         )
+        if teacher_id is not None:
+            stmt = stmt.where(visible_paper(teacher_id))
         if (school_id := get_school_id()) is not None:
             stmt = stmt.where(ExamPaper.school_id == school_id)
         rows = (await self.session.execute(stmt)).all()
@@ -57,7 +109,7 @@ class ExamPaperRepository(BaseRepository[ExamPaper]):
         )
 
     async def list_for_exam(
-        self, exam_id: UUID, *, class_id: UUID | None = None
+        self, exam_id: UUID, *, class_id: UUID | None = None, teacher_id: UUID | None = None
     ) -> Sequence[tuple[ExamPaper, Subject, SchoolClass]]:
         """Papers joined to their subject and class in ONE query, ordered by
         class level then subject code -- the order a result sheet prints in.
@@ -76,17 +128,31 @@ class ExamPaperRepository(BaseRepository[ExamPaper]):
         )
         if class_id is not None:
             stmt = stmt.where(ExamPaper.class_id == class_id)
+        if teacher_id is not None:
+            stmt = stmt.where(visible_paper(teacher_id))
         rows = (await self.session.execute(stmt)).all()
         return [(paper, subject, school_class) for paper, subject, school_class in rows]
 
-    async def marks_entered_counts(self, exam_id: UUID) -> dict[UUID, int]:
-        """Marks entered per paper of one exam, ONE grouped query."""
+    async def get_visible(self, paper_id: UUID, teacher_id: UUID) -> ExamPaper | None:
+        return await self.find_one(ExamPaper.id == paper_id, visible_paper(teacher_id))
+
+    async def has_papers_outside(self, exam_id: UUID, teacher_id: UUID) -> bool:
+        """Whether the exam has a paper this teacher does not answer for."""
+        return await self.exists(ExamPaper.exam_id == exam_id, ~visible_paper(teacher_id))
+
+    async def marks_entered_counts(
+        self, exam_id: UUID, *, teacher_id: UUID | None = None
+    ) -> dict[UUID, int]:
+        """Marks entered per paper of one exam, ONE grouped query -- for a
+        teacher, only the marks their own sheet would show."""
         stmt = (
             select(ExamMark.paper_id, func.count(ExamMark.id))
             .join(ExamPaper, ExamPaper.id == ExamMark.paper_id)
             .where(ExamPaper.exam_id == exam_id, ExamMark.deleted_at.is_(None))
             .group_by(ExamMark.paper_id)
         )
+        if teacher_id is not None:
+            stmt = stmt.where(ExamMark.student_id.in_(taught_students(teacher_id)))
         if (school_id := get_school_id()) is not None:
             stmt = stmt.where(ExamMark.school_id == school_id)
         rows = (await self.session.execute(stmt)).all()
@@ -108,19 +174,29 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
     model = ExamMark
     sortable_fields = frozenset({"created_at"})
 
-    async def list_for_paper(self, paper_id: UUID) -> Sequence[ExamMark]:
+    async def list_for_paper(
+        self, paper_id: UUID, *, teacher_id: UUID | None = None
+    ) -> Sequence[ExamMark]:
         stmt = self._base_select().where(ExamMark.paper_id == paper_id)
+        if teacher_id is not None:
+            stmt = stmt.where(ExamMark.student_id.in_(taught_students(teacher_id)))
         return (await self.session.execute(stmt)).scalars().all()
 
-    async def count_for_paper(self, paper_id: UUID) -> int:
+    async def count_for_paper(self, paper_id: UUID, *, teacher_id: UUID | None = None) -> int:
+        """Marks on a paper. Unbounded by default: the remove-paper guard must see
+        every mark, not only the caller's section's."""
         stmt = (
             select(func.count())
             .select_from(ExamMark)
             .where(ExamMark.paper_id == paper_id, ExamMark.deleted_at.is_(None))
         )
+        if teacher_id is not None:
+            stmt = stmt.where(ExamMark.student_id.in_(taught_students(teacher_id)))
         return int((await self.session.execute(stmt)).scalar_one() or 0)
 
-    async def class_roster(self, class_id: UUID) -> Sequence[Student]:
+    async def class_roster(
+        self, class_id: UUID, *, teacher_id: UUID | None = None
+    ) -> Sequence[Student]:
         """Every enrolled student seated in any section of `class_id`, ordered by
         admission number -- the roll order a mark sheet is keyed in.
 
@@ -138,6 +214,8 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
             )
             .order_by(Student.admission_number)
         )
+        if teacher_id is not None:
+            stmt = stmt.where(Section.id.in_(taught_section_ids(teacher_id)))
         if (school_id := get_school_id()) is not None:
             stmt = stmt.where(Student.school_id == school_id)
         return (await self.session.execute(stmt)).scalars().all()
@@ -148,18 +226,27 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
     # in `Student.id IN (...)` conditions, the same shape as the fee filter's
     # `students_owing`. What counts as passed/failed/absent is defined HERE,
     # beside the mark model, so the directory never re-derives marking rules.
+    #
+    # Each takes `teacher_id` so a bound teacher's filter and totals count only
+    # the papers they answer for -- a maths teacher filtering "failed" must not
+    # learn who failed Urdu.
 
-    def students_marked(self, exam_id: UUID):  # type: ignore[no-untyped-def]
+    def students_marked(  # type: ignore[no-untyped-def]
+        self, exam_id: UUID, *, teacher_id: UUID | None = None
+    ):
         """Students with ANY mark row (including absences) in this exam."""
-        return (
+        stmt = (
             select(ExamMark.student_id)
             .join(ExamPaper, ExamPaper.id == ExamMark.paper_id)
             .where(ExamPaper.exam_id == exam_id, ExamMark.deleted_at.is_(None))
         )
+        return _bound_to_papers(stmt, teacher_id)
 
-    def students_absent(self, exam_id: UUID):  # type: ignore[no-untyped-def]
+    def students_absent(  # type: ignore[no-untyped-def]
+        self, exam_id: UUID, *, teacher_id: UUID | None = None
+    ):
         """Students who missed at least one paper of this exam."""
-        return (
+        stmt = (
             select(ExamMark.student_id)
             .join(ExamPaper, ExamPaper.id == ExamMark.paper_id)
             .where(
@@ -168,14 +255,17 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
                 ExamMark.is_absent.is_(True),
             )
         )
+        return _bound_to_papers(stmt, teacher_id)
 
-    def students_below_pass(self, exam_id: UUID):  # type: ignore[no-untyped-def]
+    def students_below_pass(  # type: ignore[no-untyped-def]
+        self, exam_id: UUID, *, teacher_id: UUID | None = None
+    ):
         """Students marked below the pass line on at least one paper.
 
         Only papers that DECLARE a pass line count -- a school that never set
         `pass_marks` has no fail list, rather than an invented 40% one.
         """
-        return (
+        stmt = (
             select(ExamMark.student_id)
             .join(ExamPaper, ExamPaper.id == ExamMark.paper_id)
             .where(
@@ -186,10 +276,11 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
                 ExamMark.marks_obtained < ExamPaper.pass_marks,
             )
         )
+        return _bound_to_papers(stmt, teacher_id)
 
     async def summary_by_student(
-        self, exam_id: UUID, student_ids: set[UUID]
-    ) -> dict[UUID, tuple]:
+        self, exam_id: UUID, student_ids: set[UUID], *, teacher_id: UUID | None = None
+    ) -> dict[UUID, tuple[Any, Any, Any, Any]]:
         """Per-student exam totals for one PAGE of the directory, in ONE grouped
         query: (obtained, max over marked papers, failed papers, absent papers).
         Per-row queries here would be an N+1 that grows with the page size."""
@@ -220,6 +311,7 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
             )
             .group_by(ExamMark.student_id)
         )
+        stmt = _bound_to_papers(stmt, teacher_id)
         rows = (await self.session.execute(stmt)).all()
         return {row[0]: (row[1], row[2], row[3], row[4]) for row in rows}
 
@@ -229,7 +321,7 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
         paper_id: UUID,
         organization_id: UUID,
         school_id: UUID,
-        entries: Sequence[dict],
+        entries: Sequence[dict[str, Any]],
     ) -> int:
         """Write a paper's mark sheet in ONE statement.
 

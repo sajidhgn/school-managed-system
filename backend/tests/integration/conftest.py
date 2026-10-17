@@ -89,6 +89,14 @@ _APP_TABLES = (
     "student_enrollments",
     # Before `subjects` (RESTRICT) and `classes` (CASCADE).
     "class_subjects",
+    "book_chunks",
+    "book_pages",
+    "book_chapter_files",
+    "book_chapters",
+    "books",
+    # The diary agent's drafts reference WhatsApp groups and outbox rows.
+    "diary_drafts",
+    "diary_agent_settings",
     # WhatsApp: groups reference classes/sections, the outbox references groups.
     "whatsapp_messages",
     "whatsapp_groups",

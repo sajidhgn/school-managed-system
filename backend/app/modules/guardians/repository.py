@@ -24,6 +24,9 @@ WHY `guardians` HAS NO `school_id` AND HOW CAMPUS SCOPE IS STILL ENFORCED
     to guardians who have at least one LIVE LINK to a student at that school. The
     predicate lives here, in one place, rather than in the service, so a future
     endpoint cannot forget it.
+
+    A teacher (anyone without `class:view_all`) is bound tighter still: only the
+    guardians of children in the sections they are assigned to -- `taught_predicate`.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import ColumnElement
@@ -41,6 +44,7 @@ from sqlalchemy.sql import ColumnElement
 from app.common.repository import BaseRepository
 from app.common.schemas import PageParams, SortParams
 from app.core.context import get_school_id
+from app.modules.academics.teaching_scope import taught_section_ids
 from app.modules.guardians.models import (
     Guardian,
     GuardianIdentity,
@@ -49,6 +53,19 @@ from app.modules.guardians.models import (
     GuardianStudent,
 )
 from app.modules.students.models import Student
+
+
+def taught_guardian_ids(teacher_id: UUID) -> Select[tuple[UUID]]:
+    """Guardians with a live link to a child in one of the teacher's sections."""
+    return (
+        select(GuardianStudent.guardian_id)
+        .join(Student, Student.id == GuardianStudent.student_id)
+        .where(
+            GuardianStudent.deleted_at.is_(None),
+            Student.deleted_at.is_(None),
+            Student.section_id.in_(taught_section_ids(teacher_id)),
+        )
+    )
 
 
 class GuardianRepository(BaseRepository[Guardian]):
@@ -108,6 +125,7 @@ class GuardianRepository(BaseRepository[Guardian]):
         sort: SortParams | None = None,
         search: str | None = None,
         student_id: UUID | None = None,
+        teacher_id: UUID | None = None,
     ) -> tuple[Sequence[Guardian], int]:
         """One page of guardians visible to the caller, plus the total.
 
@@ -127,6 +145,11 @@ class GuardianRepository(BaseRepository[Guardian]):
         if (campus := self.campus_predicate()) is not None:
             stmt = stmt.where(campus)
             count_stmt = count_stmt.where(campus)
+
+        if teacher_id is not None:
+            taught = Guardian.id.in_(taught_guardian_ids(teacher_id))
+            stmt = stmt.where(taught)
+            count_stmt = count_stmt.where(taught)
 
         if student_id is not None:
             child = select(GuardianStudent.guardian_id).where(

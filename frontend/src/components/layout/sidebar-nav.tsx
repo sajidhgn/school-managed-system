@@ -7,11 +7,12 @@ import {
   CalendarRange,
   ClipboardList,
   CreditCard,
+  FileQuestion,
   GraduationCap,
   LayoutDashboard,
   Layers,
+  Library,
   MessageCircle,
-  NotebookPen,
   Receipt,
   ScrollText,
   Settings,
@@ -24,7 +25,7 @@ import { usePathname } from "next/navigation";
 
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { useRequiredSession } from "@/components/providers/session-provider";
-import { PERMISSIONS } from "@/lib/api/types";
+import { PERMISSIONS, SCHOOL_ADMIN_PERMISSIONS } from "@/lib/api/types";
 import { canAny } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +103,7 @@ export function SidebarNav({
           href: "/schools",
           label: t.nav.schools,
           icon: Building2,
-          anyOf: [PERMISSIONS.schoolRead],
+          anyOf: SCHOOL_ADMIN_PERMISSIONS,
         },
       ],
     },
@@ -149,10 +150,17 @@ export function SidebarNav({
           requiresSchool: true,
         },
         {
-          href: "/diary",
-          label: t.nav.diary,
-          icon: NotebookPen,
-          anyOf: [PERMISSIONS.diaryRead],
+          href: "/books",
+          label: t.nav.books,
+          icon: Library,
+          anyOf: [PERMISSIONS.bookRead],
+          requiresSchool: true,
+        },
+        {
+          href: "/papers",
+          label: t.nav.papers,
+          icon: FileQuestion,
+          anyOf: [PERMISSIONS.paperRead],
           requiresSchool: true,
         },
         {

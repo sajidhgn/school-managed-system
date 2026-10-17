@@ -11,7 +11,10 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector is PostgreSQL 16 plus the `vector` extension the textbook
+    # library's embeddings need. On an existing alpine-built volume, run
+    # `REINDEX DATABASE school_manage_db;` once (musl -> glibc collation).
+    image: pgvector/pgvector:pg16
     container_name: sms-postgres
     environment:
       POSTGRES_USER: postgres
@@ -87,5 +90,23 @@ services:
       - ./app:/app/app:ro
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
+  # WhatsApp gateway for WHATSAPP_BACKEND=waha (`make waha-up`). The API usually runs
+  # on the host with `make dev`, so WAHA calls it back on host.docker.internal.
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: sms-waha
+    environment:
+      WHATSAPP_API_KEY: local-waha-key-change-before-deploy
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3001:3000"
+    volumes:
+      - waha_sessions:/app/.sessions
+    profiles: ["waha"]
+
 volumes:
   pgdata:
+  waha_sessions:

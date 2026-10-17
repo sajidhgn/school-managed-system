@@ -111,6 +111,7 @@ class MemberRead(BaseSchema):
     user_id: UUID
     email: str
     full_name: str
+    phone: str | None = None
     school_id: UUID | None
     role_id: UUID
     role_code: str
@@ -162,8 +163,18 @@ class MemberBranchAssign(BaseSchema):
 
 
 class MemberUpdate(BaseSchema):
-    """Change a member's name, role, status, or any combination."""
+    """Change a member's details, sign-in credentials, role, status, or any combination.
+
+    `email` and `password` are the member's SIGN-IN details. They live on the global
+    user row, so the service only lets an administrator change them for an account
+    that belongs to this organization alone -- see `RbacService._assert_can_manage_account`.
+    """
 
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=32)
+    """An empty string clears the number."""
+    password: str | None = Field(default=None, min_length=1, max_length=200)
+    """A new password. Signs the member out everywhere. Needs `member:reset_password`."""
     role_id: UUID | None = None
     suspended: bool | None = None

@@ -43,6 +43,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.modules.academics.teaching_scope import assigned_teacher
 from app.modules.search import providers as registry
 from app.modules.search.providers import ProviderDef, SearchEntity
 from app.modules.search.query import (
@@ -99,6 +100,7 @@ class SearchPrincipal:
     """
 
     organization_id: UUID
+    user_id: UUID
     role_code: str
     permissions: frozenset[str]
 
@@ -146,6 +148,7 @@ class SearchService:
         """
         warnings: list[str] = []
         wants_all = ALL_SCOPE in parsed.filter_values("school")
+        teacher_id = assigned_teacher(self.principal.user_id, self.principal.permissions)
 
         if not self.principal.is_org_level:
             if wants_all:
@@ -155,11 +158,14 @@ class SearchService:
             return SearchScope(
                 organization_id=self.principal.organization_id,
                 school_id=self.principal.membership_school_id,
+                teacher_id=teacher_id,
             ), warnings
 
         school_id = None if wants_all else self.principal.active_school_id
         return SearchScope(
-            organization_id=self.principal.organization_id, school_id=school_id
+            organization_id=self.principal.organization_id,
+            school_id=school_id,
+            teacher_id=teacher_id,
         ), warnings
 
     # -- the search --------------------------------------------------------

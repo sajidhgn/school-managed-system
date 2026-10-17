@@ -1273,12 +1273,13 @@ export interface paths {
         head?: never;
         /**
          * Update Member
-         * @description Rename a member, change their role, suspend, or reactivate (spec §8).
+         * @description Edit a member: details, sign-in credentials, role, and status (spec §8).
          *
-         *     Two operations behind one PATCH because the members table exposes both as inline
-         *     edits on the same row. Each is permission-checked separately: suspending needs
-         *     `member:suspend` on top of `member:update`, since removing someone's access is a
-         *     materially different act from correcting their job title.
+         *     Several operations behind one PATCH because the edit dialog saves them together.
+         *     Each is permission-checked separately: suspending needs `member:suspend` and
+         *     setting a password needs `member:reset_password` on top of `member:update`,
+         *     since locking someone out -- or signing in as them -- is a materially different
+         *     act from correcting their job title.
          */
         patch: operations["update_member_api_v1_schools__school_id__members__membership_id__patch"];
         trace?: never;
@@ -1486,27 +1487,6 @@ export interface paths {
          *     small but real leak on a surface reachable by anyone with a handset and a code.
          */
         get: operations["child_api_v1_portal_children__student_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/portal/children/{student_id}/diary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The homework diary of one child's class for a date
-         * @description Same per-child gate as `/children/{student_id}`: 404 for a child this
-         *     guardian may not view.
-         */
-        get: operations["child_diary_api_v1_portal_children__student_id__diary_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1753,6 +1733,8 @@ export interface paths {
          *     That is student data that happens to be reached through a section, and letting
          *     `class:read` -- which exists so staff can see the school's structure -- return it
          *     would make the structure permission a back door into the directory.
+         *
+         *     A teacher gets only the registers of sections they are assigned to.
          */
         get: operations["section_roster_api_v1_classes_sections__section_id__roster_get"];
         put?: never;
@@ -2513,18 +2495,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/diary/sections": {
+    "/api/v1/books": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        /** Books on the campus */
+        get: operations["list_books_api_v1_books_get"];
+        put?: never;
         /**
-         * Every section, with what the caller may write on its diary
-         * @description The caller's own classes come first: class teacher, then subject teacher.
+         * Add a book: Title, Class, Publisher, Version, and optionally its chapter list
+         * @description 409 `DUPLICATE_BOOK` if the class already has that title/publisher/version.
          */
-        get: operations["list_sections_api_v1_diary_sections_get"];
+        post: operations["create_book_api_v1_books_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hybrid (meaning + keyword) search across every book you can see */
+        get: operations["search_library_api_v1_books_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2533,27 +2533,350 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/diary/sections/{section_id}": {
+    "/api/v1/books/ask": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** One section's diary page for a date */
-        get: operations["get_page_api_v1_diary_sections__section_id__get"];
+        get?: never;
+        put?: never;
         /**
-         * Write homework on a section's diary page
-         * @description Partial: subjects not named are untouched. A blank `content` clears that
-         *     subject. 403 `DIARY_NOT_ASSIGNED` if any named row is not the caller's to write;
-         *     nothing is saved in that case.
-         *
-         *     Guarded on `diary:read` and then on `diary:write` OR `diary:manage` in the
-         *     service: `require()` demands every code it is given, and a coordinator role may
-         *     reasonably hold `manage` without `write`.
+         * Ask the library: an answer written from your books, with page citations
+         * @description Narrow it with `class_id`, `subject_id`, `book_id` or `chapter_id`. `found` is
+         *     false when the books do not cover the question -- the model is not allowed to
+         *     answer from its own knowledge.
          */
-        put: operations["write_page_api_v1_diary_sections__section_id__put"];
+        post: operations["ask_library_api_v1_books_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One book with its chapters */
+        get: operations["get_book_api_v1_books__book_id__get"];
+        put?: never;
         post?: never;
+        /** Delete a book, its files and its index */
+        delete: operations["delete_book_api_v1_books__book_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit a book's details */
+        patch: operations["update_book_api_v1_books__book_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a chapter to the book's chapter list */
+        post: operations["add_chapter_api_v1_books__book_id__chapters_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters/{chapter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a chapter with its files and index */
+        delete: operations["delete_chapter_api_v1_books__book_id__chapters__chapter_id__delete"];
+        options?: never;
+        head?: never;
+        /** Renumber or rename a chapter */
+        patch: operations["update_chapter_api_v1_books__book_id__chapters__chapter_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a chapter's pages: a PDF, or photos of the pages
+         * @description Photos may be uploaded in any order -- the agent orders them by printed page
+         *     number. Uploading drops the chapter's previous pages and vectors; with
+         *     `process=true` the agent is queued straight away.
+         */
+        post: operations["upload_files_api_v1_books__book_id__chapters__chapter_id__files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove one uploaded file */
+        delete: operations["delete_file_api_v1_books__book_id__chapters__chapter_id__files__file_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download an uploaded file */
+        get: operations["download_file_api_v1_books__book_id__files__file_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue the agent to (re)read, order, verify and index a chapter */
+        post: operations["process_api_v1_books__book_id__chapters__chapter_id__process_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a chapter the agent flagged for review */
+        post: operations["accept_api_v1_books__book_id__chapters__chapter_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/chapters/{chapter_id}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A chapter's pages in the agent's order, with their text */
+        get: operations["list_pages_api_v1_books__book_id__chapters__chapter_id__pages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/pages/{page_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A page's image */
+        get: operations["page_image_api_v1_books__book_id__pages__page_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/{book_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Semantic search over a book's indexed chapters (pgvector) */
+        get: operations["search_api_v1_books__book_id__search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Test papers on the campus */
+        get: operations["list_papers_api_v1_papers_get"];
+        put?: never;
+        /**
+         * Generate a test paper from a book's chapters
+         * @description Queues the paper. 422 `CHAPTER_NOT_READY` if a chapter has not been read.
+         */
+        post: operations["create_paper_api_v1_papers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The question bank */
+        get: operations["question_bank_api_v1_papers_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{paper_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One paper with its questions */
+        get: operations["get_paper_api_v1_papers__paper_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete a paper (its questions stay in the bank) */
+        delete: operations["delete_paper_api_v1_papers__paper_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit a paper's details */
+        patch: operations["update_paper_api_v1_papers__paper_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/papers/{paper_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write the paper again from scratch */
+        post: operations["regenerate_paper_api_v1_papers__paper_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{paper_id}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a question from the bank */
+        post: operations["add_question_api_v1_papers__paper_id__questions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{paper_id}/questions/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a question from the paper (it stays in the bank) */
+        delete: operations["remove_question_api_v1_papers__paper_id__questions__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a question on the paper
+         * @description A question other papers also use is copied, so they do not change.
+         */
+        patch: operations["edit_question_api_v1_papers__paper_id__questions__entry_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/papers/{paper_id}/questions/{entry_id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Have the AI write a different question for this place
+         * @description 422 `REPLACEMENT_FAILED` when no new question passed the checks; 503
+         *     `AI_FAILED` when OpenAI refused or failed (the message says which).
+         */
+        post: operations["replace_question_api_v1_papers__paper_id__questions__entry_id__replace_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2591,6 +2914,42 @@ export interface paths {
         post?: never;
         /** Unlink a group; its queued messages are dropped */
         delete: operations["delete_group_api_v1_whatsapp_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whatsapp/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The campus's linked WhatsApp number (WAHA) */
+        get: operations["get_connection_api_v1_whatsapp_connection_get"];
+        put?: never;
+        /** Start linking the campus's number; then scan the QR code */
+        post: operations["connect_api_v1_whatsapp_connection_post"];
+        /** Log the campus's number out of the gateway */
+        delete: operations["disconnect_api_v1_whatsapp_connection_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whatsapp/connection/qr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The QR code to scan with the school's phone */
+        get: operations["connection_qr_api_v1_whatsapp_connection_qr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2695,6 +3054,58 @@ export interface paths {
         post?: never;
         /** Cancel a message that has not been sent */
         delete: operations["cancel_message_api_v1_whatsapp_messages__message_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diary-agent/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The campus's diary format */
+        get: operations["get_settings_api_v1_diary_agent_settings_get"];
+        /** Change the diary format */
+        put: operations["put_settings_api_v1_diary_agent_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diary-agent/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A sample diary in a format, without saving it */
+        post: operations["preview_api_v1_diary_agent_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diary-agent/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Diaries teachers have sent, newest first */
+        get: operations["list_drafts_api_v1_diary_agent_drafts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3669,6 +4080,19 @@ export interface components {
             /** Breaches */
             breaches: components["schemas"]["PlanLimitBreach"][];
         };
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+            /** Class Id */
+            class_id?: string | null;
+            /** Subject Id */
+            subject_id?: string | null;
+            /** Book Id */
+            book_id?: string | null;
+            /** Chapter Id */
+            chapter_id?: string | null;
+        };
         /** AttendanceDay */
         AttendanceDay: {
             /**
@@ -4066,6 +4490,162 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post */
+        Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post: {
+            /**
+             * Files
+             * @description PDF, JPEG, PNG or WebP files.
+             */
+            files: string[];
+            /**
+             * Process
+             * @default true
+             */
+            process?: boolean;
+        };
+        /** BookCreate */
+        BookCreate: {
+            /** Title */
+            title: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Publisher */
+            publisher: string;
+            /** Version */
+            version: string;
+            /** Subject Id */
+            subject_id?: string | null;
+            /** Chapters */
+            chapters?: components["schemas"]["ChapterInput"][];
+        };
+        /** BookDetail */
+        BookDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Publisher */
+            publisher: string;
+            /** Version */
+            version: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Subject Id */
+            subject_id: string | null;
+            /** Subject Name */
+            subject_name: string | null;
+            /** Chapter Count */
+            chapter_count: number;
+            /** Ready Chapter Count */
+            ready_chapter_count: number;
+            /** Created By Name */
+            created_by_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Chapters */
+            chapters: components["schemas"]["ChapterRead"][];
+        };
+        /** BookRead */
+        BookRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Publisher */
+            publisher: string;
+            /** Version */
+            version: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Subject Id */
+            subject_id: string | null;
+            /** Subject Name */
+            subject_name: string | null;
+            /** Chapter Count */
+            chapter_count: number;
+            /** Ready Chapter Count */
+            ready_chapter_count: number;
+            /** Created By Name */
+            created_by_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Can Edit */
+            can_edit: boolean;
+        };
+        /** BookSearchHit */
+        BookSearchHit: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Chapter Id
+             * Format: uuid
+             */
+            chapter_id: string;
+            /** Chapter Number */
+            chapter_number: number;
+            /** Chapter Title */
+            chapter_title: string;
+            /** Page Start */
+            page_start: number;
+            /** Page End */
+            page_end: number;
+            /** Printed Start */
+            printed_start: number | null;
+            /** Printed End */
+            printed_end: number | null;
+            /** Content */
+            content: string;
+            /** Score */
+            score: number;
+        };
+        /** BookUpdate */
+        BookUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Class Id */
+            class_id?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Subject Id */
+            subject_id?: string | null;
+            /**
+             * Clear Subject
+             * @default false
+             */
+            clear_subject?: boolean;
+        };
         /** CancelRequest */
         CancelRequest: {
             /**
@@ -4258,6 +4838,177 @@ export interface components {
              * @example M. Imtiaz
              */
             holder?: string;
+        };
+        /** ChapterFileRead */
+        ChapterFileRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["FileKind"];
+            /** Original Name */
+            original_name: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Page Count */
+            page_count: number;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ChapterInput */
+        ChapterInput: {
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+        };
+        /** ChapterRead */
+        ChapterRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            status: components["schemas"]["ChapterStatus"];
+            /** Page Count */
+            page_count: number;
+            /** Files */
+            files: components["schemas"]["ChapterFileRead"][];
+            report: components["schemas"]["ChapterReport"] | null;
+            /**
+             * Indexing
+             * @default false
+             */
+            indexing?: boolean;
+            /** Error */
+            error: string | null;
+            /** Processed At */
+            processed_at: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ChapterRef */
+        ChapterRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ChapterReport
+         * @description What the agent found the last time it processed the chapter.
+         */
+        ChapterReport: {
+            /** Detected Chapter Number */
+            detected_chapter_number?: number | null;
+            /**
+             * Detected Confidence
+             * @default 0
+             */
+            detected_confidence?: number;
+            /**
+             * Matches Declared
+             * @default false
+             */
+            matches_declared?: boolean;
+            /** Chapter Probabilities */
+            chapter_probabilities?: {
+                [key: string]: number;
+            };
+            /** Issues */
+            issues?: components["schemas"]["ReportIssue"][];
+            /**
+             * Pages Total
+             * @default 0
+             */
+            pages_total?: number;
+            /**
+             * Vision Pages
+             * @default 0
+             */
+            vision_pages?: number;
+            /**
+             * Text Layer Pages
+             * @default 0
+             */
+            text_layer_pages?: number;
+            /**
+             * Batch Read Pages
+             * @default 0
+             */
+            batch_read_pages?: number;
+            /**
+             * Batch Fallback Pages
+             * @default 0
+             */
+            batch_fallback_pages?: number;
+            /**
+             * Chunks
+             * @default 0
+             */
+            chunks?: number;
+            /**
+             * Batch Embedded Chunks
+             * @default 0
+             */
+            batch_embedded_chunks?: number;
+            /**
+             * Batch Embed Fallback Chunks
+             * @default 0
+             */
+            batch_embed_fallback_chunks?: number;
+            /** Models */
+            models?: {
+                [key: string]: string;
+            };
+            /** Calls */
+            calls?: {
+                [key: string]: number;
+            };
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens?: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens?: number;
+            /** Accepted By Name */
+            accepted_by_name?: string | null;
+        };
+        /**
+         * ChapterStatus
+         * @enum {string}
+         */
+        ChapterStatus: "empty" | "uploaded" | "queued" | "reading" | "processing" | "ready" | "needs_review" | "failed";
+        /** ChapterUpdate */
+        ChapterUpdate: {
+            /** Number */
+            number?: number | null;
+            /** Title */
+            title?: string | null;
         };
         /** ClassCreate */
         ClassCreate: {
@@ -4467,118 +5218,82 @@ export interface components {
             fees: components["schemas"]["FeePulse"] | null;
             exams: components["schemas"]["ExamPulse"] | null;
         };
-        /**
-         * DiaryAccess
-         * @description Why the caller sees a section in their diary list, strongest first.
-         * @enum {string}
-         */
-        DiaryAccess: "class_teacher" | "subject_teacher" | "manage" | "read";
-        /** DiaryEntryInput */
-        DiaryEntryInput: {
-            /**
-             * Subject Id
-             * Format: uuid
-             */
-            subject_id: string;
-            /** Content */
-            content: string;
+        /** DiaryAgentSettingsRead */
+        DiaryAgentSettingsRead: {
+            /** Enabled */
+            enabled: boolean;
+            /** Template */
+            template: string;
+            /** Entry Template */
+            entry_template: string;
+            /** Instructions */
+            instructions?: string | null;
+            /** Placeholders */
+            placeholders: string[];
+            /** Entry Placeholders */
+            entry_placeholders: string[];
         };
-        /** DiaryPage */
-        DiaryPage: {
-            /**
-             * Section Id
-             * Format: uuid
-             */
-            section_id: string;
-            /** Section Name */
-            section_name: string;
-            /**
-             * Class Id
-             * Format: uuid
-             */
-            class_id: string;
-            /** Class Name */
-            class_name: string;
-            /** Class Teacher Name */
-            class_teacher_name: string | null;
-            /**
-             * Entry Date
-             * Format: date
-             */
-            entry_date: string;
-            /** Rows */
-            rows: components["schemas"]["DiaryRow"][];
-            /** Can Edit */
-            can_edit: boolean;
+        /** DiaryAgentSettingsWrite */
+        DiaryAgentSettingsWrite: {
+            /** Enabled */
+            enabled: boolean;
+            /** Template */
+            template: string;
+            /** Entry Template */
+            entry_template: string;
+            /** Instructions */
+            instructions?: string | null;
         };
-        /**
-         * DiaryPageWrite
-         * @description The rows the caller changed. Subjects not named are left as they are, so two
-         *     subject teachers saving the same page at once never overwrite each other.
-         */
-        DiaryPageWrite: {
-            /** Entries */
-            entries: components["schemas"]["DiaryEntryInput"][];
-        };
-        /** DiaryRow */
-        DiaryRow: {
+        /** DiaryDraftRead */
+        DiaryDraftRead: {
             /**
-             * Subject Id
+             * Id
              * Format: uuid
              */
-            subject_id: string;
-            /** Subject Code */
-            subject_code: string;
-            /** Subject Name */
-            subject_name: string;
-            /** Teacher Id */
-            teacher_id: string | null;
+            id: string;
             /** Teacher Name */
             teacher_name: string | null;
-            /** Content */
-            content: string | null;
-            /** Written By Name */
-            written_by_name: string | null;
-            /** Updated At */
-            updated_at: string | null;
-            /** Can Edit */
-            can_edit: boolean;
+            status: components["schemas"]["DiaryDraftStatus"];
+            /** Diary Date */
+            diary_date: string | null;
+            /** Class Hint */
+            class_hint: string | null;
+            /** Class Label */
+            class_label: string | null;
+            /** Group Id */
+            group_id: string | null;
+            /** Body */
+            body: string | null;
+            /** Message Id */
+            message_id: string | null;
+            /** Error */
+            error: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
-         * DiarySectionOption
-         * @description One section in the diary picker.
+         * DiaryDraftStatus
+         * @enum {string}
          */
-        DiarySectionOption: {
-            /**
-             * Section Id
-             * Format: uuid
-             */
-            section_id: string;
-            /** Section Name */
-            section_name: string;
-            /**
-             * Class Id
-             * Format: uuid
-             */
-            class_id: string;
-            /** Class Name */
-            class_name: string;
-            /** Class Level */
-            class_level: number;
-            /** Class Teacher Name */
-            class_teacher_name: string | null;
-            access: components["schemas"]["DiaryAccess"];
-            /**
-             * Filled Count
-             * @default 0
-             */
-            filled_count?: number;
-            /**
-             * Subject Count
-             * @default 0
-             */
-            subject_count?: number;
+        DiaryDraftStatus: "reading" | "needs_class" | "awaiting_confirmation" | "posted" | "cancelled" | "failed";
+        /** DiaryPreviewRead */
+        DiaryPreviewRead: {
+            /** Body */
+            body: string;
         };
+        /**
+         * Difficulty
+         * @enum {string}
+         */
+        Difficulty: "easy" | "medium" | "hard";
         /**
          * EnrollmentBackfillResult
          * @description What `POST /academic-years/{id}/enrollments/backfill` did.
@@ -5709,6 +6424,11 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * FileKind
+         * @enum {string}
+         */
+        FileKind: "pdf" | "image";
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /**
@@ -6568,6 +7288,61 @@ export interface components {
          * @enum {string}
          */
         LedgerEntryType: "charge" | "payment" | "payment_reversed" | "voucher_voided" | "late_fee" | "adjustment";
+        /** LibraryAnswer */
+        LibraryAnswer: {
+            /** Found */
+            found: boolean;
+            /** Answer */
+            answer: string;
+            /** Sources */
+            sources: components["schemas"]["LibraryHit"][];
+            /** Cited */
+            cited: number[];
+        };
+        /**
+         * LibraryHit
+         * @description A passage found by library-wide (hybrid) search.
+         */
+        LibraryHit: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Book Id
+             * Format: uuid
+             */
+            book_id: string;
+            /** Book Title */
+            book_title: string;
+            /**
+             * Chapter Id
+             * Format: uuid
+             */
+            chapter_id: string;
+            /** Chapter Number */
+            chapter_number: number;
+            /** Chapter Title */
+            chapter_title: string;
+            /** Page Start */
+            page_start: number;
+            /** Page End */
+            page_end: number;
+            /** Printed Start */
+            printed_start: number | null;
+            /** Printed End */
+            printed_end: number | null;
+            /** Content */
+            content: string;
+            /** Score */
+            score: number;
+            /**
+             * Matched By
+             * @enum {string}
+             */
+            matched_by: "both" | "meaning" | "keywords";
+        };
         /**
          * LinkedStudentRead
          * @description One child as seen from the guardian's record.
@@ -6814,6 +7589,8 @@ export interface components {
             email: string;
             /** Full Name */
             full_name: string;
+            /** Phone */
+            phone?: string | null;
             /** School Id */
             school_id: string | null;
             /**
@@ -6841,11 +7618,21 @@ export interface components {
         };
         /**
          * MemberUpdate
-         * @description Change a member's name, role, status, or any combination.
+         * @description Change a member's details, sign-in credentials, role, status, or any combination.
+         *
+         *     `email` and `password` are the member's SIGN-IN details. They live on the global
+         *     user row, so the service only lets an administrator change them for an account
+         *     that belongs to this organization alone -- see `RbacService._assert_can_manage_account`.
          */
         MemberUpdate: {
             /** Full Name */
             full_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Password */
+            password?: string | null;
             /** Role Id */
             role_id?: string | null;
             /** Suspended */
@@ -7196,6 +7983,48 @@ export interface components {
             /** Has Prev */
             has_prev: boolean;
         };
+        /**
+         * PageMethod
+         * @enum {string}
+         */
+        PageMethod: "text_layer" | "vision";
+        /**
+         * PagePlacement
+         * @description How the agent decided where a page goes.
+         * @enum {string}
+         */
+        PagePlacement: "printed_number" | "pdf_order" | "agent" | "upload_order";
+        /** PageRead */
+        PageRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            /** Printed Page Number */
+            printed_page_number: number | null;
+            placement: components["schemas"]["PagePlacement"];
+            method: components["schemas"]["PageMethod"];
+            /** Text */
+            text: string;
+            /** Has Image */
+            has_image: boolean;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /** Source Index */
+            source_index: number;
+            /** Detected Chapter Number */
+            detected_chapter_number: number | null;
+            /** Chapter Confidence */
+            chapter_confidence: number | null;
+            /** Opens Chapter */
+            opens_chapter: boolean;
+        };
         /** Page[AcademicYearRead] */
         Page_AcademicYearRead_: {
             /** Items */
@@ -7212,6 +8041,12 @@ export interface components {
         Page_ClassRead_: {
             /** Items */
             items: components["schemas"]["ClassRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[DiaryDraftRead] */
+        Page_DiaryDraftRead_: {
+            /** Items */
+            items: components["schemas"]["DiaryDraftRead"][];
             meta: components["schemas"]["PageMeta"];
         };
         /** Page[ExamRead] */
@@ -7280,11 +8115,195 @@ export interface components {
             items: components["schemas"]["WhatsAppMessageRead"][];
             meta: components["schemas"]["PageMeta"];
         };
+        /** PaperCreate */
+        PaperCreate: {
+            /** Title */
+            title: string;
+            /**
+             * Book Id
+             * Format: uuid
+             */
+            book_id: string;
+            /** Chapter Ids */
+            chapter_ids: string[];
+            /** @default en */
+            language?: components["schemas"]["PaperLanguage"];
+            /** @default mixed */
+            difficulty?: components["schemas"]["PaperDifficulty"];
+            paper_type: components["schemas"]["PaperType"];
+            /** Sections */
+            sections: components["schemas"]["SectionInput"][];
+            /** Duration Minutes */
+            duration_minutes?: number | null;
+            /** Instructions */
+            instructions?: string | null;
+        };
+        /** PaperDetail */
+        PaperDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string | null;
+            /** Subject Id */
+            subject_id: string | null;
+            /** Subject Name */
+            subject_name: string | null;
+            /** Book Id */
+            book_id: string | null;
+            /** Book Title */
+            book_title: string | null;
+            language: components["schemas"]["PaperLanguage"];
+            difficulty: components["schemas"]["PaperDifficulty"];
+            paper_type: components["schemas"]["PaperType"];
+            status: components["schemas"]["PaperStatus"];
+            /** Question Count */
+            question_count: number;
+            /** Total Marks */
+            total_marks: number;
+            /** Created By User Id */
+            created_by_user_id: string | null;
+            /** Created By Name */
+            created_by_name: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Generated At */
+            generated_at: string | null;
+            /** Duration Minutes */
+            duration_minutes: number | null;
+            /** Instructions */
+            instructions: string | null;
+            /** Chapters */
+            chapters: components["schemas"]["ChapterRef"][];
+            /** Requested */
+            requested: components["schemas"]["SectionInput"][];
+            /** Report */
+            report: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error: string | null;
+            /** Sections */
+            sections: components["schemas"]["app__modules__papers__schemas__SectionRead"][];
+        };
+        /**
+         * PaperDifficulty
+         * @enum {string}
+         */
+        PaperDifficulty: "easy" | "medium" | "hard" | "mixed";
+        /**
+         * PaperLanguage
+         * @enum {string}
+         */
+        PaperLanguage: "en" | "ur" | "ar";
         /** PaperMarksRead */
         PaperMarksRead: {
             paper: components["schemas"]["ExamPaperRead"];
             /** Rows */
             rows: components["schemas"]["StudentMarkRow"][];
+        };
+        /** PaperQuestionAdd */
+        PaperQuestionAdd: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Marks */
+            marks?: number | null;
+        };
+        /** PaperQuestionRead */
+        PaperQuestionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            /** Marks */
+            marks: number;
+            requested_difficulty: components["schemas"]["Difficulty"] | null;
+            question: components["schemas"]["QuestionRead"];
+        };
+        /** PaperRead */
+        PaperRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string | null;
+            /** Subject Id */
+            subject_id: string | null;
+            /** Subject Name */
+            subject_name: string | null;
+            /** Book Id */
+            book_id: string | null;
+            /** Book Title */
+            book_title: string | null;
+            language: components["schemas"]["PaperLanguage"];
+            difficulty: components["schemas"]["PaperDifficulty"];
+            paper_type: components["schemas"]["PaperType"];
+            status: components["schemas"]["PaperStatus"];
+            /** Question Count */
+            question_count: number;
+            /** Total Marks */
+            total_marks: number;
+            /** Created By User Id */
+            created_by_user_id: string | null;
+            /** Created By Name */
+            created_by_name: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Generated At */
+            generated_at: string | null;
+        };
+        /**
+         * PaperStatus
+         * @enum {string}
+         */
+        PaperStatus: "queued" | "generating" | "ready" | "needs_review" | "failed";
+        /**
+         * PaperType
+         * @enum {string}
+         */
+        PaperType: "objective" | "subjective" | "mix";
+        /** PaperUpdate */
+        PaperUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Duration Minutes */
+            duration_minutes?: number | null;
+            /** Instructions */
+            instructions?: string | null;
         };
         /**
          * ParsedQueryRead
@@ -7821,6 +8840,74 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /**
+         * QuestionOrigin
+         * @enum {string}
+         */
+        QuestionOrigin: "ai" | "manual";
+        /** QuestionRead */
+        QuestionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            type: components["schemas"]["QuestionType"];
+            difficulty: components["schemas"]["Difficulty"];
+            language: components["schemas"]["PaperLanguage"];
+            /** Text */
+            text: string;
+            /** Options */
+            options: string[] | null;
+            /** Correct Option */
+            correct_option: number | null;
+            /** Answer */
+            answer: string;
+            /** Marks */
+            marks: number;
+            /** Printed Page */
+            printed_page: number | null;
+            /** Book Id */
+            book_id: string | null;
+            /** Chapter Id */
+            chapter_id: string | null;
+            /** Chapter Number */
+            chapter_number: number | null;
+            /** Chapter Title */
+            chapter_title: string | null;
+            origin: components["schemas"]["QuestionOrigin"];
+            /** Checks */
+            checks: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * QuestionType
+         * @enum {string}
+         */
+        QuestionType: "mcq" | "true_false" | "fill_blank" | "short" | "long";
+        /**
+         * QuestionUpdate
+         * @description Edit a question in place. Options and key are checked against its type.
+         */
+        QuestionUpdate: {
+            /** Text */
+            text?: string | null;
+            /** Options */
+            options?: string[] | null;
+            /** Correct Option */
+            correct_option?: number | null;
+            /** Answer */
+            answer?: string | null;
+            difficulty?: components["schemas"]["Difficulty"] | null;
+            /** Marks */
+            marks?: number | null;
+        };
         /** QueueResult */
         QueueResult: {
             /** Queued */
@@ -7905,6 +8992,19 @@ export interface components {
             verification_required?: boolean;
             /** Message */
             message: string;
+        };
+        /** ReplaceRequest */
+        ReplaceRequest: {
+            difficulty?: components["schemas"]["Difficulty"] | null;
+        };
+        /** ReportIssue */
+        ReportIssue: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Positions */
+            positions?: number[];
         };
         /** ResendVerificationRequest */
         ResendVerificationRequest: {
@@ -8452,34 +9552,13 @@ export interface components {
             /** Total Count */
             total_count: number;
         };
-        /** SectionRead */
-        SectionRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Class Id
-             * Format: uuid
-             */
-            class_id: string;
-            /** Name */
-            name: string;
-            /** Capacity */
-            capacity: number | null;
-            /** Class Teacher Id */
-            class_teacher_id: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
+        /** SectionInput */
+        SectionInput: {
+            type: components["schemas"]["QuestionType"];
+            /** Count */
+            count: number;
+            /** Marks */
+            marks?: number | null;
         };
         /**
          * SectionRosterEntry
@@ -9786,6 +10865,24 @@ export interface components {
              */
             reason: string;
         };
+        /**
+         * WhatsAppConnectionRead
+         * @description The campus's linked WhatsApp number, as the WAHA gateway sees it.
+         */
+        WhatsAppConnectionRead: {
+            /** Backend */
+            backend: string;
+            /** Configured */
+            configured: boolean;
+            /** Status */
+            status: string | null;
+            /** Phone */
+            phone: string | null;
+            /** Push Name */
+            push_name: string | null;
+            /** Unresolved Groups */
+            unresolved_groups: number;
+        };
         /** WhatsAppGroupRead */
         WhatsAppGroupRead: {
             /**
@@ -9808,6 +10905,8 @@ export interface components {
             name: string;
             /** Invite Code */
             invite_code: string;
+            /** Chat Id */
+            chat_id: string | null;
             /** Is Active */
             is_active: boolean;
             /** Send Fee Notice */
@@ -9843,7 +10942,7 @@ export interface components {
          * WhatsAppMessageKind
          * @enum {string}
          */
-        WhatsAppMessageKind: "fee_notice" | "custom";
+        WhatsAppMessageKind: "fee_notice" | "custom" | "diary";
         /** WhatsAppMessageRead */
         WhatsAppMessageRead: {
             /**
@@ -9880,6 +10979,13 @@ export interface components {
          * @enum {string}
          */
         WhatsAppMessageStatus: "queued" | "sent" | "failed";
+        /** WhatsAppQrRead */
+        WhatsAppQrRead: {
+            /** Mimetype */
+            mimetype: string;
+            /** Data */
+            data: string;
+        };
         /** WhatsAppSettingsRead */
         WhatsAppSettingsRead: {
             /** Fee Notice Enabled */
@@ -9905,6 +11011,43 @@ export interface components {
             fee_template: string;
             /** Monthly Note */
             monthly_note?: string | null;
+        };
+        /** SectionRead */
+        app__modules__academics__schemas__SectionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Name */
+            name: string;
+            /** Capacity */
+            capacity: number | null;
+            /** Class Teacher Id */
+            class_teacher_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SectionRead */
+        app__modules__papers__schemas__SectionRead: {
+            type: components["schemas"]["QuestionType"];
+            /** Marks */
+            marks: number;
+            /** Questions */
+            questions: components["schemas"]["PaperQuestionRead"][];
         };
     };
     responses: never;
@@ -13812,59 +14955,6 @@ export interface operations {
             };
         };
     };
-    child_diary_api_v1_portal_children__student_id__diary_get: {
-        parameters: {
-            query?: {
-                /** @description Defaults to today. */
-                date?: string | null;
-            };
-            header?: never;
-            path: {
-                student_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DiaryPage"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     search_api_v1_search_get: {
         parameters: {
             query?: {
@@ -14388,7 +15478,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SectionRead"][];
+                    "application/json": components["schemas"]["app__modules__academics__schemas__SectionRead"][];
                 };
             };
             /** @description Bad Request */
@@ -14442,7 +15532,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SectionRead"];
+                    "application/json": components["schemas"]["app__modules__academics__schemas__SectionRead"];
                 };
             };
             /** @description Bad Request */
@@ -14544,7 +15634,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SectionRead"];
+                    "application/json": components["schemas"]["app__modules__academics__schemas__SectionRead"];
                 };
             };
             /** @description Bad Request */
@@ -17908,11 +18998,11 @@ export interface operations {
             };
         };
     };
-    list_sections_api_v1_diary_sections_get: {
+    list_books_api_v1_books_get: {
         parameters: {
             query?: {
-                /** @description The diary's day. Defaults to today. */
-                date?: string | null;
+                class_id?: string | null;
+                subject_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -17926,7 +19016,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiarySectionOption"][];
+                    "application/json": components["schemas"]["BookRead"][];
                 };
             };
             /** @description Bad Request */
@@ -17959,15 +19049,171 @@ export interface operations {
             };
         };
     };
-    get_page_api_v1_diary_sections__section_id__get: {
+    create_book_api_v1_books_post: {
         parameters: {
-            query?: {
-                /** @description The diary's day. Defaults to today. */
-                date?: string | null;
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    search_library_api_v1_books_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                class_id?: string | null;
+                subject_id?: string | null;
+                book_id?: string | null;
+                chapter_id?: string | null;
+                limit?: number;
             };
             header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryHit"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ask_library_api_v1_books_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryAnswer"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_book_api_v1_books__book_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
             path: {
-                section_id: string;
+                book_id: string;
             };
             cookie?: never;
         };
@@ -17979,7 +19225,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiaryPage"];
+                    "application/json": components["schemas"]["BookDetail"];
                 };
             };
             /** @description Bad Request */
@@ -18012,21 +19258,66 @@ export interface operations {
             };
         };
     };
-    write_page_api_v1_diary_sections__section_id__put: {
+    delete_book_api_v1_books__book_id__delete: {
         parameters: {
-            query?: {
-                /** @description The diary's day. Defaults to today. */
-                date?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
-                section_id: string;
+                book_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_book_api_v1_books__book_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DiaryPageWrite"];
+                "application/json": components["schemas"]["BookUpdate"];
             };
         };
         responses: {
@@ -18036,7 +19327,1161 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiaryPage"];
+                    "application/json": components["schemas"]["BookDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_chapter_api_v1_books__book_id__chapters_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChapterInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_chapter_api_v1_books__book_id__chapters__chapter_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_chapter_api_v1_books__book_id__chapters__chapter_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChapterUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    upload_files_api_v1_books__book_id__chapters__chapter_id__files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_file_api_v1_books__book_id__chapters__chapter_id__files__file_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    download_file_api_v1_books__book_id__files__file_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    process_api_v1_books__book_id__chapters__chapter_id__process_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    accept_api_v1_books__book_id__chapters__chapter_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_pages_api_v1_books__book_id__chapters__chapter_id__pages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    page_image_api_v1_books__book_id__pages__page_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    search_api_v1_books__book_id__search_get: {
+        parameters: {
+            query: {
+                q: string;
+                chapter_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                book_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookSearchHit"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_papers_api_v1_papers_get: {
+        parameters: {
+            query?: {
+                class_id?: string | null;
+                subject_id?: string | null;
+                status?: components["schemas"]["PaperStatus"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_paper_api_v1_papers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    question_bank_api_v1_papers_questions_get: {
+        parameters: {
+            query?: {
+                class_id?: string | null;
+                subject_id?: string | null;
+                book_id?: string | null;
+                chapter_id?: string | null;
+                type?: components["schemas"]["QuestionType"] | null;
+                difficulty?: components["schemas"]["Difficulty"] | null;
+                language?: components["schemas"]["PaperLanguage"] | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_paper_api_v1_papers__paper_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_paper_api_v1_papers__paper_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_paper_api_v1_papers__paper_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    regenerate_paper_api_v1_papers__paper_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_question_api_v1_papers__paper_id__questions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperQuestionAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperQuestionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_question_api_v1_papers__paper_id__questions__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    edit_question_api_v1_papers__paper_id__questions__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperQuestionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    replace_question_api_v1_papers__paper_id__questions__entry_id__replace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperQuestionRead"];
                 };
             };
             /** @description Bad Request */
@@ -18240,6 +20685,196 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_connection_api_v1_whatsapp_connection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhatsAppConnectionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    connect_api_v1_whatsapp_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhatsAppConnectionRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    disconnect_api_v1_whatsapp_connection_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    connection_qr_api_v1_whatsapp_connection_qr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhatsAppQrRead"];
+                };
             };
             /** @description Bad Request */
             400: {
@@ -18642,6 +21277,209 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_settings_api_v1_diary_agent_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryAgentSettingsRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    put_settings_api_v1_diary_agent_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiaryAgentSettingsWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryAgentSettingsRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    preview_api_v1_diary_agent_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiaryAgentSettingsWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryPreviewRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_drafts_api_v1_diary_agent_drafts_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DiaryDraftRead_"];
+                };
             };
             /** @description Bad Request */
             400: {

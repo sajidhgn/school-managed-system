@@ -129,7 +129,9 @@ export type ClassRead = S["ClassRead"];
 export type ClassCreate = S["ClassCreate"];
 export type ClassUpdate = S["ClassUpdate"];
 export type ClassSummary = S["ClassSummary"];
-export type SectionRead = S["SectionRead"];
+// The papers module also has a `SectionRead`, so the generator qualifies both by
+// module; this one is the class section. The paper's is `PaperSectionRead`.
+export type SectionRead = S["app__modules__academics__schemas__SectionRead"];
 export type SectionCreate = S["SectionCreate"];
 export type SectionUpdate = S["SectionUpdate"];
 export type SectionSummary = S["SectionSummary"];
@@ -151,13 +153,6 @@ export type ClassSubjectRead = S["ClassSubjectRead"];
 export type ClassSubjectCreate = S["ClassSubjectCreate"];
 export type ClassSubjectUpdate = S["ClassSubjectUpdate"];
 
-// --- Diary -----------------------------------------------------------------
-export type DiaryAccess = S["DiaryAccess"];
-export type DiarySectionOption = S["DiarySectionOption"];
-export type DiaryPage = S["DiaryPage"];
-export type DiaryRow = S["DiaryRow"];
-export type DiaryPageWrite = S["DiaryPageWrite"];
-
 // --- WhatsApp class groups --------------------------------------------------
 export type WhatsAppGroupRead = S["WhatsAppGroupRead"];
 export type WhatsAppGroupWrite = S["WhatsAppGroupWrite"];
@@ -169,6 +164,51 @@ export type FeeNoticePreview = S["FeeNoticePreview"];
 export type FeeNoticeQueueRequest = S["FeeNoticeQueueRequest"];
 export type CustomMessageRequest = S["CustomMessageRequest"];
 export type QueueResult = S["QueueResult"];
+export type WhatsAppMessageKind = S["WhatsAppMessageKind"];
+export type WhatsAppConnectionRead = S["WhatsAppConnectionRead"];
+export type WhatsAppQrRead = S["WhatsAppQrRead"];
+
+// --- Diary agent (teachers post the diary over WhatsApp) --------------------
+export type DiaryAgentSettingsRead = S["DiaryAgentSettingsRead"];
+export type DiaryAgentSettingsWrite = S["DiaryAgentSettingsWrite"];
+export type DiaryPreviewRead = S["DiaryPreviewRead"];
+export type DiaryDraftRead = S["DiaryDraftRead"];
+export type DiaryDraftStatus = S["DiaryDraftStatus"];
+
+// --- Textbook library ------------------------------------------------------
+export type BookRead = S["BookRead"];
+export type BookDetail = S["BookDetail"];
+export type BookCreate = S["BookCreate"];
+export type BookUpdate = S["BookUpdate"];
+export type ChapterInput = S["ChapterInput"];
+export type ChapterUpdate = S["ChapterUpdate"];
+export type ChapterRead = S["ChapterRead"];
+export type ChapterStatus = S["ChapterStatus"];
+export type ChapterReport = S["ChapterReport"];
+export type ChapterFileRead = S["ChapterFileRead"];
+export type ReportIssue = S["ReportIssue"];
+export type BookPageRead = S["PageRead"];
+export type BookSearchHit = S["BookSearchHit"];
+
+// --- Test papers (generated from the textbook library) ---------------------
+export type PaperRead = S["PaperRead"];
+export type PaperDetail = S["PaperDetail"];
+export type PaperCreate = S["PaperCreate"];
+export type PaperUpdate = S["PaperUpdate"];
+export type PaperStatus = S["PaperStatus"];
+export type PaperType = S["PaperType"];
+export type PaperLanguage = S["PaperLanguage"];
+export type PaperDifficulty = S["PaperDifficulty"];
+export type PaperSectionInput = S["SectionInput"];
+export type PaperSectionRead = S["app__modules__papers__schemas__SectionRead"];
+export type PaperQuestionRead = S["PaperQuestionRead"];
+export type PaperQuestionAdd = S["PaperQuestionAdd"];
+export type PaperChapterRef = S["ChapterRef"];
+export type QuestionRead = S["QuestionRead"];
+export type QuestionUpdate = S["QuestionUpdate"];
+export type QuestionType = S["QuestionType"];
+export type QuestionDifficulty = S["Difficulty"];
+export type ReplaceQuestionRequest = S["ReplaceRequest"];
 
 // --- Exams -----------------------------------------------------------------
 export type ExamRead = S["ExamRead"];
@@ -267,6 +307,7 @@ export const PERMISSIONS = {
   memberInvite: "member:invite",
   memberUpdate: "member:update",
   memberSuspend: "member:suspend",
+  memberResetPassword: "member:reset_password",
   memberRemove: "member:remove",
   roleRead: "role:read",
   roleCreate: "role:create",
@@ -282,6 +323,7 @@ export const PERMISSIONS = {
   studentUpdate: "student:update",
   studentDelete: "student:delete",
   classRead: "class:read",
+  classViewAll: "class:view_all",
   classCreate: "class:create",
   classUpdate: "class:update",
   classDelete: "class:delete",
@@ -311,19 +353,41 @@ export const PERMISSIONS = {
   // whoever records absences must not be the one who can rewrite the record. Same
   // control as `feeVoid` above, applied to the register a truancy referral is built on.
   attendanceAmend: "attendance:amend",
-  // The daily homework diary. `diaryWrite` reaches only the classes and subjects the
-  // holder is assigned to (enforced server-side); `diaryManage` reaches every page.
-  diaryRead: "diary:read",
-  diaryWrite: "diary:write",
-  diaryManage: "diary:manage",
-  // Class WhatsApp groups. `whatsappSend` posts; `whatsappManage` links groups and
-  // configures the monthly fee notice.
+  // Class WhatsApp groups. `whatsappSend` posts; `whatsappManage` links groups,
+  // connects the school's number and configures the fee notice and diary format.
+  // `whatsappDiary` lets a teacher post the day's diary by sending a photo to the
+  // school's number — there is no web screen for it.
   whatsappRead: "whatsapp:read",
   whatsappSend: "whatsapp:send",
   whatsappManage: "whatsapp:manage",
+  whatsappDiary: "whatsapp:diary",
+  // The textbook library. `bookWrite` changes only the books its holder uploaded
+  // (enforced server-side); `bookManage` changes or deletes any book.
+  bookRead: "book:read",
+  bookWrite: "book:write",
+  bookManage: "book:manage",
+  // Test papers written from the library's chapters. Same split as books:
+  // `paperWrite` edits the papers its holder made, `paperManage` any paper.
+  paperRead: "paper:read",
+  paperWrite: "paper:write",
+  paperManage: "paper:manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+/**
+ * Who gets the Schools page: someone who can ADMINISTER campuses, not merely read one.
+ *
+ * `school:read` alone is not enough. Teachers and accountants hold it because the
+ * server needs it to show them their own campus's name and profile elsewhere, but
+ * the Schools page is the organization's campus directory — a teacher has nothing
+ * to do there.
+ */
+export const SCHOOL_ADMIN_PERMISSIONS: string[] = [
+  PERMISSIONS.schoolCreate,
+  PERMISSIONS.schoolUpdate,
+  PERMISSIONS.schoolArchive,
+];
 
 // --- Fees ------------------------------------------------------------------
 export type FeeHeadRead = S["FeeHeadRead"];

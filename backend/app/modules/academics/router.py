@@ -48,6 +48,7 @@ from app.modules.academics.service import (
     AcademicsService,
     CurriculumService,
 )
+from app.modules.academics.teaching_scope import assigned_teacher
 from app.modules.students.schemas import EnrollmentBackfillResult, SectionRosterEntry
 from app.modules.students.service import EnrollmentService
 
@@ -64,6 +65,9 @@ CalendarManageCtx = Annotated[AuthContext, Depends(require("calendar:manage"))]
 SubjectReadCtx = Annotated[AuthContext, Depends(require("subject:read"))]
 SubjectManageCtx = Annotated[AuthContext, Depends(require("subject:manage"))]
 StudentReadCtx = Annotated[AuthContext, Depends(require("student:read"))]
+# The class reads carry the context, not just the check: a teacher sees only the
+# classes and sections they are assigned to (see `teaching_scope`).
+ClassReadCtx = Annotated[AuthContext, Depends(require("class:read"))]
 PromoteCtx = Annotated[AuthContext, Depends(require("student:promote"))]
 
 
@@ -76,11 +80,12 @@ PromoteCtx = Annotated[AuthContext, Depends(require("student:promote"))]
     "/summary",
     response_model=list[ClassSummary],
     summary="Class and section summaries with headcounts",
-    dependencies=[Depends(require("class:read"))],
 )
-async def class_summaries(db: DbSession) -> list[ClassSummary]:
+async def class_summaries(db: DbSession, ctx: ClassReadCtx) -> list[ClassSummary]:
     """Dashboard view: every class, its sections, and students per section."""
-    return await AcademicsService(db).summaries()
+    return await AcademicsService(db).summaries(
+        teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +101,13 @@ async def class_summaries(db: DbSession) -> list[ClassSummary]:
     "",
     response_model=Page[ClassRead],
     summary="List classes",
-    dependencies=[Depends(require("class:read"))],
 )
-async def list_classes(db: DbSession, params: Pagination, sort: Sorting) -> Page[ClassRead]:
-    return await AcademicsService(db).list_classes(params, sort)
+async def list_classes(
+    db: DbSession, params: Pagination, sort: Sorting, ctx: ClassReadCtx
+) -> Page[ClassRead]:
+    return await AcademicsService(db).list_classes(
+        params, sort, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 @router.post(
@@ -117,10 +125,12 @@ async def create_class(payload: ClassCreate, db: DbSession) -> ClassRead:
     "/{class_id}",
     response_model=ClassRead,
     summary="Get a class",
-    dependencies=[Depends(require("class:read"))],
 )
-async def get_class(class_id: UUID, db: DbSession) -> ClassRead:
-    return ClassRead.model_validate(await AcademicsService(db).get_class(class_id))
+async def get_class(class_id: UUID, db: DbSession, ctx: ClassReadCtx) -> ClassRead:
+    school_class = await AcademicsService(db).get_visible_class(
+        class_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
+    return ClassRead.model_validate(school_class)
 
 
 @router.patch(
@@ -152,10 +162,11 @@ async def delete_class(class_id: UUID, db: DbSession) -> None:
     "/{class_id}/sections",
     response_model=list[SectionRead],
     summary="List the sections of a class",
-    dependencies=[Depends(require("class:read"))],
 )
-async def list_sections(class_id: UUID, db: DbSession) -> list[SectionRead]:
-    return await AcademicsService(db).list_sections(class_id)
+async def list_sections(class_id: UUID, db: DbSession, ctx: ClassReadCtx) -> list[SectionRead]:
+    return await AcademicsService(db).list_sections(
+        class_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 @router.post(
@@ -227,9 +238,11 @@ async def remove_from_curriculum(link_id: UUID, db: DbSession, ctx: SubjectManag
     summary="The subjects this class studies",
 )
 async def list_curriculum(
-    class_id: UUID, db: DbSession, _ctx: SubjectReadCtx
+    class_id: UUID, db: DbSession, ctx: SubjectReadCtx
 ) -> list[ClassSubjectRead]:
-    return await CurriculumService(db).list_curriculum(class_id)
+    return await CurriculumService(db).list_curriculum(
+        class_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 @router.post(
@@ -397,10 +410,12 @@ async def list_subjects(
     db: DbSession,
     params: Pagination,
     sort: Sorting,
-    _ctx: SubjectReadCtx,
+    ctx: SubjectReadCtx,
     search: SearchQuery = None,
 ) -> Page[SubjectRead]:
-    return await CurriculumService(db).list_subjects(params, sort, search=search)
+    return await CurriculumService(db).list_subjects(
+        params, sort, search=search, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
 
 
 @subjects_router.post(
@@ -420,8 +435,11 @@ async def create_subject(
     response_model=SubjectRead,
     summary="Get a subject",
 )
-async def get_subject(subject_id: UUID, db: DbSession, _ctx: SubjectReadCtx) -> SubjectRead:
-    return SubjectRead.model_validate(await CurriculumService(db).get_subject(subject_id))
+async def get_subject(subject_id: UUID, db: DbSession, ctx: SubjectReadCtx) -> SubjectRead:
+    subject = await CurriculumService(db).get_visible_subject(
+        subject_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
+    )
+    return SubjectRead.model_validate(subject)
 
 
 @subjects_router.patch(
@@ -455,7 +473,7 @@ async def delete_subject(subject_id: UUID, db: DbSession, ctx: SubjectManageCtx)
     summary="The class register for a section, in roll order",
 )
 async def section_roster(
-    section_id: UUID, db: DbSession, _ctx: StudentReadCtx
+    section_id: UUID, db: DbSession, ctx: StudentReadCtx
 ) -> list[SectionRosterEntry]:
     """Gated on `student:read`, not `class:read`.
 
@@ -463,7 +481,14 @@ async def section_roster(
     That is student data that happens to be reached through a section, and letting
     `class:read` -- which exists so staff can see the school's structure -- return it
     would make the structure permission a back door into the directory.
+
+    A teacher gets only the registers of sections they are assigned to.
     """
+    await AcademicsService(db).assert_teaches_section(
+        section_id,
+        teacher_id=assigned_teacher(ctx.user_id, ctx.permissions),
+        message="Section not found.",
+    )
     return await EnrollmentService(db).roster(section_id)
 
 

@@ -28,6 +28,7 @@ from app.core.context import require_organization_id, require_school_id
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.modules.academics.service import AcademicCalendarService, AcademicsService
+from app.modules.academics.teaching_scope import taught_section_ids
 from app.modules.billing.entitlements import EntitlementService
 from app.modules.fees.repository import FeeVoucherRepository
 from app.modules.students.models import Student, StudentEnrollment, StudentStatus
@@ -129,8 +130,13 @@ class StudentService:
         payload["section_name"] = pair[1] if pair else None
         return StudentRead.model_validate(payload)
 
-    async def get(self, student_id: UUID) -> StudentRead:
-        return await self._read(await self._get_or_404(student_id))
+    async def get(self, student_id: UUID, *, teacher_id: UUID | None = None) -> StudentRead:
+        student = await self._get_or_404(student_id)
+        # A child outside the teacher's classes is a 404, like any id they cannot see.
+        await self.academics.assert_teaches_section(
+            student.section_id, teacher_id=teacher_id, message="Student not found."
+        )
+        return await self._read(student)
 
     def _fee_standing_condition(self, standing: FeeStandingFilter) -> ColumnElement[bool]:
         """Turn "owes money" into a WHERE clause on `students`.
@@ -155,7 +161,7 @@ class StudentService:
         return Student.id.in_(vouchers.students_owing(due_before=due_before))
 
     def _exam_result_condition(
-        self, exam_id: UUID, result: ExamResultFilter | None
+        self, exam_id: UUID, result: ExamResultFilter | None, teacher_id: UUID | None = None
     ) -> ColumnElement[bool]:
         """Turn "how did they do in this exam" into a WHERE clause on `students`.
 
@@ -163,22 +169,25 @@ class StudentService:
         `exam_marks` would multiply a student by their papers and corrupt the
         page total. What counts as passed/failed/absent is defined beside the
         mark model -- see `ExamMarkRepository` -- this method only composes it.
+
+        A bound teacher's outcome counts only the papers they teach: "failed" for a
+        maths teacher means failed maths, not a peek at who failed Urdu.
         """
         from app.modules.exams.repository import ExamMarkRepository
 
         marks = ExamMarkRepository(self.session)
         if result is None:
             # An exam filter with no outcome: everyone marked in it at all.
-            return Student.id.in_(marks.students_marked(exam_id))
+            return Student.id.in_(marks.students_marked(exam_id, teacher_id=teacher_id))
         if result is ExamResultFilter.ABSENT:
-            return Student.id.in_(marks.students_absent(exam_id))
+            return Student.id.in_(marks.students_absent(exam_id, teacher_id=teacher_id))
         if result is ExamResultFilter.FAILED:
-            return Student.id.in_(marks.students_below_pass(exam_id))
+            return Student.id.in_(marks.students_below_pass(exam_id, teacher_id=teacher_id))
         # PASSED: marked, missed nothing, cleared every declared pass line.
         return (
-            Student.id.in_(marks.students_marked(exam_id))
-            & Student.id.notin_(marks.students_absent(exam_id))
-            & Student.id.notin_(marks.students_below_pass(exam_id))
+            Student.id.in_(marks.students_marked(exam_id, teacher_id=teacher_id))
+            & Student.id.notin_(marks.students_absent(exam_id, teacher_id=teacher_id))
+            & Student.id.notin_(marks.students_below_pass(exam_id, teacher_id=teacher_id))
         )
 
     async def list(
@@ -186,6 +195,7 @@ class StudentService:
         params: PageParams,
         sort: SortParams,
         *,
+        teacher_id: UUID | None = None,
         search: str | None = None,
         section_id: UUID | None = None,
         status: StudentStatus | None = None,
@@ -193,7 +203,9 @@ class StudentService:
         exam_id: UUID | None = None,
         exam_result: ExamResultFilter | None = None,
     ) -> Page[StudentListRow]:
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
+        if teacher_id is not None:
+            conditions.append(Student.section_id.in_(taught_section_ids(teacher_id)))
         if search:
             conditions.append(self.repo.search_filter(search))
         if section_id is not None:
@@ -203,7 +215,7 @@ class StudentService:
         if fee_standing is not None:
             conditions.append(self._fee_standing_condition(fee_standing))
         if exam_id is not None:
-            conditions.append(self._exam_result_condition(exam_id, exam_result))
+            conditions.append(self._exam_result_condition(exam_id, exam_result, teacher_id))
 
         rows, total = await self.repo.list(*conditions, params=params, sort=sort)
         # Every section on the page resolved once, not once per child.
@@ -211,7 +223,7 @@ class StudentService:
             {r.section_id for r in rows if r.section_id is not None}
         )
         dues = await self._dues_for(rows, fee_standing)
-        results = await self._exam_results_for(rows, exam_id)
+        results = await self._exam_results_for(rows, exam_id, teacher_id)
         items = [
             StudentListRow.model_validate(
                 (await self._read(r, labels)).model_dump()
@@ -222,7 +234,7 @@ class StudentService:
         return Page.create(items, total, params)
 
     async def _exam_results_for(
-        self, rows: Sequence[Student], exam_id: UUID | None
+        self, rows: Sequence[Student], exam_id: UUID | None, teacher_id: UUID | None = None
     ) -> dict[UUID, StudentExamResult]:
         """Exam totals for the students on THIS page, when an exam was named.
 
@@ -236,7 +248,7 @@ class StudentService:
         from app.modules.exams.repository import ExamMarkRepository
 
         raw = await ExamMarkRepository(self.session).summary_by_student(
-            exam_id, {r.id for r in rows}
+            exam_id, {r.id for r in rows}, teacher_id=teacher_id
         )
         results: dict[UUID, StudentExamResult] = {}
         for student_id, (obtained, total_max, failed, absent) in raw.items():

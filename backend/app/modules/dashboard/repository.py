@@ -10,6 +10,11 @@ SCOPING
     verified token's ContextVar and is skipped only for an organization-level
     principal with no campus open, which is how they get the group-wide picture. The
     tenant boundary itself is PostgreSQL RLS, not this filter.
+
+    A teacher without `class:view_all` is narrowed further, to their assigned
+    sections (`academics/teaching_scope.py`): students and registers by section,
+    exam marks by the student's section AND the paper's (class, subject), so a maths
+    teacher's board shows maths, not their pupils' English results.
 """
 
 from __future__ import annotations
@@ -18,14 +23,16 @@ from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy import case as sa_case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
 from app.core.context import get_school_id
 from app.modules.academics.models import AcademicYear, SchoolClass, Section, Subject
+from app.modules.academics.teaching_scope import taught_section_ids
 from app.modules.attendance.models import (
     AttendanceRecord,
     AttendanceSession,
@@ -33,6 +40,7 @@ from app.modules.attendance.models import (
     AttendanceStatus,
 )
 from app.modules.exams.models import Exam, ExamMark, ExamPaper
+from app.modules.exams.repository import taught_students, visible_paper
 from app.modules.fees.models import FeePayment, FeePaymentStatus
 from app.modules.students.models import Student, StudentStatus
 
@@ -56,8 +64,34 @@ _COUNTED = func.sum(sa_case((AttendanceRecord.status == AttendanceStatus.EXCUSED
 
 
 class DashboardRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, teacher_id: UUID | None = None) -> None:
         self.session = session
+        self.teacher_id = teacher_id
+
+    # Each returns no condition for an unbound caller, so `.where(*...)` is a no-op.
+
+    def _taught_students(self) -> list[ColumnElement[bool]]:
+        if self.teacher_id is None:
+            return []
+        return [Student.section_id.in_(taught_section_ids(self.teacher_id))]
+
+    def _taught_registers(self) -> list[ColumnElement[bool]]:
+        if self.teacher_id is None:
+            return []
+        return [AttendanceSession.section_id.in_(taught_section_ids(self.teacher_id))]
+
+    def _taught_marks(self) -> list[ColumnElement[bool]]:
+        """Marks of the teacher's pupils on papers of subjects they answer for.
+
+        The exams module's own helpers, so the dashboard and the marks screen agree
+        on which papers and pupils a teacher can see.
+        """
+        if self.teacher_id is None:
+            return []
+        return [
+            ExamMark.student_id.in_(taught_students(self.teacher_id)),
+            visible_paper(self.teacher_id),
+        ]
 
     # -- students -----------------------------------------------------------
 
@@ -69,7 +103,7 @@ class DashboardRepository:
             func.count().filter(Student.status == StudentStatus.PENDING),
             func.count().filter(is_active, Student.enrolled_on >= joined_since),
             func.count().filter(is_active, Student.section_id.is_(None)),
-        ).where(Student.deleted_at.is_(None))
+        ).where(Student.deleted_at.is_(None), *self._taught_students())
         active, pending, joined, unplaced = (
             await self.session.execute(_scope(stmt, Student.school_id))
         ).one()
@@ -78,7 +112,11 @@ class DashboardRepository:
     async def gender_counts(self) -> Sequence[tuple[str | None, int]]:
         stmt = (
             select(Student.gender, func.count())
-            .where(Student.deleted_at.is_(None), Student.status == StudentStatus.ACTIVE)
+            .where(
+                Student.deleted_at.is_(None),
+                Student.status == StudentStatus.ACTIVE,
+                *self._taught_students(),
+            )
             .group_by(Student.gender)
         )
         rows = (await self.session.execute(_scope(stmt, Student.school_id))).all()
@@ -95,6 +133,7 @@ class DashboardRepository:
                 Student.deleted_at.is_(None),
                 Student.status == StudentStatus.ACTIVE,
                 SchoolClass.deleted_at.is_(None),
+                *self._taught_students(),
             )
             .group_by(SchoolClass.name, SchoolClass.level)
             .order_by(SchoolClass.level, SchoolClass.name)
@@ -113,6 +152,7 @@ class DashboardRepository:
                 AttendanceSession.status == AttendanceSessionStatus.SUBMITTED,
                 AttendanceSession.session_date >= start,
                 AttendanceSession.session_date <= end,
+                *self._taught_registers(),
             )
             .group_by(AttendanceSession.session_date)
         )
@@ -127,6 +167,7 @@ class DashboardRepository:
                 AttendanceSession.status == AttendanceSessionStatus.SUBMITTED,
                 AttendanceSession.session_date >= start,
                 AttendanceSession.session_date <= end,
+                *self._taught_registers(),
             )
             .group_by(AttendanceRecord.status)
         )
@@ -139,6 +180,7 @@ class DashboardRepository:
             Student.deleted_at.is_(None),
             Student.status == StudentStatus.ACTIVE,
             Student.section_id.is_not(None),
+            *self._taught_students(),
         )
         return int((await self.session.execute(_scope(stmt, Student.school_id))).scalar_one())
 
@@ -146,6 +188,7 @@ class DashboardRepository:
         stmt = select(func.count(func.distinct(AttendanceSession.section_id))).where(
             AttendanceSession.session_date == day,
             AttendanceSession.status == AttendanceSessionStatus.SUBMITTED,
+            *self._taught_registers(),
         )
         scoped = _scope(stmt, AttendanceSession.school_id)
         return int((await self.session.execute(scoped)).scalar_one())
@@ -195,6 +238,9 @@ class DashboardRepository:
                 ExamPaper.deleted_at.is_(None),
                 ExamMark.deleted_at.is_(None),
                 ExamMark.marks_obtained.is_not(None),
+                # Bounded here too, so a teacher's board shows the latest exam with
+                # marks THEY can see, not an empty chart for someone else's.
+                *self._taught_marks(),
             )
             .exists()
         )
@@ -229,6 +275,7 @@ class DashboardRepository:
                 ExamMark.is_absent.is_(False),
                 ExamMark.marks_obtained.is_not(None),
                 ExamPaper.max_marks > 0,
+                *self._taught_marks(),
             )
             .group_by(Subject.name)
         )
