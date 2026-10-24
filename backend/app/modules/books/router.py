@@ -13,10 +13,14 @@ AUTHORISATION SHAPE
 UPLOADS ARE MULTIPART
     `POST /books/{id}/chapters/{cid}/files` takes `files` (one or many PDFs/images)
     and `process` (default true: queue the agent as soon as the files land).
+    `POST /books/scan` takes `files` too -- a new book's cover and contents pages --
+    and answers with the details read off them (on kie.ai when `KIE_API_TOKEN` is
+    set, see `agent.front_matter_reader`); it stores nothing.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 
@@ -32,15 +36,29 @@ from fastapi import (
     status,
 )
 from fastapi.responses import FileResponse
+from openai import OpenAIError
 from sqlalchemy import select
 
 from app.api.deps import AuthContext, DbSession, SettingsDep, require
 from app.common.storage import LocalFileStorage, get_storage
 from app.core.config import Settings
 from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.core.rate_limit import enforce_rate_limit
 from app.modules.academics.teaching_scope import assigned_teacher
-from app.modules.books.agent import AgentNotConfiguredError, Answerer, BookAgent
-from app.modules.books.jobs import AgentFactory, default_agent_factory, process_chapter
+from app.modules.books.agent import (
+    SCAN_PROVIDERS,
+    AgentNotConfiguredError,
+    Answerer,
+    BookAgent,
+    FrontMatterReader,
+    front_matter_reader,
+)
+from app.modules.books.jobs import (
+    AgentFactory,
+    default_agent_factory,
+    describe_failure,
+    process_chapter,
+)
 from app.modules.books.models import BookChapter, ChapterStatus
 from app.modules.books.repository import LibraryScope
 from app.modules.books.schemas import (
@@ -48,6 +66,7 @@ from app.modules.books.schemas import (
     BookCreate,
     BookDetail,
     BookRead,
+    BookScan,
     BookSearchHit,
     BookUpdate,
     ChapterInput,
@@ -56,6 +75,7 @@ from app.modules.books.schemas import (
     LibraryAnswer,
     LibraryHit,
     PageRead,
+    ScanStatus,
 )
 from app.modules.books.service import BookService, Caller, IncomingFile
 
@@ -63,6 +83,9 @@ router = APIRouter()
 
 _MAX_REQUEST_MB = 250
 """All files of one upload together -- what one request may hold in memory."""
+_SCANS_PER_HOUR = 30
+"""Front-matter readings per user per hour. Each is one vision call over up to
+sixteen pages; the cap keeps a stuck retry loop from running up the bill."""
 
 ReadCtx = Annotated[AuthContext, Depends(require("book:read"))]
 
@@ -76,8 +99,14 @@ def get_agent_factory() -> AgentFactory:
     return default_agent_factory
 
 
+def get_scan_reader_factory() -> Callable[[], FrontMatterReader]:
+    """Reads "Add a book" photos: kie.ai or OpenAI. Overridden in tests."""
+    return front_matter_reader
+
+
 StorageDep = Annotated[LocalFileStorage, Depends(get_book_storage)]
 AgentFactoryDep = Annotated[AgentFactory, Depends(get_agent_factory)]
+ScanReaderFactoryDep = Annotated[Callable[[], FrontMatterReader], Depends(get_scan_reader_factory)]
 
 
 def _caller(ctx: AuthContext) -> Caller:
@@ -129,6 +158,30 @@ async def _after_queue(
         agent_factory=agent_factory,
         storage=storage,
     )
+
+
+async def _read_uploads(
+    files: list[UploadFile], settings: Settings, *, too_large_hint: str = ""
+) -> list[IncomingFile]:
+    """Every uploaded file in memory, refusing oversized ones before reading them."""
+    limit = settings.BOOKS_MAX_UPLOAD_MB * 1024 * 1024
+    # Checked before anything is read: the files are spooled to disk by the
+    # multipart parser, but `.read()` below holds each one in memory.
+    total = sum(upload.size or 0 for upload in files)
+    if total > _MAX_REQUEST_MB * 1024 * 1024:
+        raise ValidationError(
+            f"Upload at most {_MAX_REQUEST_MB} MB at a time{too_large_hint}.",
+            code="UPLOAD_TOO_LARGE",
+        )
+    incoming: list[IncomingFile] = []
+    for upload in files:
+        if upload.size is not None and upload.size > limit:
+            raise ValidationError(
+                f"{upload.filename} is larger than {settings.BOOKS_MAX_UPLOAD_MB} MB.",
+                code="FILE_TOO_LARGE",
+            )
+        incoming.append(IncomingFile(upload.filename or "upload", await upload.read(limit + 1)))
+    return incoming
 
 
 async def _chapter_school(chapter_id: UUID, db: DbSession) -> UUID:
@@ -226,6 +279,70 @@ async def ask_library(
     return await _service(db, storage, settings).ask(
         payload, embed, agent, teacher_id=_caller(ctx).teacher_id
     )
+
+
+@router.get(
+    "/scan/status",
+    response_model=ScanStatus,
+    summary='Whether "Add a book" can read pages with AI right now',
+)
+async def scan_status(
+    ctx: ReadCtx, settings: SettingsDep, reader_factory: ScanReaderFactoryDep
+) -> ScanStatus:
+    """Checks the key `BOOKS_SCAN_PROVIDER` needs is set, that the provider accepts
+    it, and that it offers `BOOKS_SCAN_MODEL` -- one `GET /models` at most, its
+    answer remembered for a few minutes; no model is run."""
+    provider = SCAN_PROVIDERS[settings.BOOKS_SCAN_PROVIDER].label
+    try:
+        problem = await reader_factory().check()
+    except AgentNotConfiguredError as exc:
+        problem = str(exc)
+    return ScanStatus(
+        ready=problem is None,
+        provider=provider,
+        model=settings.BOOKS_SCAN_MODEL,
+        problem=problem,
+    )
+
+
+@router.post(
+    "/scan",
+    response_model=BookScan,
+    summary="Read a new book's details off photos or a PDF of its cover and contents pages",
+)
+async def scan_book(
+    db: DbSession,
+    ctx: ReadCtx,
+    storage: StorageDep,
+    settings: SettingsDep,
+    reader_factory: ScanReaderFactoryDep,
+    files: Annotated[
+        list[UploadFile],
+        File(description="Photos (JPEG, PNG, WebP) or a PDF of the cover and contents pages."),
+    ],
+) -> BookScan:
+    """Pre-fills "Add a book": title, publisher, edition, class, subject and the
+    chapter list. Nothing is saved -- the teacher checks the form, then creates the
+    book with `POST /books`. Only the first 16 pages are read. 422 `NOTHING_READ`
+    when the pages show neither a title nor a contents list."""
+    await enforce_rate_limit(
+        "book_scan", str(ctx.user_id), limit=_SCANS_PER_HOUR, window_seconds=3600
+    )
+    incoming = await _read_uploads(files, settings)
+    try:
+        reader = reader_factory()
+    except AgentNotConfiguredError as exc:
+        raise ServiceUnavailableError(str(exc), code="AI_NOT_CONFIGURED") from exc
+    # Key, model and server are checked before the pages are sent anywhere.
+    if (problem := await reader.check()) is not None:
+        raise ServiceUnavailableError(problem, code="AI_NOT_READY")
+    try:
+        return await _service(db, storage, settings).scan(incoming, reader, _caller(ctx))
+    except OpenAIError as exc:
+        provider = SCAN_PROVIDERS[settings.BOOKS_SCAN_PROVIDER].label
+        raise ServiceUnavailableError(describe_failure(exc, provider), code="AI_FAILED") from exc
+    except RuntimeError as exc:  # the model answered, but not with a usable reading
+        raise ServiceUnavailableError(str(exc), code="AI_FAILED") from exc
 
 
 @router.post(
@@ -350,24 +467,9 @@ async def upload_files(
     """Photos may be uploaded in any order -- the agent orders them by printed page
     number. Uploading drops the chapter's previous pages and vectors; with
     `process=true` the agent is queued straight away."""
-    limit = settings.BOOKS_MAX_UPLOAD_MB * 1024 * 1024
-    # Checked before anything is read: the files are spooled to disk by the
-    # multipart parser, but `.read()` below holds each one in memory.
-    total = sum(upload.size or 0 for upload in files)
-    if total > _MAX_REQUEST_MB * 1024 * 1024:
-        raise ValidationError(
-            f"Upload at most {_MAX_REQUEST_MB} MB at a time; split the chapter into "
-            "several uploads.",
-            code="UPLOAD_TOO_LARGE",
-        )
-    incoming: list[IncomingFile] = []
-    for upload in files:
-        if upload.size is not None and upload.size > limit:
-            raise ValidationError(
-                f"{upload.filename} is larger than {settings.BOOKS_MAX_UPLOAD_MB} MB.",
-                code="FILE_TOO_LARGE",
-            )
-        incoming.append(IncomingFile(upload.filename or "upload", await upload.read(limit + 1)))
+    incoming = await _read_uploads(
+        files, settings, too_large_hint="; split the chapter into several uploads"
+    )
     chapter = await _service(db, storage, settings).upload(
         book_id, chapter_id, incoming, _caller(ctx), process=process
     )

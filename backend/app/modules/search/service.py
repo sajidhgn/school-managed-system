@@ -363,7 +363,7 @@ class SearchService:
 def _url_for(provider: ProviderDef, row: RawHit) -> str:
     """Fill the provider's deep link.
 
-    Three destinations are a record (`/students/{id}`); the rest are the module's
+    Four destinations are a record (`/students/{id}`); the rest are the module's
     list page, because those modules have no detail page and no filter to point at.
     Both shapes are expressed as a template so the difference lives in the registry
     rather than in a branch here -- see `ProviderDef.url_template`.
@@ -414,6 +414,7 @@ _EXAMPLES: dict[SearchEntity, str] = {
     SearchEntity.INVITATION: "type:invitation status:pending",
     SearchEntity.FEE_STRUCTURE: "type:fee_structure year:2026-2027",
     SearchEntity.FEE_HEAD: "type:fee_head status:active",
+    SearchEntity.ATTENDANCE: "type:attendance status:draft",
     SearchEntity.ROLE: "type:role status:custom",
     SearchEntity.AUDIT: "type:audit after:2026-01-01",
     SearchEntity.SCHOOL: "type:school status:active",

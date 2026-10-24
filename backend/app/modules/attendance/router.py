@@ -7,8 +7,10 @@ AUTHORISATION SHAPE
     whole integrity story:
 
         attendance:read    see registers and reports
-        attendance:mark    open a register, set statuses, submit it
-        attendance:amend   change or reopen a register that was already SUBMITTED
+        attendance:mark    open a register, set statuses, submit it -- until the
+                           day after its date is over, when the register LOCKS
+        attendance:amend   change or reopen a register that was already SUBMITTED,
+                           or one that has locked
 
     A system where the person who records absences can also erase them has no
     attendance record, only an attendance opinion. `attendance:amend` is `dangerous`
@@ -32,8 +34,9 @@ TEACHERS SEE THEIR OWN SECTIONS
 
 ROUTE ORDER IS LOAD-BEARING
     Starlette matches in declaration order. Every literal segment (`/today`,
-    `/students/...`, `/sections/...`) is declared BEFORE the `/{session_id}` pattern
-    that would otherwise swallow it and fail with a 422 UUID error.
+    `/analytics`, `/students...`, `/sections/...`) is declared BEFORE the
+    `/{session_id}` pattern that would otherwise swallow it and fail with a 422 UUID
+    error.
 """
 
 from __future__ import annotations
@@ -44,17 +47,25 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query, status
 
-from app.api.deps import AuthContext, DbSession, Pagination, Sorting, require
+from app.api.deps import AuthContext, DbSession, Pagination, SearchQuery, Sorting, require
 from app.common.schemas import Page
 from app.modules.academics.teaching_scope import assigned_teacher
+from app.modules.attendance.analytics import (
+    DEFAULT_MIN_SESSIONS,
+    DEFAULT_THRESHOLD,
+    AttendanceAnalyticsService,
+)
 from app.modules.attendance.models import AttendanceSessionStatus
 from app.modules.attendance.schemas import (
+    AttendanceAnalytics,
     AttendanceMarkRequest,
     AttendanceSessionDetail,
     AttendanceSessionOpen,
     AttendanceSessionRead,
     DailyOverview,
     SectionAttendanceReport,
+    StudentAttendanceCalendar,
+    StudentAttendancePage,
     StudentAttendanceSummary,
 )
 from app.modules.attendance.service import AttendanceService
@@ -91,6 +102,123 @@ async def daily_overview(
     flat attendance table cannot distinguish from "everybody was present".
     """
     return await AttendanceService(db).daily_overview(session_date, teacher_id=_teacher(ctx))
+
+
+# ---------------------------------------------------------------------------
+# Analytics -- read-only, `attendance:read`, teacher-bounded like every read above
+# ---------------------------------------------------------------------------
+#
+# All three count SUBMITTED WHOLE-DAY registers only, under the module's percentage
+# rules; see `analytics.py` for why the whole-day register is the unit and why
+# "school days" is a proxy. Literal paths, so declared above `/{session_id}`.
+
+
+@router.get(
+    "/analytics",
+    response_model=AttendanceAnalytics,
+    summary="Attendance by class and section over a date range, with at-risk students",
+)
+async def attendance_analytics(
+    db: DbSession,
+    ctx: ReadCtx,
+    from_date: date | None = Query(
+        default=None, description="Inclusive. Defaults to 29 days before `to_date`."
+    ),
+    to_date: date | None = Query(default=None, description="Inclusive. Defaults to today."),
+    class_id: UUID | None = Query(default=None, description="Only this class's sections."),
+    threshold: float = Query(
+        default=DEFAULT_THRESHOLD,
+        ge=0,
+        le=100,
+        description="A student below this percentage over the range is at risk.",
+    ),
+    min_sessions: int = Query(
+        default=DEFAULT_MIN_SESSIONS,
+        ge=1,
+        le=366,
+        description="Counted registers a student needs before they can be flagged.",
+    ),
+) -> AttendanceAnalytics:
+    """The head teacher's class-by-class view.
+
+    Per-section rates against the previous period of equal length, marking coverage
+    against the days the school was marking, today's register state, a daily trend,
+    a weekday pattern, the students under `threshold`, and the today / this month /
+    last month / year-to-date headline. A teacher without `class:view_all` gets the
+    same view of their own sections only. Ranges over 366 days are refused.
+    """
+    return await AttendanceAnalyticsService(db).analytics(
+        from_date=from_date,
+        to_date=to_date,
+        class_id=class_id,
+        threshold=threshold,
+        min_sessions=min_sessions,
+        teacher_id=_teacher(ctx),
+    )
+
+
+@router.get(
+    "/students",
+    response_model=StudentAttendancePage,
+    summary="Every student's attendance: today, this month, last month and overall",
+)
+async def student_attendance_list(
+    db: DbSession,
+    params: Pagination,
+    sort: Sorting,
+    ctx: ReadCtx,
+    search: SearchQuery = None,
+    class_id: UUID | None = Query(default=None, description="Students seated in this class."),
+    section_id: UUID | None = Query(default=None, description="Students seated in this section."),
+    from_date: date | None = Query(
+        default=None,
+        description="Start of the `overall` window. Defaults to the academic year's start.",
+    ),
+    to_date: date | None = Query(
+        default=None, description="End of the `overall` window. Defaults to today."
+    ),
+) -> StudentAttendancePage:
+    """One row per active student the caller may see, worst overall rate first.
+
+    `sort_by` is one of `overall` (default), `this_month`, `previous_month`, `name`,
+    `admission_number`, `roll_number`, `class`. `q` matches a name or admission
+    number anywhere, or a roll number exactly. `today_register` tells "not marked
+    yet" apart from "present"; `today_status` is set only once the register is
+    submitted.
+    """
+    return await AttendanceAnalyticsService(db).students(
+        params,
+        sort,
+        from_date=from_date,
+        to_date=to_date,
+        class_id=class_id,
+        section_id=section_id,
+        search=search,
+        teacher_id=_teacher(ctx),
+    )
+
+
+@router.get(
+    "/students/{student_id}/calendar",
+    response_model=StudentAttendanceCalendar,
+    summary="One student's attendance day by day, with a rate per month",
+)
+async def student_attendance_calendar(
+    student_id: UUID,
+    db: DbSession,
+    ctx: ReadCtx,
+    from_date: date | None = Query(
+        default=None, description="Inclusive. Defaults to the academic year's start."
+    ),
+    to_date: date | None = Query(default=None, description="Inclusive. Defaults to today."),
+) -> StudentAttendanceCalendar:
+    """The drill-down behind a student row: every whole-day register the child is
+    on, the month-by-month rates, and the rate over the whole range. A draft day
+    carries no status. 404 -- worded as for an unknown id -- for a student outside a
+    teacher's sections."""
+    return await AttendanceAnalyticsService(db).student_calendar(
+        student_id, from_date=from_date, to_date=to_date, teacher_id=_teacher(ctx)
+    )
 
 
 @router.get(
@@ -142,7 +270,10 @@ async def open_session(
     the exceptions. See `AttendanceService` for why the register is pre-filled.
     """
     return await AttendanceService(db).open_session(
-        payload, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+        payload,
+        actor_id=ctx.user_id,
+        may_amend=ctx.has("attendance:amend"),
+        teacher_id=_teacher(ctx),
     )
 
 
@@ -167,8 +298,10 @@ async def mark_attendance(
 
     On a SUBMITTED register this becomes an AMENDMENT -- it requires
     `attendance:amend` as well, requires a `reason`, and writes one audit row per
-    changed student. The permission is resolved here and passed to the service as a
-    flag, so the service stays callable from a CLI or a worker.
+    changed student. A LOCKED register (past the day after its date) refuses
+    `attendance:mark` alone with `ATTENDANCE_LOCKED`. The permission is resolved here
+    and passed to the service as a flag, so the service stays callable from a CLI or a
+    worker.
     """
     return await AttendanceService(db).mark(
         session_id,
@@ -188,7 +321,10 @@ async def submit_session(session_id: UUID, db: DbSession, ctx: MarkCtx) -> Atten
     """From here the register feeds reports and absence alerts, and further changes
     need `attendance:amend`."""
     return await AttendanceService(db).submit(
-        session_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx)
+        session_id,
+        actor_id=ctx.user_id,
+        may_amend=ctx.has("attendance:amend"),
+        teacher_id=_teacher(ctx),
     )
 
 
@@ -221,7 +357,12 @@ async def reopen_session(
 async def discard_session(session_id: UUID, db: DbSession, ctx: MarkCtx) -> None:
     """Only a DRAFT. A submitted register is corrected by amendment, which leaves a
     trail; deleting one would not."""
-    await AttendanceService(db).discard(session_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx))
+    await AttendanceService(db).discard(
+        session_id,
+        actor_id=ctx.user_id,
+        may_amend=ctx.has("attendance:amend"),
+        teacher_id=_teacher(ctx),
+    )
 
 
 # ---------------------------------------------------------------------------

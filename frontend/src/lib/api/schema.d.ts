@@ -2230,6 +2230,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/attendance/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Attendance by class and section over a date range, with at-risk students
+         * @description The head teacher's class-by-class view.
+         *
+         *     Per-section rates against the previous period of equal length, marking coverage
+         *     against the days the school was marking, today's register state, a daily trend,
+         *     a weekday pattern, the students under `threshold`, and the today / this month /
+         *     last month / year-to-date headline. A teacher without `class:view_all` gets the
+         *     same view of their own sections only. Ranges over 366 days are refused.
+         */
+        get: operations["attendance_analytics_api_v1_attendance_analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every student's attendance: today, this month, last month and overall
+         * @description One row per active student the caller may see, worst overall rate first.
+         *
+         *     `sort_by` is one of `overall` (default), `this_month`, `previous_month`, `name`,
+         *     `admission_number`, `roll_number`, `class`. `q` matches a name or admission
+         *     number anywhere, or a roll number exactly. `today_register` tells "not marked
+         *     yet" apart from "present"; `today_status` is set only once the register is
+         *     submitted.
+         */
+        get: operations["student_attendance_list_api_v1_attendance_students_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/students/{student_id}/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One student's attendance day by day, with a rate per month
+         * @description The drill-down behind a student row: every whole-day register the child is
+         *     on, the month-by-month rates, and the rate over the whole range. A draft day
+         *     carries no status. 404 -- worded as for an unknown id -- for a student outside a
+         *     teacher's sections.
+         */
+        get: operations["student_attendance_calendar_api_v1_attendance_students__student_id__calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attendance": {
         parameters: {
             query?: never;
@@ -2299,8 +2374,10 @@ export interface paths {
          *
          *     On a SUBMITTED register this becomes an AMENDMENT -- it requires
          *     `attendance:amend` as well, requires a `reason`, and writes one audit row per
-         *     changed student. The permission is resolved here and passed to the service as a
-         *     flag, so the service stays callable from a CLI or a worker.
+         *     changed student. A LOCKED register (past the day after its date) refuses
+         *     `attendance:mark` alone with `ATTENDANCE_LOCKED`. The permission is resolved here
+         *     and passed to the service as a flag, so the service stays callable from a CLI or a
+         *     worker.
          */
         patch: operations["mark_attendance_api_v1_attendance__session_id__entries_patch"];
         trace?: never;
@@ -2549,6 +2626,51 @@ export interface paths {
          *     answer from its own knowledge.
          */
         post: operations["ask_library_api_v1_books_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/scan/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether "Add a book" can read pages with AI right now
+         * @description Checks the key `BOOKS_SCAN_PROVIDER` needs is set, that the provider accepts
+         *     it, and that it offers `BOOKS_SCAN_MODEL` -- one `GET /models` at most, its
+         *     answer remembered for a few minutes; no model is run.
+         */
+        get: operations["scan_status_api_v1_books_scan_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read a new book's details off photos or a PDF of its cover and contents pages
+         * @description Pre-fills "Add a book": title, publisher, edition, class, subject and the
+         *     chapter list. Nothing is saved -- the teacher checks the form, then creates the
+         *     book with `POST /books`. Only the first 16 pages are read. 422 `NOTHING_READ`
+         *     when the pages show neither a title nor a contents list.
+         */
+        post: operations["scan_book_api_v1_books_scan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4093,6 +4215,145 @@ export interface components {
             /** Chapter Id */
             chapter_id?: string | null;
         };
+        /**
+         * AtRiskStudent
+         * @description A student whose rate over the range is below the caller's threshold.
+         */
+        AtRiskStudent: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Section Id */
+            section_id: string | null;
+            /** Class Name */
+            class_name: string | null;
+            /** Section Name */
+            section_name: string | null;
+            /** Roll Number */
+            roll_number: string | null;
+            /** Percentage */
+            percentage: number;
+            /** Counted Sessions */
+            counted_sessions: number;
+            /** Absent */
+            absent: number;
+            /** Absence Streak */
+            absence_streak: number;
+        };
+        /**
+         * AttendanceAnalytics
+         * @description Attendance across every section the caller may see, over one date range.
+         */
+        AttendanceAnalytics: {
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
+            /**
+             * Previous From Date
+             * Format: date
+             */
+            previous_from_date: string;
+            /**
+             * Previous To Date
+             * Format: date
+             */
+            previous_to_date: string;
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+            /** Class Id */
+            class_id: string | null;
+            /** Threshold */
+            threshold: number;
+            /** Min Sessions */
+            min_sessions: number;
+            headline: components["schemas"]["AttendanceHeadline"];
+            summary: components["schemas"]["AttendanceAnalyticsSummary"];
+            /** Sections */
+            sections: components["schemas"]["SectionAttendanceAnalytics"][];
+            /** Days */
+            days: components["schemas"]["AttendanceTrendDay"][];
+            /** Weekdays */
+            weekdays: components["schemas"]["AttendanceWeekday"][];
+            /** At Risk */
+            at_risk: components["schemas"]["AtRiskStudent"][];
+            /** Classes */
+            classes: components["schemas"]["AttendanceAnalyticsClass"][];
+        };
+        /**
+         * AttendanceAnalyticsClass
+         * @description One option for the class filter -- bounded exactly as the data is, so a teacher
+         *     is never offered a class the endpoint would answer with a 404.
+         */
+        AttendanceAnalyticsClass: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Level */
+            level: number;
+            /**
+             * School Id
+             * Format: uuid
+             */
+            school_id: string;
+        };
+        /** AttendanceAnalyticsSummary */
+        AttendanceAnalyticsSummary: {
+            /** Percentage */
+            percentage: number | null;
+            /** Previous Percentage */
+            previous_percentage: number | null;
+            counts: components["schemas"]["AttendanceStatusCounts"];
+            /** Counted */
+            counted: number;
+            /** School Days */
+            school_days: number;
+            /** Sections */
+            sections: number;
+            /** Registers Submitted */
+            registers_submitted: number;
+            /** Registers Expected */
+            registers_expected: number;
+            /** Coverage Percentage */
+            coverage_percentage: number | null;
+            /** At Risk Students */
+            at_risk_students: number;
+        };
+        /**
+         * AttendanceDateRange
+         * @description An inclusive date range, as resolved by the server.
+         */
+        AttendanceDateRange: {
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
+        };
         /** AttendanceDay */
         AttendanceDay: {
             /**
@@ -4146,6 +4407,18 @@ export interface components {
             remarks: string | null;
         };
         /**
+         * AttendanceHeadline
+         * @description The numbers a principal quotes: fixed to the CALENDAR, not to the selected
+         *     range, so they do not move when someone changes the date picker. Bounded exactly
+         *     like the rest of the response -- a teacher's are their own sections'.
+         */
+        AttendanceHeadline: {
+            today: components["schemas"]["AttendanceWindowRate"];
+            this_month: components["schemas"]["AttendanceWindowRate"];
+            previous_month: components["schemas"]["AttendanceWindowRate"];
+            year_to_date: components["schemas"]["AttendanceWindowRate"] | null;
+        };
+        /**
          * AttendanceMarkRequest
          * @description Set statuses for some or all students on a register.
          *
@@ -4173,6 +4446,17 @@ export interface components {
             /** Rate Prev 30D */
             rate_prev_30d: number | null;
             mix_30d: components["schemas"]["StatusMix"];
+        };
+        /**
+         * AttendanceRate
+         * @description A rate and what it was computed from.
+         */
+        AttendanceRate: {
+            /** Percentage */
+            percentage: number | null;
+            /** Counted */
+            counted: number;
+            counts: components["schemas"]["AttendanceStatusCounts"];
         };
         /**
          * AttendanceSessionDetail
@@ -4215,6 +4499,11 @@ export interface components {
             submitted_at: string | null;
             /** Notes */
             notes: string | null;
+            /**
+             * Locked
+             * @description Past the marking window -- the day after `session_date` is over -- so only `attendance:amend` can change it, draft or submitted. Computed when read.
+             */
+            locked: boolean;
             /**
              * Present Count
              * @default 0
@@ -4315,6 +4604,11 @@ export interface components {
             /** Notes */
             notes: string | null;
             /**
+             * Locked
+             * @description Past the marking window -- the day after `session_date` is over -- so only `attendance:amend` can change it, draft or submitted. Computed when read.
+             */
+            locked: boolean;
+            /**
              * Present Count
              * @default 0
              */
@@ -4377,6 +4671,25 @@ export interface components {
          * @enum {string}
          */
         AttendanceStatus: "present" | "absent" | "late" | "excused" | "half_day";
+        /**
+         * AttendanceStatusCounts
+         * @description Register lines by status. Counts of LINES (student-days), not of students.
+         *
+         *     No defaults: every response states all five, so the generated client type has no
+         *     optional field for a caller to null-check.
+         */
+        AttendanceStatusCounts: {
+            /** Present */
+            present: number;
+            /** Absent */
+            absent: number;
+            /** Late */
+            late: number;
+            /** Excused */
+            excused: number;
+            /** Half Day */
+            half_day: number;
+        };
         /** AttendanceToday */
         AttendanceToday: {
             /** Sections Total */
@@ -4386,6 +4699,63 @@ export interface components {
             mix: components["schemas"]["StatusMix"];
             /** Rate */
             rate: number | null;
+        };
+        /**
+         * AttendanceTrendDay
+         * @description One school day in the range. Only dates with a submitted register appear: a
+         *     weekend is not a day of zero attendance, and listing it as one would draw every
+         *     Sunday as a cliff.
+         */
+        AttendanceTrendDay: {
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Percentage */
+            percentage: number | null;
+            /** Counted */
+            counted: number;
+            /** Absent */
+            absent: number;
+        };
+        /**
+         * AttendanceWeekday
+         * @description The rate on one day of the week, across the range.
+         *
+         *     Exists for the pattern a principal looks for and a daily line hides: Mondays
+         *     after a long weekend, Saturdays in a five-and-a-half-day week.
+         */
+        AttendanceWeekday: {
+            /** Weekday */
+            weekday: number;
+            /** School Days */
+            school_days: number;
+            /** Percentage */
+            percentage: number | null;
+            /** Absent */
+            absent: number;
+        };
+        /**
+         * AttendanceWindowRate
+         * @description A rate over a named calendar window, with the window's dates.
+         */
+        AttendanceWindowRate: {
+            /** Percentage */
+            percentage: number | null;
+            /** Counted */
+            counted: number;
+            counts: components["schemas"]["AttendanceStatusCounts"];
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
         };
         /**
          * AuditLogRead
@@ -4489,6 +4859,14 @@ export interface components {
         Body_reopen_session_api_v1_attendance__session_id__reopen_post: {
             /** Reason */
             reason: string;
+        };
+        /** Body_scan_book_api_v1_books_scan_post */
+        Body_scan_book_api_v1_books_scan_post: {
+            /**
+             * Files
+             * @description Photos (JPEG, PNG, WebP) or a PDF of the cover and contents pages.
+             */
+            files: string[];
         };
         /** Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post */
         Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post: {
@@ -4598,6 +4976,35 @@ export interface components {
             created_at: string;
             /** Can Edit */
             can_edit: boolean;
+        };
+        /**
+         * BookScan
+         * @description A book's details as the AI read them off its cover and contents pages.
+         *
+         *     A draft for the "Add a book" form, never saved by itself: every field is
+         *     what the teacher sees pre-filled and checks before adding the book.
+         */
+        BookScan: {
+            /** Title */
+            title: string | null;
+            /** Publisher */
+            publisher: string | null;
+            /** Version */
+            version: string | null;
+            /** Class Id */
+            class_id: string | null;
+            /** Class Printed */
+            class_printed: string | null;
+            /** Subject Id */
+            subject_id: string | null;
+            /** Subject Printed */
+            subject_printed: string | null;
+            /** Chapters */
+            chapters: components["schemas"]["ChapterInput"][];
+            /** Pages Read */
+            pages_read: number;
+            /** Notes */
+            notes?: string[];
         };
         /** BookSearchHit */
         BookSearchHit: {
@@ -5197,6 +5604,11 @@ export interface components {
              * Format: date
              */
             session_date: string;
+            /**
+             * Locked
+             * @description Registers for this date are past the marking window: `attendance:mark` can no longer open or change them, only `attendance:amend` can.
+             */
+            locked: boolean;
             /** Sections */
             sections: components["schemas"]["SectionDayStatus"][];
             /** Sections Total */
@@ -8993,6 +9405,17 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * RegisterState
+         * @description Where a section's register for TODAY stands.
+         *
+         *     Three values, not `AttendanceSessionStatus | None`, because "nobody has opened
+         *     it" is the state this field exists to surface, and a null is too easy to render
+         *     as a blank cell. Same distinction `SectionDayStatus.session_id is None` draws on
+         *     the daily overview.
+         * @enum {string}
+         */
+        RegisterState: "not_started" | "draft" | "submitted";
         /** ReplaceRequest */
         ReplaceRequest: {
             difficulty?: components["schemas"]["Difficulty"] | null;
@@ -9160,6 +9583,20 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /**
+         * ScanStatus
+         * @description Whether "Add a book" can read pages with AI right now, and with what.
+         */
+        ScanStatus: {
+            /** Ready */
+            ready: boolean;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string;
+            /** Problem */
+            problem?: string | null;
+        };
         /** SchoolCreate */
         SchoolCreate: {
             /** Name */
@@ -9305,7 +9742,7 @@ export interface components {
          *     frontend switches on the same string the user types. One vocabulary, not three.
          * @enum {string}
          */
-        SearchEntity: "student" | "class" | "section" | "member" | "invitation" | "role" | "school" | "voucher" | "fee_head" | "fee_structure" | "audit";
+        SearchEntity: "student" | "class" | "section" | "member" | "invitation" | "role" | "school" | "voucher" | "fee_head" | "fee_structure" | "attendance" | "audit";
         /**
          * SearchGroup
          * @description All hits of one entity type, plus how many there were in total.
@@ -9456,6 +9893,53 @@ export interface components {
             url: string;
             /** Icon */
             icon: string;
+        };
+        /**
+         * SectionAttendanceAnalytics
+         * @description One section's attendance over the range.
+         */
+        SectionAttendanceAnalytics: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Name */
+            class_name: string;
+            /** Class Level */
+            class_level: number;
+            /**
+             * School Id
+             * Format: uuid
+             */
+            school_id: string;
+            /** Class Teacher Id */
+            class_teacher_id: string | null;
+            /** Class Teacher Name */
+            class_teacher_name: string | null;
+            /** Students On Roll */
+            students_on_roll: number;
+            /** Percentage */
+            percentage: number | null;
+            /** Previous Percentage */
+            previous_percentage: number | null;
+            counts: components["schemas"]["AttendanceStatusCounts"];
+            /** Registers Submitted */
+            registers_submitted: number;
+            /** Registers Draft */
+            registers_draft: number;
+            /** Coverage Percentage */
+            coverage_percentage: number | null;
+            today_status: components["schemas"]["RegisterState"];
+            /** At Risk Students */
+            at_risk_students: number;
         };
         /**
          * SectionAttendanceDay
@@ -9793,6 +10277,121 @@ export interface components {
              * @description Which school is being applied to.
              */
             school_id: string;
+        };
+        /**
+         * StudentAttendanceCalendar
+         * @description One child, day by day, with a rate for the range and for each month in it.
+         */
+        StudentAttendanceCalendar: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Section Id */
+            section_id: string | null;
+            /** Class Name */
+            class_name: string | null;
+            /** Section Name */
+            section_name: string | null;
+            /** Roll Number */
+            roll_number: string | null;
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+            overall: components["schemas"]["AttendanceRate"];
+            /** Months */
+            months: components["schemas"]["StudentAttendanceMonth"][];
+            /** Days */
+            days: components["schemas"]["StudentAttendanceCalendarDay"][];
+        };
+        /**
+         * StudentAttendanceCalendarDay
+         * @description One whole-day register the child is on.
+         */
+        StudentAttendanceCalendarDay: {
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            register_state: components["schemas"]["RegisterState"];
+            status: components["schemas"]["AttendanceStatus"] | null;
+        };
+        /** StudentAttendanceMonth */
+        StudentAttendanceMonth: {
+            /** Percentage */
+            percentage: number | null;
+            /** Counted */
+            counted: number;
+            counts: components["schemas"]["AttendanceStatusCounts"];
+            /** Month */
+            month: string;
+        };
+        /**
+         * StudentAttendancePage
+         * @description `Page[StudentAttendanceRow]`'s envelope -- `items` and `meta` exactly as every
+         *     paginated list (ADR 0001) -- plus the windows the row rates refer to, stated once
+         *     rather than repeated on every row.
+         */
+        StudentAttendancePage: {
+            /** Items */
+            items: components["schemas"]["StudentAttendanceRow"][];
+            meta: components["schemas"]["PageMeta"];
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+            this_month: components["schemas"]["AttendanceDateRange"];
+            previous_month: components["schemas"]["AttendanceDateRange"];
+            overall: components["schemas"]["AttendanceDateRange"];
+        };
+        /**
+         * StudentAttendanceRow
+         * @description One student: today's line, this month, last month and the overall range.
+         */
+        StudentAttendanceRow: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Full Name */
+            full_name: string;
+            /** Roll Number */
+            roll_number: string | null;
+            /** Section Id */
+            section_id: string | null;
+            /** Class Id */
+            class_id: string | null;
+            /** Class Name */
+            class_name: string | null;
+            /** Section Name */
+            section_name: string | null;
+            today_register: components["schemas"]["RegisterState"];
+            today_status: components["schemas"]["AttendanceStatus"] | null;
+            this_month: components["schemas"]["AttendanceRate"];
+            previous_month: components["schemas"]["AttendanceRate"];
+            overall: components["schemas"]["AttendanceRate"];
         };
         /**
          * StudentAttendanceSummary
@@ -17898,6 +18497,183 @@ export interface operations {
             };
         };
     };
+    attendance_analytics_api_v1_attendance_analytics_get: {
+        parameters: {
+            query?: {
+                /** @description Inclusive. Defaults to 29 days before `to_date`. */
+                from_date?: string | null;
+                /** @description Inclusive. Defaults to today. */
+                to_date?: string | null;
+                /** @description Only this class's sections. */
+                class_id?: string | null;
+                /** @description A student below this percentage over the range is at risk. */
+                threshold?: number;
+                /** @description Counted registers a student needs before they can be flagged. */
+                min_sessions?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceAnalytics"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    student_attendance_list_api_v1_attendance_students_get: {
+        parameters: {
+            query?: {
+                /** @description Students seated in this class. */
+                class_id?: string | null;
+                /** @description Students seated in this section. */
+                section_id?: string | null;
+                /** @description Start of the `overall` window. Defaults to the academic year's start. */
+                from_date?: string | null;
+                /** @description End of the `overall` window. Defaults to today. */
+                to_date?: string | null;
+                page?: number;
+                size?: number;
+                sort_by?: string | null;
+                sort_dir?: components["schemas"]["SortDirection"];
+                /** @description Search term */
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentAttendancePage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    student_attendance_calendar_api_v1_attendance_students__student_id__calendar_get: {
+        parameters: {
+            query?: {
+                /** @description Inclusive. Defaults to the academic year's start. */
+                from_date?: string | null;
+                /** @description Inclusive. Defaults to today. */
+                to_date?: string | null;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentAttendanceCalendar"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_sessions_api_v1_attendance_get: {
         parameters: {
             query?: {
@@ -19176,6 +19952,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryAnswer"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    scan_status_api_v1_books_scan_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    scan_book_api_v1_books_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_scan_book_api_v1_books_scan_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookScan"];
                 };
             };
             /** @description Bad Request */

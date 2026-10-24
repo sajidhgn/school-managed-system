@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
@@ -23,9 +24,13 @@ export const dynamic = "force-dynamic";
 export default async function AttendancePage() {
   const { user } = await requireSchoolContext();
   return (
-    <AttendanceView
-      canMark={hasPermission(user, PERMISSIONS.attendanceMark)}
-      canAmend={hasPermission(user, PERMISSIONS.attendanceAmend)}
-    />
+    // `AttendanceView` reads `?session=` (a register linked from global search), and
+    // Next requires a boundary around `useSearchParams` for that.
+    <Suspense>
+      <AttendanceView
+        canMark={hasPermission(user, PERMISSIONS.attendanceMark)}
+        canAmend={hasPermission(user, PERMISSIONS.attendanceAmend)}
+      />
+    </Suspense>
   );
 }

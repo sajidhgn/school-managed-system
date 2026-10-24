@@ -1,0 +1,146 @@
+/*
+ * HeroUI v3 on the public site, and only there.
+ *
+ * `@import "@heroui/styles"` is the documented setup, but it declares HeroUI's
+ * theme on `:root`, and its names collide with the tenant panel's tokens:
+ * `--muted` is a text colour in HeroUI and a background in the panel, `--accent`
+ * is HeroUI's brand colour and the panel's hover fill. A stylesheet a route loads
+ * stays in the document after client-side navigation, so a sign-in that lands on
+ * /dashboard would carry HeroUI's `:root` into the panel.
+ *
+ * So this file takes HeroUI's component styles and leaves its theme out. The
+ * variables those styles read are declared below on `.mk-heroui`, which the
+ * header, footer, marketing pages and the overlay container carry. The auth forms
+ * under (marketing) use the panel's components and stay outside it.
+ *
+ * The values point at the `--mk-*` tokens, which the black, fog and blue bands
+ * and dark mode already re-point, so a HeroUI button follows the band it sits in
+ * with no theme of its own.
+ */
+
+@reference "tailwindcss";
+@reference "tw-animate-css";
+
+@import "@heroui/styles/themes/shared/theme.css";
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/variants";
+
+/* Only the components the site uses, in the order HeroUI's own index imports
+   them (shared pieces first, so the components that use them can override).
+   All of them would be 400 KB of CSS on every public page.
+
+   Close button, button, chip, skeleton and drawer are not here: the root
+   layout's app/heroui.css loads them for every page, ahead of this file. */
+@import "@heroui/styles/components/label.css" layer(components);
+@import "@heroui/styles/components/accordion.css" layer(components);
+@import "@heroui/styles/components/breadcrumbs.css" layer(components);
+@import "@heroui/styles/components/link.css" layer(components);
+@import "@heroui/styles/components/toggle-button.css" layer(components);
+@import "@heroui/styles/components/toggle-button-group.css" layer(components);
+@import "@heroui/styles/components/dropdown.css" layer(components);
+@import "@heroui/styles/components/menu-item.css" layer(components);
+@import "@heroui/styles/components/menu-section.css" layer(components);
+@import "@heroui/styles/components/menu.css" layer(components);
+@import "@heroui/styles/components/card.css" layer(components);
+@import "@heroui/styles/components/separator.css" layer(components);
+
+@layer base {
+  /* Re-declared on each band, because a variable built from `var(--mk-ink)`
+     resolves where it is declared, not where it is read. */
+  .mk-heroui,
+  .mk-heroui :is(.mk-night, .mk-fog, .mk-blue) {
+    --white: #ffffff;
+    --black: #000000;
+    --snow: #fcfcfc;
+    --eclipse: var(--mk-text);
+
+    --border-width: 1px;
+    --field-border-width: 0px;
+    --disabled-opacity: 0.5;
+    --ring-offset-width: 2px;
+    --cursor-interactive: pointer;
+    --cursor-disabled: not-allowed;
+    --radius: 0.75rem;
+    --field-radius: calc(var(--radius) * 1.5);
+    --field-border: transparent;
+    --skeleton-animation: shimmer;
+    --tooltip-delay: 1500ms;
+    --tooltip-close-delay: 500ms;
+    --z-index-overlay: 100000;
+    --z-index-toast: calc(var(--z-index-overlay) + 1);
+
+    /* The palette: the site's own tokens. */
+    --background: var(--mk-paper);
+    --foreground: var(--mk-text);
+    --surface: var(--mk-card);
+    --surface-foreground: var(--mk-text);
+    --surface-secondary: color-mix(in oklab, var(--mk-card) 94%, var(--mk-text) 6%);
+    --surface-secondary-foreground: var(--mk-text);
+    --surface-tertiary: color-mix(in oklab, var(--mk-card) 90%, var(--mk-text) 10%);
+    --surface-tertiary-foreground: var(--mk-text);
+    --overlay: var(--mk-card);
+    --overlay-foreground: var(--mk-text);
+    --muted: var(--mk-muted);
+    --default: color-mix(in oklab, var(--mk-paper) 90%, var(--mk-text) 10%);
+    --default-foreground: var(--mk-text);
+    --field-background: var(--mk-card);
+    --field-foreground: var(--mk-text);
+    --field-placeholder: var(--mk-muted);
+    /* The call-to-action pair, not `--mk-ink`: a primary button stays solid
+       brand blue on black and white alike, and turns white on the blue band. */
+    --accent: var(--mk-cta-bg);
+    --accent-foreground: var(--mk-cta-fg);
+    --success: oklch(0.7329 0.1935 150.81);
+    --success-foreground: var(--mk-text);
+    --warning: oklch(0.7819 0.1585 72.33);
+    --warning-foreground: var(--mk-text);
+    --danger: oklch(0.6532 0.2328 25.74);
+    --danger-foreground: #ffffff;
+    --segment: var(--mk-card);
+    --segment-foreground: var(--mk-text);
+    --border: var(--mk-line);
+    --separator: var(--mk-line);
+    --focus: var(--mk-ink);
+    --link: var(--mk-text);
+    --backdrop: rgb(10 12 16 / 0.55);
+
+    --surface-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --overlay-shadow:
+      0 2px 8px 0 rgb(0 0 0 / 0.08), 0 14px 28px 0 rgb(0 0 0 / 0.12), 0 0 0 1px var(--mk-line);
+    --field-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+
+    /* Derived shades, as HeroUI's default theme computes them. */
+    --surface-hover: color-mix(in oklab, var(--surface) 92%, var(--surface-foreground) 8%);
+    --background-secondary: color-mix(in oklab, var(--background) 96%, var(--foreground) 4%);
+    --background-tertiary: color-mix(in oklab, var(--background) 92%, var(--foreground) 8%);
+    --background-inverse: var(--foreground);
+    --default-hover: color-mix(in oklab, var(--default) 92%, var(--default-foreground) 8%);
+    --accent-hover: color-mix(in oklab, var(--accent) 90%, var(--accent-foreground) 10%);
+    --success-hover: color-mix(in oklab, var(--success) 90%, var(--success-foreground) 10%);
+    --warning-hover: color-mix(in oklab, var(--warning) 90%, var(--warning-foreground) 10%);
+    --danger-hover: color-mix(in oklab, var(--danger) 90%, var(--danger-foreground) 10%);
+    --field-hover: color-mix(in oklab, var(--field-background) 90%, var(--field-foreground) 2%);
+    --field-focus: var(--field-background);
+    --field-border-hover: color-mix(in oklab, var(--border) 88%, var(--field-foreground) 10%);
+    --field-border-focus: color-mix(in oklab, var(--border) 74%, var(--field-foreground) 22%);
+    --default-soft: color-mix(in oklab, var(--default) 50%, transparent);
+    --default-soft-foreground: var(--default-foreground);
+    --default-soft-hover: color-mix(in oklab, var(--default) 60%, transparent);
+    --accent-soft: color-mix(in oklab, var(--accent) 15%, transparent);
+    --accent-soft-foreground: color-mix(in oklab, var(--accent) 70%, var(--foreground) 30%);
+    --accent-soft-hover: color-mix(in oklab, var(--accent) 20%, transparent);
+    --danger-soft: color-mix(in oklab, var(--danger) 15%, transparent);
+    --danger-soft-foreground: color-mix(in oklab, var(--danger) 70%, var(--foreground) 40%);
+    --danger-soft-hover: color-mix(in oklab, var(--danger) 20%, transparent);
+    --warning-soft: color-mix(in oklab, var(--warning) 15%, transparent);
+    --warning-soft-foreground: color-mix(in oklab, var(--warning) 80%, var(--foreground) 70%);
+    --warning-soft-hover: color-mix(in oklab, var(--warning) 20%, transparent);
+    --success-soft: color-mix(in oklab, var(--success) 15%, transparent);
+    --success-soft-foreground: color-mix(in oklab, var(--success) 80%, var(--foreground) 60%);
+    --success-soft-hover: color-mix(in oklab, var(--success) 20%, transparent);
+    --separator-secondary: color-mix(in oklab, var(--surface) 85%, var(--surface-foreground) 15%);
+    --separator-tertiary: color-mix(in oklab, var(--surface) 81%, var(--surface-foreground) 19%);
+    --border-secondary: color-mix(in oklab, var(--surface) 78%, var(--surface-foreground) 22%);
+    --border-tertiary: color-mix(in oklab, var(--surface) 66%, var(--surface-foreground) 34%);
+  }
+}

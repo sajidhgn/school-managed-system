@@ -13,6 +13,11 @@ tests write into the pages, so the pipeline's rules are tested without a network
 says the books do not cover a question containing "[UNCOVERED]" -- the passages
 it saw are kept in `ANSWERED` for the tests to inspect.
 
+`read_front_matter` reads lines like "TITLE: ...", "PUBLISHER: ...", "VERSION:
+...", "CLASS: ...", "SUBJECT: ..." and "CH n: title" off each page (its PDF text
+layer, or the photo's `PHOTO_PAGES` text), and picks the offered class or subject
+whose name is printed exactly. What it was offered is kept in `FRONT_MATTER_OFFERS`.
+
 Embeddings hash each word into one of 1536 buckets, so texts sharing words are
 close in cosine distance -- enough to prove pgvector search returns the right chunk.
 
@@ -37,10 +42,14 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.modules.books.agent import (
+    NONE_CHOICE,
     BookAnswer,
     BookContext,
     ChapterVerdict,
     EmbedRequest,
+    FrontMatterChapter,
+    FrontMatterReading,
+    FrontPage,
     PageEvidence,
     PageReading,
     PageVerdict,
@@ -164,10 +173,39 @@ class FakeBookAgent:
         first = passages[0]
         return BookAnswer(found=True, answer=f"{first.text[:60]} [1]", citations=[1])
 
+    async def read_front_matter(
+        self, pages: Sequence[FrontPage], classes: Sequence[str], subjects: Sequence[str]
+    ) -> FrontMatterReading:
+        self.usage.add("front_matter", 500 * len(pages), 200)
+        FRONT_MATTER_OFFERS.append((list(classes), list(subjects)))
+        text = "\n".join(p.text_layer or read_photo(p.image).text for p in pages)
+        fields = dict(re.findall(r"^([A-Z]+): (.+)$", text, re.M))
+        class_printed, subject_printed = fields.get("CLASS"), fields.get("SUBJECT")
+        return FrontMatterReading(
+            title=fields.get("TITLE"),
+            publisher=fields.get("PUBLISHER"),
+            version=fields.get("VERSION"),
+            class_printed=class_printed,
+            class_choice=class_printed if class_printed in classes else NONE_CHOICE,
+            subject_printed=subject_printed,
+            subject_choice=subject_printed if subject_printed in subjects else NONE_CHOICE,
+            chapters=[
+                FrontMatterChapter(number=int(number), title=title)
+                for number, title in re.findall(r"^CH (\d+): (.+)$", text, re.M)
+            ],
+        )
 
+    async def check(self) -> str | None:
+        return SCAN_PROBLEM[0]
+
+
+SCAN_PROBLEM: list[str | None] = [None]
+"""What the fake reader's `check` reports; a test sets `SCAN_PROBLEM[0]`."""
 ANSWERED: list[tuple[str, list[Passage]]] = []
 """Every (question, passages) `answer_question` was given. Module-level: the API
 builds a new agent per request."""
+FRONT_MATTER_OFFERS: list[tuple[list[str], list[str]]] = []
+"""Every (classes, subjects) `read_front_matter` was offered."""
 
 
 @dataclass

@@ -73,10 +73,13 @@ own module's list endpoint uses:
 | `invitation` | `invitation:read` | `/invitations` |
 | `fee_head`, `fee_structure` | `fee:read` | `/fees/setup` |
 | `role` | `role:read` | `/roles` |
+| `attendance` | `attendance:read` | `/attendance?session={id}` |
 | `audit` | `audit:read` | `/audit` |
 
-Only three destinations are precise records; the other eight modules have list pages
-with no filter UI and no `q` parameter, so their hits land on the list. The templates
+Only four destinations are precise: three records, plus an attendance register, which
+the board opens in place from `?session=` (moving to that register's day). The other
+modules have list pages with no filter UI and no `q` parameter, so their hits land on
+the list. The templates
 deliberately carry no `?q=`/`?role=` — nothing reads those, and a URL implying a
 filter that was never applied is worse than an honestly coarse link. **Follow-up:**
 when those pages grow a filter, add the parameter to `ProviderDef.url_template` and
@@ -170,7 +173,7 @@ both a teacher and an accountant may read students.
 
 1. a baseline weight per entity (people and students above configuration objects)
 2. plus boosts from the **work** permissions the caller holds — `fee:collect`
-   boosts vouchers, `attendance:mark` boosts students and sections,
+   boosts vouchers, `attendance:mark` boosts students, sections and registers,
    `role:assign_permissions` boosts roles. Read codes contribute nothing: nearly
    everyone can read students, so `student:read` says nothing about intent.
 3. plus a small explicit nudge for the three seeded role codes

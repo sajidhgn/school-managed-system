@@ -9,6 +9,11 @@ to that class's parents' WhatsApp group once the teacher replies **OK**.
 It replaces the old typed Diary screen (removed with migration `b8d0f2a4c6e8`,
 which drops `diary_entries`).
 
+The same number also takes attendance: a text such as `Nursery-A absent 12, 13`
+goes to the [attendance agent](attendance-agent.md). Every text is offered to it
+first; photos are always the diary's. With a diary and a register both waiting,
+**OK** confirms the one shown last.
+
 ## The teacher's side (all on WhatsApp)
 
 ```

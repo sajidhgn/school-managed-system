@@ -24,14 +24,30 @@ const ToastViewport = React.forwardRef<
 ));
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 
+/*
+ * HeroUI's toast: a rounded card on the overlay shadow that rises in on the fluid
+ * curve and slides away when dismissed. The bar on the leading edge carries the
+ * tone — blue, green or red — beside a title that says the same thing in words.
+ */
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-start justify-between gap-3 overflow-hidden rounded-lg border p-4 pe-8 shadow-lg transition-all data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[swipe=end]:animate-out",
+  [
+    "group pointer-events-auto relative flex w-full items-start justify-between gap-3 overflow-hidden",
+    "rounded-2xl border border-border bg-card p-4 ps-5 pe-10 text-card-foreground shadow-[var(--shadow-overlay)]",
+    "before:absolute before:inset-y-3 before:start-0 before:w-1 before:rounded-e-full",
+    "transition-[transform,opacity] duration-200 ease-out",
+    "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-4 data-[state=open]:zoom-in-95",
+    "data-[state=open]:duration-350 data-[state=open]:ease-fluid",
+    "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-200",
+    "data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
+    "data-[swipe=cancel]:translate-x-0",
+    "data-[swipe=end]:animate-out data-[swipe=end]:slide-out-to-right-full",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default: "border-border bg-card text-card-foreground",
-        success: "border-success/30 bg-card text-card-foreground",
-        destructive: "border-destructive/40 bg-card text-card-foreground",
+        default: "before:bg-primary",
+        success: "before:bg-success",
+        destructive: "before:bg-destructive",
       },
     },
     defaultVariants: { variant: "default" },
@@ -53,7 +69,7 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute end-2 top-2 rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring",
+      "close-button close-button--default absolute end-3 top-3",
       className,
     )}
     toast-close=""

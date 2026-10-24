@@ -132,7 +132,7 @@ class AuditAction:
     # --- Fees (what a school bills its students) ----------------------------
     #
     # Distinct from the billing actions above, which record what the school owes
-    # EduCloud. Two money flows between different parties; sharing an action name
+    # SchoolYar. Two money flows between different parties; sharing an action name
     # would make "show me every payment" answer the wrong question.
     FEE_HEAD_CREATED = "fee_head.created"
     FEE_HEAD_UPDATED = "fee_head.updated"

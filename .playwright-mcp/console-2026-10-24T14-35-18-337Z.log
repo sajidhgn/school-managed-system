@@ -1,0 +1,3 @@
+[     841ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://www.eschool.pk/:0
+[    1773ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.eschool.pk/favicon.ico:0
+[    4578ms] [ERROR] Failed to load resource: the server responded with a status of 405 () @ https://www.eschool.pk/hcdn-cgi/jschallenge-validate:0

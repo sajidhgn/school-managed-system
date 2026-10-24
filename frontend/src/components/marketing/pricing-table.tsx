@@ -1,12 +1,15 @@
 "use client";
 
+import { buttonVariants } from "@heroui/styles";
+import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { Check, Minus } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Check, Minus } from "lucide-react";
+import { useId, useState, type KeyboardEvent } from "react";
 
+import { EASE_OUT } from "@/components/marketing/motion/reveal";
 import { useTranslations } from "@/components/providers/i18n-provider";
-import { Button } from "@/components/ui/button";
-import { USAGE_LABELS, type PlanPublic } from "@/lib/api/types";
+import type { Messages } from "@/lib/i18n/messages";
+import type { PlanPublic } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,15 +18,33 @@ import { cn } from "@/lib/utils";
  * Everything shown — prices, limits, feature flags — comes from the API. Nothing
  * about a plan is known to this component except how to display it, so adding a
  * plan or changing a limit is a database edit, not a deploy.
+ *
+ * The billing switch is a radio group with a sliding pill; switching it rolls each
+ * price over to the other period's.
  */
 
-const FEATURE_LABELS: Record<string, string> = {
-  custom_branding: "Custom branding",
-  api_access: "API access",
-  priority_support: "Priority support",
-  sso: "Single sign-on",
-  advanced_reports: "Advanced reports",
+type MarketingKey = keyof Messages["marketing"];
+
+/** Each plan limit and feature flag, by the catalog word that names it in the
+ * visitor's language. */
+const LIMIT_LABELS: Record<string, MarketingKey> = {
+  max_schools: "limitSchools",
+  max_students: "limitStudents",
+  max_staff: "limitStaff",
+  max_custom_roles: "limitRoles",
+  storage_mb: "limitStorage",
 };
+
+const FEATURE_LABELS: Record<string, MarketingKey> = {
+  custom_branding: "featureBranding",
+  api_access: "featureApi",
+  priority_support: "featureSupport",
+  sso: "featureSso",
+  advanced_reports: "featureReports",
+};
+
+type Cycle = "monthly" | "yearly";
+const CYCLES: Cycle[] = ["monthly", "yearly"];
 
 /** `-1` is the backend's sentinel for "no ceiling" (spec §6.1). */
 function formatLimit(value: number, unlimited: string): string {
@@ -33,7 +54,8 @@ function formatLimit(value: number, unlimited: string): string {
 
 export function PricingTable({ plans }: { plans: PlanPublic[] }) {
   const { t, locale } = useTranslations();
-  const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
+  const [cycle, setCycle] = useState<Cycle>("monthly");
+  const switchId = useId();
 
   const money = (amount: string | number | null | undefined, currency: string) => {
     if (amount === null || amount === undefined) return null;
@@ -54,130 +76,158 @@ export function PricingTable({ plans }: { plans: PlanPublic[] }) {
   // should help a visitor choose, not upsell them.
   const highlightCode = plans.find((p) => Number(p.price_monthly ?? 0) > 0)?.code;
 
+  const onSwitchKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const next = cycle === "monthly" ? "yearly" : "monthly";
+    setCycle(next);
+    event.currentTarget.querySelector<HTMLButtonElement>(`[data-cycle="${next}"]`)?.focus();
+  };
+
   return (
     <>
-      <div className="mt-10 flex justify-center">
-        <div
-          role="radiogroup"
-          aria-label="Billing period"
-          className="inline-flex rounded-lg border border-border bg-card p-1"
-        >
-          {(["monthly", "yearly"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={cycle === option}
-              onClick={() => setCycle(option)}
-              className={cn(
-                "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
-                cycle === option
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {option === "monthly" ? t.marketing.monthly : t.marketing.yearly}
-              {option === "yearly" ? (
-                <span className="ms-2 text-xs opacity-80">{t.marketing.yearlyHint}</span>
-              ) : null}
-            </button>
-          ))}
+      <div className="flex justify-center">
+        <div role="radiogroup" aria-label={t.marketing.billingPeriod} className="mk-switch" onKeyDown={onSwitchKey}>
+          {CYCLES.map((option) => {
+            const checked = cycle === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                tabIndex={checked ? 0 : -1}
+                data-cycle={option}
+                className="mk-switch__option"
+                onClick={() => setCycle(option)}
+              >
+                {checked ? (
+                  <motion.span
+                    layoutId={`${switchId}-pill`}
+                    className="mk-switch__pill"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    aria-hidden
+                  />
+                ) : null}
+                <span className="relative">{option === "monthly" ? t.marketing.monthly : t.marketing.yearly}</span>
+                {option === "yearly" ? <span className="mk-switch__hint">{t.marketing.yearlyHint}</span> : null}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-3">
+      <motion.ul
+        className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3"
+        initial="hidden"
+        animate="show"
+        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } } }}
+      >
         {plans.map((plan) => {
-          const price = money(
-            cycle === "monthly" ? plan.price_monthly : plan.price_yearly,
-            plan.currency,
-          );
+          const price = money(cycle === "monthly" ? plan.price_monthly : plan.price_yearly, plan.currency);
           const featured = plan.code === highlightCode;
 
           return (
-            <div
+            <motion.li
               key={plan.id}
-              className={cn(
-                "relative flex flex-col rounded-xl border bg-card p-6",
-                featured ? "border-primary shadow-md" : "border-border",
-              )}
+              data-reveal=""
+              variants={{
+                hidden: { opacity: 0, y: 28 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE_OUT } },
+              }}
+              whileHover={{ y: -6 }}
+              className={cn("mk-plan", featured && "mk-plan--featured mk-night")}
             >
               {featured ? (
-                <span className="absolute -top-3 start-6 rounded-full bg-primary px-3 py-0.5 text-xs font-medium text-primary-foreground">
-                  Most popular
-                </span>
+                <>
+                  <span className="mk-plan__glow" aria-hidden />
+                  <span className="mk-plan__badge">{t.marketing.mostPopular}</span>
+                </>
               ) : null}
 
-              <h2 className="text-lg font-semibold">{plan.name}</h2>
+              {/* An <h2>: plans sit directly under the page's h1. */}
+              <h2 className="relative font-mk-display text-xl font-bold">{plan.name}</h2>
               {plan.marketing_tagline ? (
-                <p className="mt-1 text-sm text-muted-foreground">{plan.marketing_tagline}</p>
+                <p className="relative mt-1.5 text-sm leading-relaxed text-mk-muted">{plan.marketing_tagline}</p>
               ) : null}
 
-              <p className="mt-5 flex items-baseline gap-1">
-                <span className="text-3xl font-semibold tracking-tight">
-                  {price ?? t.marketing.contactSales}
-                </span>
+              <div className="relative mt-6 flex h-12 items-baseline gap-1.5 overflow-hidden">
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span
+                    key={`${cycle}-${price}`}
+                    className="font-mk-display text-[2.4rem] leading-none font-extrabold tracking-[-0.04em]"
+                    initial={{ y: 28, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -28, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  >
+                    {price ?? t.marketing.contactSales}
+                  </motion.span>
+                </AnimatePresence>
                 {price ? (
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-sm text-mk-muted">
                     {cycle === "monthly" ? t.common.perMonth : t.common.perYear}
                   </span>
                 ) : null}
-              </p>
+              </div>
 
               {plan.trial_days > 0 ? (
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  {plan.trial_days}-day free trial
+                <p className="relative mt-1.5 text-xs text-mk-muted">
+                  {t.marketing.freeTrial.replace("{days}", String(plan.trial_days))}
                 </p>
               ) : null}
 
-              <Button asChild className="mt-6" variant={featured ? "default" : "outline"}>
-                <Link href={`/signup?plan=${plan.code}&cycle=${cycle}`}>
-                  {t.marketing.choosePlan}
-                </Link>
-              </Button>
+              <Link
+                href={`/signup?plan=${plan.code}&cycle=${cycle}`}
+                className={buttonVariants({
+                  variant: featured ? "primary" : "outline",
+                  fullWidth: true,
+                  className: cn("relative mt-6", featured && "mk-shine"),
+                })}
+              >
+                {t.marketing.choosePlan}
+                <ArrowRight className="size-4 rtl:-scale-x-100" aria-hidden />
+              </Link>
 
-              <dl className="mt-7 space-y-2.5 border-t border-border pt-6 text-sm">
-                {Object.entries(USAGE_LABELS).map(([key, labelText]) => {
+              <dl className="relative mt-7 space-y-2.5 border-t border-mk-line pt-6 text-sm">
+                {Object.entries(LIMIT_LABELS).map(([key, label]) => {
                   const limit = plan.limits?.[key as keyof typeof plan.limits];
                   if (typeof limit !== "number") return null;
                   return (
                     <div key={key} className="flex justify-between gap-4">
-                      <dt className="text-muted-foreground">{labelText}</dt>
-                      <dd className="font-medium">
-                        {formatLimit(limit, t.common.unlimited)}
-                      </dd>
+                      <dt className="text-mk-muted">{t.marketing[label]}</dt>
+                      <dd className="font-semibold">{formatLimit(limit, t.common.unlimited)}</dd>
                     </div>
                   );
                 })}
               </dl>
 
-              <ul className="mt-5 space-y-2 border-t border-border pt-5 text-sm">
-                {Object.entries(FEATURE_LABELS).map(([key, labelText]) => {
+              <ul className="relative mt-6 space-y-2.5 border-t border-mk-line pt-6 text-sm">
+                {Object.entries(FEATURE_LABELS).map(([key, label]) => {
                   const enabled = Boolean(plan.features?.[key as keyof typeof plan.features]);
                   return (
-                    <li
-                      key={key}
-                      className={cn(
-                        "flex items-center gap-2",
-                        enabled ? "" : "text-muted-foreground",
-                      )}
-                    >
+                    <li key={key} className={cn("flex items-center gap-2.5", enabled ? "" : "text-mk-muted")}>
                       {enabled ? (
-                        <Check className="size-4 shrink-0 text-success" aria-hidden />
+                        <span className="mk-tick" aria-hidden>
+                          <Check className="size-3" strokeWidth={3} />
+                        </span>
                       ) : (
-                        <Minus className="size-4 shrink-0 opacity-50" aria-hidden />
+                        <span className="mk-tick mk-tick--off" aria-hidden>
+                          <Minus className="size-3" strokeWidth={3} />
+                        </span>
                       )}
                       {/* Screen readers get the state in words; sighted users get
                           the icon. Without this, both rows read identically. */}
-                      <span className="sr-only">{enabled ? "Included:" : "Not included:"}</span>
-                      {labelText}
+                      <span className="sr-only">{enabled ? t.marketing.included : t.marketing.notIncluded}</span>
+                      {t.marketing[label]}
                     </li>
                   );
                 })}
               </ul>
-            </div>
+            </motion.li>
           );
         })}
-      </div>
+      </motion.ul>
     </>
   );
 }

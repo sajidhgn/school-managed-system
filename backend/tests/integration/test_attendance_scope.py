@@ -11,6 +11,7 @@ Grade 9-B with one, Grade 10-A with one.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -95,6 +96,63 @@ async def test_class_teacher_marks_only_their_own_section(school: School) -> Non
     untouched = (await campus.get(f"{API}/attendance/{other}")).json()
     assert untouched["status"] == "draft"
     assert untouched["absent_count"] == 0
+
+
+async def test_teacher_is_locked_out_once_the_day_after_has_passed(school: School) -> None:
+    """Rule 3 of the service: `attendance:mark` reaches a register through the day
+    after its date. After that it is locked, draft or not, and only an amender can
+    change it."""
+    campus = school.campus
+    teacher = await _class_teacher_of_9a(school)
+    yesterday = str(TODAY - timedelta(days=1))
+    two_days_ago = str(TODAY - timedelta(days=2))
+
+    # Yesterday is still inside the window.
+    opened = await _post(
+        teacher,
+        f"{API}/attendance",
+        json={"section_id": campus.section_id, "session_date": yesterday},
+    )
+    assert opened.status_code == 201, opened.text
+    assert opened.json()["locked"] is False
+
+    # The day before is not -- not even to open.
+    refused = await _post(
+        teacher,
+        f"{API}/attendance",
+        json={"section_id": campus.section_id, "session_date": two_days_ago},
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["code"] == "ATTENDANCE_LOCKED"
+
+    # A draft the administrator left there is locked to the teacher as well.
+    stale = await campus.post(
+        f"{API}/attendance",
+        json={"section_id": campus.section_id, "session_date": two_days_ago},
+    )
+    assert stale.status_code == 201, stale.text
+    stale_id = stale.json()["id"]
+    detail = await teacher.get(f"{API}/attendance/{stale_id}")
+    assert detail.json()["locked"] is True
+    entries = {"entries": [{"student_id": campus.student_ids[0], "status": "absent"}]}
+    for response in (
+        await _patch(teacher, f"{API}/attendance/{stale_id}/entries", json=entries),
+        await _post(teacher, f"{API}/attendance/{stale_id}/submit"),
+        await _delete(teacher, f"{API}/attendance/{stale_id}"),
+    ):
+        assert response.status_code == 409, response.text
+        assert response.json()["code"] == "ATTENDANCE_LOCKED"
+
+    board = await teacher.get(f"{API}/attendance/today", params={"date": two_days_ago})
+    assert board.json()["locked"] is True
+    assert (await teacher.get(f"{API}/attendance/today")).json()["locked"] is False
+
+    # The amender is not locked out.
+    marked = await campus.patch(f"{API}/attendance/{stale_id}/entries", json=entries)
+    assert marked.status_code == 200, marked.text
+    submitted = await campus.post(f"{API}/attendance/{stale_id}/submit")
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["absent_count"] == 1
 
 
 async def test_class_teacher_reads_only_their_own_section(school: School) -> None:
@@ -250,3 +308,41 @@ async def test_dashboard_exams_are_bounded_by_pupil_and_subject(school: School) 
     # Nobody's pupils, nobody's subjects: no exam to chart at all.
     outsider = await _teacher(campus.tenant, "new@test.example", "New Teacher")
     assert (await outsider.get(ANALYTICS)).json()["exams"] is None
+
+
+async def test_global_search_finds_registers_only_inside_the_teachers_sections(
+    school: School,
+) -> None:
+    """The omnibar's Attendance group draws the same boundary as `GET /attendance/{id}`:
+    the administrator finds every register for the day, the class teacher of 9-A only
+    their own -- and each hit links straight to the register it names."""
+    campus = school.campus
+    teacher = await _class_teacher_of_9a(school)
+    own = await _open(campus, campus.section_id)
+    other = await _open(campus, school.section_10a)
+    query = {"q": f"type:attendance {TODAY}"}
+
+    def registers(body: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        return {
+            hit["id"]: hit
+            for group in body["groups"]
+            if group["type"] == "attendance"
+            for hit in group["hits"]
+        }
+
+    admin = await campus.get(f"{API}/search", params=query)
+    assert admin.status_code == 200, admin.text
+    found = registers(admin.json())
+    assert set(found) == {own, other}
+    assert found[own]["title"] == "Grade 9 — A"
+    assert found[own]["subtitle"] == f"{TODAY} · Whole day"
+    assert found[own]["status"] == "draft"
+    assert found[own]["url"] == f"/attendance?session={own}"
+
+    # Neither is submitted yet, so the register's own lifecycle filter finds nothing.
+    submitted = await campus.get(f"{API}/search", params={"q": "type:attendance status:submitted"})
+    assert registers(submitted.json()) == {}
+
+    taught = await teacher.get(f"{API}/search", params=query)
+    assert taught.status_code == 200, taught.text
+    assert set(registers(taught.json())) == {own}

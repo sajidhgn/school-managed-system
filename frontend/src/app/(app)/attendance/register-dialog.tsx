@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Lock } from "lucide-react";
+import { CircleCheck, Lock } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,13 +52,18 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
 /**
  * Colour carries meaning here, so it is paired with a label rather than used alone:
  * a register read by a colour-blind teacher must still be readable.
+ *
+ * The state tokens, matching `STATUS_META` (components/attendance/status.tsx), so a
+ * status is the same colour in the register as on every analytics screen: green
+ * in, amber partly in, red out, gray on leave. (This used to add a sky blue and a
+ * violet of its own.)
  */
 const STATUS_STYLE: Record<AttendanceStatus, string> = {
-  present: "bg-emerald-600 text-white border-emerald-600",
-  absent: "bg-red-600 text-white border-red-600",
-  late: "bg-amber-500 text-white border-amber-500",
-  excused: "bg-sky-600 text-white border-sky-600",
-  half_day: "bg-violet-600 text-white border-violet-600",
+  present: "bg-success text-success-foreground border-success",
+  absent: "bg-destructive text-destructive-foreground border-destructive",
+  late: "bg-warning text-warning-foreground border-warning",
+  excused: "bg-muted-foreground text-background border-muted-foreground",
+  half_day: "bg-warning/20 text-foreground border-warning",
 };
 
 export function RegisterDialog({
@@ -83,8 +88,12 @@ export function RegisterDialog({
 
   const session = query.data;
   const isSubmitted = session?.status === "submitted";
-  // A submitted register is editable only by an amender, and only with a reason.
-  const editable = isSubmitted ? canAmend : canMark;
+  // Past the day after its date the register is locked, draft or not; the server
+  // decides when, so the browser's clock cannot disagree with it.
+  const isLocked = session?.locked ?? false;
+  // A submitted or locked register is editable only by an amender. A submitted one
+  // also needs a reason; a locked draft does not, since it was never asserted.
+  const editable = isSubmitted || isLocked ? canAmend : canMark;
 
   React.useEffect(() => {
     // Discard local edits whenever the dialog switches registers, so yesterday's
@@ -151,8 +160,14 @@ export function RegisterDialog({
             Register
             {isSubmitted && (
               <Badge variant="success">
-                <Lock className="mr-1 h-3 w-3" aria-hidden />
+                <CircleCheck className="mr-1 h-3 w-3" aria-hidden />
                 Submitted
+              </Badge>
+            )}
+            {isLocked && (
+              <Badge variant="outline">
+                <Lock className="mr-1 h-3 w-3" aria-hidden />
+                Locked
               </Badge>
             )}
           </DialogTitle>
@@ -232,11 +247,20 @@ export function RegisterDialog({
           </div>
         )}
 
-        {isSubmitted && !canAmend && (
+        {isLocked && !canAmend ? (
           <p className="text-xs text-muted-foreground">
-            This register has been submitted. Correcting it needs the
-            &ldquo;amend attendance&rdquo; permission.
+            Attendance for this date is locked. Registers can be changed until the end
+            of the following day; correcting it now needs the &ldquo;amend
+            attendance&rdquo; permission.
           </p>
+        ) : (
+          isSubmitted &&
+          !canAmend && (
+            <p className="text-xs text-muted-foreground">
+              This register has been submitted. Correcting it needs the
+              &ldquo;amend attendance&rdquo; permission.
+            </p>
+          )
         )}
 
         <DialogFooter className="gap-2">
@@ -269,7 +293,7 @@ export function RegisterDialog({
             </Button>
           )}
 
-          {!isSubmitted && canMark && (
+          {!isSubmitted && canMark && (!isLocked || canAmend) && (
             <Button disabled={submit.isPending} onClick={() => void handleSubmit()}>
               Submit register
             </Button>

@@ -1,6 +1,6 @@
 # Attendance module specification
 
-Status: backend slice 1 implemented.
+Status: backend slice 1 implemented; analytics (§14) and WhatsApp marking (§15) added.
 Depends on: the academic calendar and enrollment ledger described in
 `docs/modules/academic-foundation.md`.
 
@@ -42,8 +42,8 @@ Each was considered and deferred. None requires a table rewrite to add.
 | Code | Held by default | What it unlocks |
 | --- | --- | --- |
 | `attendance:read` | teacher, principal | View registers, the daily overview, and both reports. |
-| `attendance:mark` | teacher, principal | Open a register, set statuses on a DRAFT, submit it, discard a DRAFT. |
-| `attendance:amend` | **principal only** | Change a SUBMITTED register, or reopen one. Marked `dangerous`. |
+| `attendance:mark` | teacher, principal | Open a register, set statuses on a DRAFT, submit it, discard a DRAFT — until the register locks (§3.1). |
+| `attendance:amend` | **principal only** | Change a SUBMITTED or locked register, or reopen one. Marked `dangerous`. |
 
 `attendance:mark` and `attendance:amend` are separate for the same reason
 `fee:collect` and `fee:void` are separate. **A system where the person who records
@@ -53,6 +53,22 @@ referrals are built on.
 
 Every `attendance:amend` action writes `before`/`after` into `audit_logs` with the
 reason the caller supplied. The reason is required, not optional.
+
+### 3.1 The marking window
+
+A register stays open to `attendance:mark` through **the day after its date** — a full
+24 hours after the school day it records has ended. From then on it is **locked**,
+draft or submitted: opening, marking, submitting or discarding it needs
+`attendance:amend`, and a teacher gets `409 ATTENDANCE_LOCKED`. On 24 October, the
+registers for 24 and 23 October are open; 22 October's is locked.
+
+Without the lock, "submitted" is the only thing protecting history, and a register
+nobody submitted could be rewritten by its teacher weeks later. "Today" is the same UTC
+date the rest of the module uses. `locked` is returned on every register and on
+`GET /attendance/today`, so the UI never has to work out the window itself.
+
+`attendance:amend` holders can still open a register up to 30 days back. That limit
+catches a mistyped date; it is not a permission boundary.
 
 ---
 
@@ -271,3 +287,62 @@ Implemented in `backend/tests/integration/test_academic_foundation.py` §4–5:
 15. Two campuses in one organization are scoped apart, while the org-level principal
     still reads both.
 16. Raw cross-tenant `INSERT` is rejected by RLS on both tables, as `sms_app`.
+
+---
+
+## 14. Analytics
+
+Read-only views over the same two tables, in `analytics.py` (service) and
+`AttendanceAnalyticsRepository` (SQL). No schema change. Gated on
+`attendance:read`. A teacher without `class:view_all` sees only their own sections
+and the children seated in them now; a principal sees the campus (an org-level
+principal with no campus open sees every campus RLS allows).
+
+| Endpoint | Answers |
+| --- | --- |
+| `GET /attendance/analytics` | Per section: rate vs the previous period of equal length, status counts, students on roll, registers submitted and in draft, marking coverage, today's register state, and at-risk count. Plus a campus summary, a daily trend, a weekday pattern, the at-risk list (worst 100, with each child's current run of consecutive absences), and a headline of today / this month / last month / academic year so far. Query: `from_date`, `to_date` (default: the last 30 days), `class_id`, `threshold` (default 75), `min_sessions` (default 5). |
+| `GET /attendance/students` | One row per active student: today's register state and status, this month, last month, and an "overall" range (default: the academic year so far). Paginated; `q` matches a name or admission number anywhere, or a roll number exactly; `sort_by` is `overall` (default, worst first), `this_month`, `previous_month`, `name`, `admission_number`, `roll_number` or `class`. Filters: `class_id`, `section_id`. |
+| `GET /attendance/students/{id}/calendar` | One student day by day, with a rate per month and over the range (default: the academic year so far). A draft day carries no status. |
+
+The rules, on top of §4.2 and §7:
+
+* **The whole-day register (`period = 0`) is the unit.** Lesson registers answer a
+  different question, and counting eight of them as a day would weight that day
+  eight times. A school that marks only per lesson sees empty analytics.
+  `GET /attendance/students/{id}/summary` predates this and counts every register,
+  so for a school that marks both kinds the two can differ.
+* **"School days" is a proxy:** a date on which at least one whole-day register was
+  submitted among the sections the caller may see. There is no holiday calendar
+  (§2). Marking coverage is measured against it, so a day nobody marked at all is
+  invisible here. The daily overview is what catches that, on the day.
+* **The headline is fixed to the calendar**, not to the selected range, so "this
+  month" does not move when someone changes the date picker.
+* **Today's status shows only once the register is submitted.** A draft is
+  pre-filled `present` (§5.2), so showing it would report a child present on a
+  register nobody has confirmed. `today_register` separates "not marked yet" from
+  "present".
+* **At risk** means below `threshold` with at least `min_sessions` counted
+  registers in the range, so one absence on the first day is not 0% at the top of
+  the list.
+* A student's rate counts every register the child is on (by current section for a
+  teacher's bound), so a child who changed section mid-month shows the same figure
+  everywhere.
+* Ranges over 366 days are refused (`DATE_RANGE_TOO_LONG`); a reversed range is
+  `INVALID_DATE_RANGE`, as for the other reports.
+
+Frontend: the dashboard shows the overall rate (this month vs last month, today,
+year so far) and every class ranked, for both principals and teachers.
+`/attendance/analytics` is the full class view, `/attendance/students` the
+per-student table, and each student's page links to their month calendar.
+
+Tests: `backend/tests/integration/test_attendance_analytics.py`.
+
+---
+
+## 15. Marking by WhatsApp
+
+Teachers can also submit the whole-day register by messaging the school's WhatsApp
+number (`Nursery-A absent 12, 13, 15`). The agent shows the matched names back and
+submits only on **OK**, through the same `open_session` → `mark` → `submit` calls as
+the web register, so §3's separation of duties holds unchanged. See
+[attendance-agent.md](attendance-agent.md).

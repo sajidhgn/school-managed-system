@@ -209,3 +209,43 @@ export function timezonesForCurrency(currency: string): string[] {
   }
   return [...zones].sort();
 }
+
+/**
+ * Everything the currency and timezone pickers show, computed in ONE runtime.
+ *
+ * Currency names (`Intl.DisplayNames`), a region's zones (`Intl.Locale`) and the
+ * full zone list (`Intl.supportedValuesOf`) all come from the runtime's ICU data,
+ * and Node's and the browser's differ: Node names "SLE — Sierra Leonean Leone"
+ * where Chrome knows only "SLE". Rendered on both sides, that is a hydration
+ * error. So the server page builds this and passes it down, and the picker
+ * renders from the prop on both sides.
+ */
+export interface CurrencyCatalog {
+  currencies: { code: string; label: string }[];
+  zonesByCurrency: Record<string, string[]>;
+  allTimezones: string[];
+}
+
+export function buildCurrencyCatalog(): CurrencyCatalog {
+  const names = new Intl.DisplayNames(["en"], { type: "currency" });
+  const label = (code: string) => {
+    try {
+      const name = names.of(code);
+      return name && name !== code ? `${code} — ${name}` : code;
+    } catch {
+      return code;
+    }
+  };
+  let allTimezones: string[];
+  try {
+    allTimezones = Intl.supportedValuesOf("timeZone");
+  } catch {
+    allTimezones = ["UTC"];
+  }
+  return {
+    currencies: CURRENCY_CODES.map((code) => ({ code, label: label(code) })),
+    zonesByCurrency: Object.fromEntries(CURRENCY_CODES.map((code) => [code, timezonesForCurrency(code)])),
+    allTimezones,
+  };
+}
+

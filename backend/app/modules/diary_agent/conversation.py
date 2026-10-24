@@ -28,6 +28,12 @@ WHERE A DIARY MAY GO -- DECIDED HERE, NOT BY THE MODEL
     The model proposes a class from that target list and the proposal is checked
     against it again before use.
 
+ATTENDANCE RIDES THE SAME NUMBER
+    Once the sender is identified, every TEXT message is offered to the attendance
+    agent first (`attendance_agent/conversation.py`): "Nursery-A absent 12, 13" is
+    a register, not a diary correction. It answers what is about attendance and
+    hands the rest back here. Photos are always the diary's.
+
 TRANSACTIONS
     Model calls and WhatsApp calls take seconds, so they happen BETWEEN short
     transactions, never inside one. The draft row carries the state across them,
@@ -48,6 +54,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.whatsapp.replies import (
+    CANCEL_WORDS,
+    CLASS_COMMAND_RE,
+    CONFIRM_WORDS,
+    norm_label,
+    reply_word,
+)
 from app.common.whatsapp.sender import WahaSender, WhatsAppSender, build_whatsapp_sender
 from app.common.whatsapp.waha import WahaClient, WahaError, session_name
 from app.core.config import Settings
@@ -60,6 +73,13 @@ from app.core.context import (
 from app.core.logging import get_logger
 from app.db.session import session_scope
 from app.modules.academics.teaching_scope import assigned_teacher
+from app.modules.attendance_agent.agent import AttendanceAgent
+from app.modules.attendance_agent.conversation import HELP_LINE as ATTENDANCE_HELP_LINE
+from app.modules.attendance_agent.conversation import (
+    MARK_PERMISSION,
+    AttendanceChat,
+    Speaker,
+)
 from app.modules.diary_agent.agent import (
     DiaryAgent,
     DiaryAgentError,
@@ -88,19 +108,6 @@ from app.modules.whatsapp.service import WhatsAppService
 logger = get_logger(__name__)
 
 POST_PERMISSION = "whatsapp:diary"
-
-_CONFIRM = frozenset(
-    {
-        "ok", "okay", "k", "yes", "y", "post", "send", "post it", "send it", "ok post",
-        "yes post", "done", "haan", "han", "ji", "jee", "theek hai", "thik hai",
-        "👍", "✅", "اوکے", "جی", "ہاں",
-    }
-)  # fmt: skip
-_CANCEL = frozenset(
-    {"cancel", "no", "n", "stop", "discard", "delete", "nahi", "nahin", "❌", "نہیں"}
-)
-_CLASS_COMMAND_RE = re.compile(r"^(?:class|grade|section)\b[\s:#-]*(.+)$", re.IGNORECASE)
-_LABEL_NOISE_RE = re.compile(r"\b(?:class|grade|section)\b|[^0-9a-z؀-ۿ]+")
 
 # A model read takes seconds; a draft still READING after this was abandoned.
 _READING_STALE_MINUTES = 5
@@ -194,14 +201,6 @@ def normalize_phone(raw: str, default_country_code: str) -> str | None:
     return digits
 
 
-def _norm_label(text: str) -> str:
-    return _LABEL_NOISE_RE.sub("", text.lower())
-
-
-def _word(text: str) -> str:
-    return text.strip().lower().strip(" .!?،۔")  # noqa: RUF001 -- Urdu punctuation
-
-
 # ---------------------------------------------------------------------------
 # The conversation
 # ---------------------------------------------------------------------------
@@ -235,10 +234,12 @@ class DiaryConversation:
         *,
         waha: WahaClient,
         agent_factory: Callable[[], DiaryAgent],
+        attendance_agent_factory: Callable[[], AttendanceAgent],
     ) -> None:
         self.settings = settings
         self.waha = waha
         self.agent_factory = agent_factory
+        self.attendance_agent_factory = attendance_agent_factory
 
     async def handle(self, event: InboundMessage) -> None:
         """Never raises: a background task's exception would only reach the log."""
@@ -262,17 +263,24 @@ class DiaryConversation:
         async with self._scope() as session:
             fmt = await self._format(session)
             teacher = await self._identify(session, event.school_id, number)
-        if fmt is None:
-            return  # switched off for this campus
+            diary_open_at = await self._diary_open_at(session, teacher)
         if teacher is None:
             logger.info("diary_agent_ignored_sender", school_id=str(event.school_id))
             return
         reply_to = f"{number}@c.us"
+        # Attendance is offered every text first, and answers whether or not this
+        # campus uses the diary agent: "Nursery-A absent 12, 13" is not a diary.
+        if not event.has_media and await self._attendance(event, teacher, reply_to, diary_open_at):
+            return
+        if fmt is None:
+            return  # switched off for this campus
         if POST_PERMISSION not in teacher.permissions:
             await self._reply(
                 event,
                 reply_to,
-                "Sorry, your account is not allowed to post the class diary. "
+                self._help(teacher)
+                if not event.has_media and MARK_PERMISSION in teacher.permissions
+                else "Sorry, your account is not allowed to post the class diary. "
                 "Please ask the school office.",
             )
             return
@@ -341,7 +349,7 @@ class DiaryConversation:
         self, event: InboundMessage, teacher: _Teacher, reply_to: str, fmt: _Format
     ) -> None:
         text = event.body.strip()
-        word = _word(text)
+        word = reply_word(text)
         revise: tuple[UUID, DiaryReading, ReadingContext] | None = None
         post: UUID | None = None
 
@@ -350,7 +358,7 @@ class DiaryConversation:
             since = datetime.now(UTC) - timedelta(minutes=self.settings.DIARY_DRAFT_TTL_MINUTES)
             draft = await drafts.open_for(teacher.user_id, since=since)
             if draft is None:
-                answer: str | None = HELP_TEXT
+                answer: str | None = self._help(teacher)
             elif draft.status is DiaryDraftStatus.READING and draft.updated_at >= datetime.now(
                 UTC
             ) - timedelta(minutes=_READING_STALE_MINUTES):
@@ -360,14 +368,14 @@ class DiaryConversation:
                 draft.status = DiaryDraftStatus.FAILED
                 draft.error = "The photo was never read."
                 answer = "Sorry, I lost that photo. Please send it again."
-            elif word in _CANCEL:
+            elif word in CANCEL_WORDS:
                 draft.status = DiaryDraftStatus.CANCELLED
                 draft.error = "Cancelled by the teacher."
                 answer = "Cancelled. Nothing was posted."
             else:
                 lookup = DiaryLookupRepository(session)
                 targets = await lookup.targets(event.school_id, teacher.bound_to)
-                command = _CLASS_COMMAND_RE.match(text)
+                command = CLASS_COMMAND_RE.match(text)
                 if draft.status is DiaryDraftStatus.NEEDS_CLASS or command or text.isdigit():
                     target = self._pick(command.group(1) if command else text, targets)
                     if target is None:
@@ -375,7 +383,7 @@ class DiaryConversation:
                     else:
                         self._set_target(draft, target, teacher, fmt)
                         answer = self._preview(draft, target)
-                elif word in _CONFIRM:
+                elif word in CONFIRM_WORDS:
                     post = draft.id
                     answer = None
                 else:
@@ -526,6 +534,46 @@ class DiaryConversation:
                 draft.status = DiaryDraftStatus.FAILED
                 draft.error = error[:500]
 
+    # -- attendance -------------------------------------------------------
+
+    async def _attendance(
+        self,
+        event: InboundMessage,
+        teacher: _Teacher,
+        reply_to: str,
+        diary_open_at: datetime | None,
+    ) -> bool:
+        """Offer a text message to the attendance agent; True when it was about attendance."""
+        chat = AttendanceChat(
+            self.settings,
+            agent_factory=self.attendance_agent_factory,
+            reply=lambda text: self._reply(event, reply_to, text),
+        )
+        speaker = Speaker(
+            user_id=teacher.user_id, full_name=teacher.full_name, permissions=teacher.permissions
+        )
+        return await chat.handle(event, speaker, reply_to=reply_to, diary_open_at=diary_open_at)
+
+    async def _diary_open_at(
+        self, session: AsyncSession, teacher: _Teacher | None
+    ) -> datetime | None:
+        """When the teacher's unfinished diary last changed, so "ok" goes to the newer
+        of a diary and a register both waiting for one."""
+        if teacher is None:
+            return None
+        since = datetime.now(UTC) - timedelta(minutes=self.settings.DIARY_DRAFT_TTL_MINUTES)
+        draft = await DiaryDraftRepository(session).open_for(teacher.user_id, since=since)
+        return draft.updated_at if draft is not None else None
+
+    @staticmethod
+    def _help(teacher: _Teacher) -> str:
+        """What the agent can do for THIS member, for a message it could not place."""
+        if POST_PERMISSION not in teacher.permissions:
+            return f"Hi! {ATTENDANCE_HELP_LINE}"
+        if MARK_PERMISSION in teacher.permissions:
+            return f"{HELP_TEXT}\n\n{ATTENDANCE_HELP_LINE}"
+        return HELP_TEXT
+
     # -- helpers ----------------------------------------------------------
 
     def _set_target(
@@ -583,11 +631,11 @@ class DiaryConversation:
         if text.isdigit():
             index = int(text)
             return targets[index - 1] if 1 <= index <= len(targets) else None
-        wanted = _norm_label(text)
+        wanted = norm_label(text)
         if not wanted:
             return None
         for target in targets:
-            if wanted in (_norm_label(target.label), _norm_label(target.group.name)):
+            if wanted in (norm_label(target.label), norm_label(target.group.name)):
                 return target
         return None
 

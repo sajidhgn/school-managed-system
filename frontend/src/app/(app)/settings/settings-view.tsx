@@ -23,33 +23,7 @@ import {
   type MemberRead,
   type OrganizationRead,
 } from "@/lib/api/types";
-import { CURRENCY_CODES, timezonesForCurrency } from "@/lib/currency-timezones";
-
-/*
- * The full IANA list is only the fallback: normally the timezone dropdown is
- * narrowed to the zones of the selected currency's regions. The English
- * currency name is fixed-locale on purpose — a locale-dependent label would
- * render differently on server and client and trip hydration.
- */
-const TIMEZONES: string[] = (() => {
-  try {
-    return Intl.supportedValuesOf("timeZone");
-  } catch {
-    return ["UTC"];
-  }
-})();
-
-const currencyNames = new Intl.DisplayNames(["en"], { type: "currency" });
-
-function currencyLabel(code: string): string {
-  try {
-    const name = currencyNames.of(code);
-    return name && name !== code ? `${code} — ${name}` : code;
-  } catch {
-    // `of` throws on a syntactically invalid code; a stored value is shown as-is.
-    return code;
-  }
-}
+import type { CurrencyCatalog } from "@/lib/currency-timezones";
 
 function withCurrent(options: string[], current: string): string[] {
   // A stored value outside ICU's list (an old tzdata alias, say) must still
@@ -71,12 +45,15 @@ export function SettingsView({
   canEditOrg,
   canTransferOwnership,
   ownershipCandidates,
+  currencyCatalog,
 }: {
   user: MeResponse;
   organization: OrganizationRead | null;
   canEditOrg: boolean;
   canTransferOwnership: boolean;
   ownershipCandidates: MemberRead[];
+  /** Built on the server (see `buildCurrencyCatalog`), so both sides render the same labels. */
+  currencyCatalog: CurrencyCatalog;
 }) {
   const router = useRouter();
   const { t } = useTranslations();
@@ -89,12 +66,12 @@ export function SettingsView({
 
   // Zones where the chosen currency circulates; empty means "unknown", in
   // which case the dropdown falls back to the full IANA list.
-  const currencyZones = timezonesForCurrency(currency);
-  const timezoneOptions = currencyZones.length ? currencyZones : TIMEZONES;
+  const currencyZones = currencyCatalog.zonesByCurrency[currency] ?? [];
+  const timezoneOptions = currencyZones.length ? currencyZones : currencyCatalog.allTimezones;
 
   function changeCurrency(code: string) {
     setCurrency(code);
-    const zones = timezonesForCurrency(code);
+    const zones = currencyCatalog.zonesByCurrency[code] ?? [];
     // Follow the currency: keep the timezone only if it still fits, otherwise
     // pick the first matching zone (single-zone countries thus auto-select).
     if (zones.length && !zones.includes(timezone)) {
@@ -255,9 +232,13 @@ export function SettingsView({
                   disabled={!canEditOrg}
                   onChange={(event) => changeCurrency(event.target.value)}
                 >
-                  {withCurrent(CURRENCY_CODES, currency).map((code) => (
+                  {/* A stored code outside the catalog still shows, as itself. */}
+                  {withCurrent(
+                    currencyCatalog.currencies.map((c) => c.code),
+                    currency,
+                  ).map((code) => (
                     <option key={code} value={code}>
-                      {currencyLabel(code)}
+                      {currencyCatalog.currencies.find((c) => c.code === code)?.label ?? code}
                     </option>
                   ))}
                 </NativeSelect>

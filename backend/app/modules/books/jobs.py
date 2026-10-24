@@ -750,8 +750,9 @@ async def _still_ours(session: AsyncSession, claim: _Claim) -> BookChapter | Non
     return chapter
 
 
-def describe_failure(exc: Exception) -> str:
-    """A message a teacher can act on, without leaking a stack trace."""
+def describe_failure(exc: Exception, provider: str = "OpenAI") -> str:
+    """A message a teacher can act on, without leaking a stack trace. `provider`
+    names who answered, for calls that may not go to OpenAI."""
     from openai import APIStatusError, AuthenticationError, PermissionDeniedError, RateLimitError
 
     from app.modules.books.agent import AgentNotConfiguredError
@@ -760,13 +761,13 @@ def describe_failure(exc: Exception) -> str:
     if isinstance(exc, AgentNotConfiguredError):
         return "The AI agent is not configured on this server (OPENAI_API_KEY is missing)."
     if isinstance(exc, AuthenticationError):
-        return "OpenAI rejected the server's API key."
+        return f"{provider} rejected the server's API key."
     if isinstance(exc, PermissionDeniedError):
-        return f"OpenAI refused the request: {exc.message}"
+        return f"{provider} refused the request: {exc.message}"
     if isinstance(exc, RateLimitError):
-        return "OpenAI's rate limit or quota was reached. Run the agent again later."
+        return f"{provider}'s rate limit or quota was reached. Run the agent again later."
     if isinstance(exc, APIStatusError):
-        return f"OpenAI returned an error ({exc.status_code}): {exc.message}"
+        return f"{provider} returned an error ({exc.status_code}): {exc.message}"
     if isinstance(exc, UnsupportedFileError | ValueError):
         return str(exc)
     return f"The agent failed: {type(exc).__name__}: {exc}"

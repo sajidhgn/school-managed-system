@@ -29,7 +29,7 @@ from sqlalchemy.orm import InstrumentedAttribute, defer
 
 from app.common.repository import BaseRepository
 from app.core.context import get_school_id
-from app.modules.academics.models import SchoolClass, Subject
+from app.modules.academics.models import ClassSubject, SchoolClass, Subject
 from app.modules.academics.teaching_scope import taught_class_ids, teaches_subject
 from app.modules.auth.models import User
 from app.modules.books.models import (
@@ -316,6 +316,38 @@ class BookLookupRepository:
         stmt = select(Subject).where(Subject.id == subject_id, Subject.deleted_at.is_(None))
         stmt = _scoped(stmt, Subject.school_id)
         return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def filing_options(
+        self, teacher_id: UUID | None
+    ) -> tuple[list[tuple[UUID, str]], list[tuple[UUID, UUID, str]]]:
+        """Where a new book can be filed: `(class id, name)` and each class's
+        curriculum as `(class id, subject id, subject name)`.
+
+        A bound teacher gets only the classes and subjects `_assert_in_scope` would
+        let them file under, so a reading never suggests one the create refuses.
+        """
+        classes = (
+            select(SchoolClass.id, SchoolClass.name)
+            .where(SchoolClass.deleted_at.is_(None))
+            .order_by(SchoolClass.level)
+        )
+        classes = _scoped(classes, SchoolClass.school_id)
+        links = (
+            select(ClassSubject.class_id, Subject.id, Subject.name)
+            .join(Subject, Subject.id == ClassSubject.subject_id)
+            .where(ClassSubject.deleted_at.is_(None), Subject.deleted_at.is_(None))
+            .order_by(Subject.name)
+        )
+        links = _scoped(links, ClassSubject.school_id)
+        if teacher_id is not None:
+            classes = classes.where(SchoolClass.id.in_(taught_class_ids(teacher_id)))
+            links = links.where(
+                teaches_subject(teacher_id, ClassSubject.class_id, ClassSubject.subject_id)
+            )
+        return (
+            [(row[0], row[1]) for row in await self.session.execute(classes)],
+            [(row[0], row[1], row[2]) for row in await self.session.execute(links)],
+        )
 
     async def teaches_class(self, teacher_id: UUID, class_id: UUID) -> bool:
         stmt = select(SchoolClass.id).where(

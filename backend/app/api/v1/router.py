@@ -167,7 +167,7 @@ api_router.include_router(whatsapp_webhook_router, prefix="/whatsapp", tags=["Wh
 api_router.include_router(diary_agent_router, prefix="/diary-agent", tags=["Diary agent"])
 
 # Fees: what a school bills its STUDENTS. Deliberately not under `/billing`, which is
-# what the school owes EduCloud -- two different money flows between two different
+# what the school owes SchoolYar -- two different money flows between two different
 # pairs of parties, and a shared prefix would invite a route in one to be secured
 # with the other's permission. See docs/modules/fees.md.
 api_router.include_router(fees_router, prefix="/fees", tags=["Fees"])

@@ -1,11 +1,27 @@
 import type { Metadata } from "next";
 
+import { LABELS, getCopy } from "@/components/marketing/copy";
+import { CtaBand } from "@/components/marketing/cta-band";
+import { Faq } from "@/components/marketing/faq";
+import { Hero } from "@/components/marketing/hero";
+import { JsonLd } from "@/components/marketing/json-ld";
+import { Reveal } from "@/components/marketing/motion/reveal";
 import { PricingTable } from "@/components/marketing/pricing-table";
+import { Section, SectionHeading } from "@/components/marketing/section";
 import { API_BASE_URL, API_V1_PREFIX } from "@/lib/api/config";
 import type { PlanPublic } from "@/lib/api/types";
-import { getTranslations } from "@/lib/i18n/server";
+import { getLocale, getTranslations } from "@/lib/i18n/server";
+import { demoUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = { title: "Pricing" };
+// No figures in the description: like the page, it must not hardcode a price.
+export async function generateMetadata(): Promise<Metadata> {
+  const copy = getCopy(await getLocale());
+  return pageMetadata({
+    title: copy.common.pricing,
+    description: copy.pricing.metaDescription,
+    path: "/pricing",
+  });
+}
 
 /**
  * Pricing page — renders `GET /public/plans` (spec §9).
@@ -26,7 +42,10 @@ export const metadata: Metadata = { title: "Pricing" };
  * page on the site; re-fetching per visitor would be pure waste.
  */
 export default async function PricingPage() {
-  const t = await getTranslations();
+  const [t, locale] = await Promise.all([getTranslations(), getLocale()]);
+  const copy = getCopy(locale);
+  const { pricing, common } = copy;
+  const contactHref = demoUrl(common.demoMessage);
 
   const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/public/plans`, {
     next: { revalidate: 300 },
@@ -38,31 +57,57 @@ export default async function PricingPage() {
   const plans: PlanPublic[] = response.ok ? await response.json() : [];
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-      <div className="mx-auto max-w-2xl text-center">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          {t.marketing.pricingTitle}
-        </h1>
-        <p className="mt-4 text-lg text-muted-foreground text-pretty">
-          {t.marketing.pricingSubtitle}
-        </p>
+    <div className="mk-heroui">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: pricing.faqs.map(([q, a]) => ({
+            "@type": "Question",
+            name: q,
+            acceptedAnswer: { "@type": "Answer", text: a },
+          })),
+        }}
+      />
+      <Hero
+        center
+        actions={false}
+        label={LABELS.pricing}
+        title={t.marketing.pricingTitle}
+        lede={t.marketing.pricingSubtitle}
+        common={common}
+      />
+
+      {/* The plans rise over the hero's foot. */}
+      <div className="mk-container relative z-10 -mt-36 pb-20">
+        {plans.length > 0 ? (
+          <PricingTable plans={plans} />
+        ) : (
+          <p className="pt-24 text-center text-mk-muted">{pricing.unavailable}</p>
+        )}
+
+        {/* Only with a way to reach the team: never a placeholder address. */}
+        {contactHref ? (
+          <Reveal as="p" className="mt-14 text-center text-sm text-mk-muted">
+            {pricing.groups.before}
+            <a href={contactHref} target="_blank" rel="noopener noreferrer" className="mk-textlink">
+              {pricing.groups.link}
+            </a>
+            {pricing.groups.after}
+          </Reveal>
+        ) : null}
       </div>
 
-      {plans.length > 0 ? (
-        <PricingTable plans={plans} />
-      ) : (
-        <p className="mt-16 text-center text-muted-foreground">
-          Plans are temporarily unavailable. Please try again shortly.
-        </p>
-      )}
+      <Section id="questions" tone="fog">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+          <SectionHeading label={LABELS.questions} title={common.questionsTitle} />
+          <Reveal>
+            <Faq items={pricing.faqs} />
+          </Reveal>
+        </div>
+      </Section>
 
-      <p className="mt-14 text-center text-sm text-muted-foreground">
-        Need more than the plans above?{" "}
-        <a href="mailto:sales@educloud.example" className="text-primary hover:underline">
-          Talk to us about Enterprise
-        </a>
-        .
-      </p>
+      <CtaBand copy={copy} />
     </div>
   );
 }

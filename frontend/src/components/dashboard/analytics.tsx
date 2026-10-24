@@ -33,30 +33,36 @@ export function AnalyticsBoard({ data }: { data: DashboardAnalytics }) {
   const { students, attendance, fees, exams } = data;
   if (!students && !attendance && !fees && !exams) return null;
 
+  // Sized to what the caller may read. A teacher sees no fees or exams, and a
+  // fixed three-column row or a fixed pair would leave a hole where each missing
+  // section was; instead the tiles share the row and the large cards flow two
+  // abreast in one grid.
+  const tiles = [students, attendance, fees].filter(Boolean).length;
+  const cards = [
+    attendance ? <RhythmCard key="rhythm" days={attendance.days} /> : null,
+    fees ? <CashflowCard key="cashflow" fees={fees} /> : null,
+    students ? <ClassesCard key="classes" students={students} /> : null,
+    exams ? <ExamCard key="exams" exams={exams} /> : null,
+  ].filter(Boolean);
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+      <div className="panel-stagger grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         {attendance ? <PulseCard attendance={attendance} /> : null}
-        <div className={cn("grid gap-4 sm:grid-cols-3", !attendance && "lg:col-span-2")}>
+        <div
+          className={cn(
+            "panel-stagger grid gap-4",
+            tiles === 3 ? "sm:grid-cols-3" : tiles === 2 ? "sm:grid-cols-2" : "sm:grid-cols-1",
+            !attendance && "lg:col-span-2",
+          )}
+        >
           {students ? <StudentsTile students={students} /> : null}
           {attendance ? <AttendanceTile attendance={attendance} /> : null}
           {fees ? <CollectionTile fees={fees} /> : null}
         </div>
       </div>
 
-      {attendance || fees ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {attendance ? <RhythmCard days={attendance.days} /> : null}
-          {fees ? <CashflowCard fees={fees} /> : null}
-        </div>
-      ) : null}
-
-      {students || exams ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {students ? <ClassesCard students={students} /> : null}
-          {exams ? <ExamCard exams={exams} /> : null}
-        </div>
-      ) : null}
+      {cards.length > 0 ? <div className="panel-stagger grid gap-4 lg:grid-cols-2">{cards}</div> : null}
     </div>
   );
 }
@@ -208,7 +214,7 @@ const MIX_ORDER = [
   { key: "excused", label: "excused", color: "bg-muted-foreground/40" },
 ] as const;
 
-function MixBar({ mix, label }: { mix: StatusMix; label: string }) {
+export function MixBar({ mix, label }: { mix: StatusMix; label: string }) {
   const { t } = useTranslations();
   const total = MIX_ORDER.reduce((sum, m) => sum + (mix[m.key] ?? 0), 0);
   if (total === 0) return null;
@@ -380,10 +386,10 @@ function CollectionTile({ fees }: { fees: FeePulse }) {
  *  would paint every ordinary day the same dark square. */
 const RHYTHM_STEPS = [0.7, 0.8, 0.88, 0.94] as const;
 const RHYTHM_FILLS = [
-  "color-mix(in oklch, var(--primary) 18%, var(--card))",
-  "color-mix(in oklch, var(--primary) 36%, var(--card))",
-  "color-mix(in oklch, var(--primary) 56%, var(--card))",
-  "color-mix(in oklch, var(--primary) 78%, var(--card))",
+  "color-mix(in oklab, var(--primary) 18%, var(--card))",
+  "color-mix(in oklab, var(--primary) 36%, var(--card))",
+  "color-mix(in oklab, var(--primary) 56%, var(--card))",
+  "color-mix(in oklab, var(--primary) 78%, var(--card))",
   "var(--primary)",
 ];
 
@@ -470,7 +476,8 @@ function CashflowCard({ fees }: { fees: FeePulse }) {
         <Empty />
       ) : (
         <>
-          <div className="flex h-44 items-end gap-1.5 border-b border-border" onMouseLeave={hide}>
+          {/* `pt-5` is headroom for the peak's label, which sits above its bar. */}
+          <div className="flex h-44 items-end gap-1.5 border-b border-border pt-5" onMouseLeave={hide}>
             {fees.months.map((m, i) => {
               const text = `${monthLong.format(label(m.month))} · ${money(values[i]!)}`;
               return (
@@ -484,7 +491,9 @@ function CashflowCard({ fees }: { fees: FeePulse }) {
                   className="group relative flex h-full flex-1 items-end outline-none"
                 >
                   {i === peak ? (
-                    <span className="absolute inset-x-0 -translate-y-5 text-center text-[11px] font-medium tabular-nums">
+                    // Anchored to the button's top: the peak bar fills the full
+                    // height, so a label offset from the baseline landed on it.
+                    <span className="pointer-events-none absolute inset-x-[-1rem] bottom-full mb-1 text-center text-[11px] font-medium tabular-nums">
                       {money(max, true)}
                     </span>
                   ) : null}

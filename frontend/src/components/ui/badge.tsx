@@ -1,35 +1,43 @@
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
+import { chipVariants } from "@heroui/styles";
 
 import { cn } from "@/lib/utils";
 
 /**
- * Status pill.
+ * Status pill, drawn as a HeroUI chip.
  *
  * Colour here is meaningful, never decorative: `success` = healthy/active,
  * `warning` = needs a human decision, `destructive` = blocked. Variants also
  * differ in weight and text, so status is never conveyed by hue alone.
+ *
+ * Soft chips throughout — a tinted fill with darker text of the same hue — so a
+ * table full of statuses stays readable instead of turning into a row of
+ * solid blocks. `default` is the brand blue; `neutral` is gray.
  */
-const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors",
-  {
-    variants: {
-      variant: {
-        default: "border-transparent bg-primary/10 text-primary",
-        neutral: "border-border bg-muted text-muted-foreground",
-        success: "border-transparent bg-success/12 text-success",
-        warning: "border-transparent bg-warning/18 text-warning-foreground dark:text-warning",
-        destructive: "border-transparent bg-destructive/12 text-destructive",
-        outline: "border-border text-foreground",
-      },
-    },
-    defaultVariants: { variant: "default" },
-  },
-);
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof badgeVariants> {}
+type Variant = "default" | "neutral" | "success" | "warning" | "destructive" | "outline";
+
+const CHIP: Record<Variant, Parameters<typeof chipVariants>[0]> = {
+  default: { color: "accent", variant: "soft" },
+  neutral: { color: "default", variant: "soft" },
+  success: { color: "success", variant: "soft" },
+  warning: { color: "warning", variant: "soft" },
+  destructive: { color: "danger", variant: "soft" },
+  outline: { color: "default", variant: "tertiary" },
+};
+
+function badgeVariants({ variant = "default" }: { variant?: Variant | null } = {}) {
+  const v = variant ?? "default";
+  return cn(
+    chipVariants(CHIP[v]).base(),
+    "gap-1 [&_svg]:size-3",
+    v === "outline" && "border border-border",
+  );
+}
+
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: Variant | null;
+}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return <span className={cn(badgeVariants({ variant }), className)} {...props} />;

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { EmptyState } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { serverGetRequired } from "@/lib/api/server";
-import type { AuditLogRead } from "@/lib/api/types";
-import { requireSchoolContext } from "@/lib/auth/session";
+import { PERMISSIONS, type AuditLogRead } from "@/lib/api/types";
+import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Audit log" };
@@ -31,7 +32,12 @@ export default async function AuditPage({
   searchParams: Promise<{ before?: string }>;
 }) {
   const params = await searchParams;
-  const [{ schoolId }, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
+  const [{ user, schoolId }, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
+
+  // Hidden from the nav for anyone without the permission, but the URL still
+  // resolves. Without this the API's 403 surfaced as a 500 page; a teacher who
+  // types the address is sent home instead, as /fees and /schools already do.
+  if (!hasPermission(user, PERMISSIONS.auditRead)) redirect("/dashboard");
   const query = new URLSearchParams({ limit: "51" });
   if (params.before) query.set("before", params.before);
   const entries = await serverGetRequired<AuditLogRead[]>(

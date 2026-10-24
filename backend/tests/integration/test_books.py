@@ -17,6 +17,9 @@ What a mocked suite would pass without:
   * ASK THE LIBRARY. Hybrid search ranks chunks across books by pgvector AND the
     generated tsvector; a chunk still waiting for its vector is found by its
     words; the answer is written from the retrieved passages only.
+  * ADD A BOOK WITH AI. A book's cover and contents pages pre-fill the form; the
+    class and subject offered are only those the caller may file under, nothing
+    is stored, and the reading is valid as it stands for `POST /books`.
 
 The model calls are the deterministic fake in `tests/books_fakes.py`; storage is a
 temporary directory.
@@ -35,13 +38,20 @@ from httpx import AsyncClient
 from app.common.email.sender import EmailMessage
 from app.common.storage import LocalFileStorage
 from app.core.config import Settings, get_settings
+from app.modules.books.agent import AgentNotConfiguredError
 from app.modules.books.jobs import process_pending
-from app.modules.books.router import get_agent_factory, get_book_storage
+from app.modules.books.router import (
+    get_agent_factory,
+    get_book_storage,
+    get_scan_reader_factory,
+)
 from tests.books_fakes import (
     ANSWERED,
     DISCARDED_BATCHES,
     FAKE_BATCHES,
+    FRONT_MATTER_OFFERS,
     PHOTO_PAGES,
+    SCAN_PROBLEM,
     FakeBatchAgent,
     FakeBookAgent,
     PhotoPage,
@@ -121,6 +131,7 @@ async def build_library(tenant: Tenant, mailbox: list[EmailMessage], tmp_path: P
     app = tenant.client._transport.app  # type: ignore[attr-defined]
     app.dependency_overrides[get_book_storage] = lambda: storage
     app.dependency_overrides[get_agent_factory] = lambda: FakeBookAgent
+    app.dependency_overrides[get_scan_reader_factory] = lambda: FakeBookAgent
 
     return Library(
         tenant=tenant,
@@ -638,3 +649,164 @@ async def test_another_organization_cannot_see_a_book(
         "cited": [],
     }
     assert ANSWERED == [], "with nothing retrieved, the answer model is never called"
+
+
+# ---------------------------------------------------------------------------
+# Add a book with AI
+# ---------------------------------------------------------------------------
+
+
+async def scan(actor: Actor, parts: list[Any]) -> Any:
+    return await actor.post(f"{API}/books/scan", files=parts)
+
+
+async def curriculum_ids(library: Library) -> dict[str, str]:
+    listed = await library.head.get(f"{API}/classes/{library.class_id}/subjects")
+    assert listed.status_code == 200, listed.text
+    return {row["subject_name"]: row["subject_id"] for row in listed.json()}
+
+
+async def test_a_books_cover_and_contents_fill_in_the_add_a_book_form(library: Library) -> None:
+    cover = (
+        None,
+        "TITLE: Beginner  Mathematics\nPUBLISHER: Oxford University Press\n"
+        "VERSION: 2nd Edition, 2026\nCLASS: Grade 9\nSUBJECT: Subject ENG",
+    )
+    # The second part of the book restarts its numbering, so the list is renumbered.
+    contents = (3, "CH 1: Numbers\nCH 2: Shapes\nCH 1: Telling the time")
+    FRONT_MATTER_OFFERS.clear()
+
+    read = await scan(library.teacher, photos({151: cover, 152: contents}))
+
+    assert read.status_code == 200, read.text
+    body = read.json()
+    assert body == {
+        "title": "Beginner Mathematics",
+        "publisher": "Oxford University Press",
+        "version": "2nd Edition, 2026",
+        "class_id": library.class_id,
+        "class_printed": "Grade 9",
+        "subject_id": (await curriculum_ids(library))["Subject ENG"],
+        "subject_printed": "Subject ENG",
+        "chapters": [
+            {"number": 1, "title": "Numbers"},
+            {"number": 2, "title": "Shapes"},
+            {"number": 3, "title": "Telling the time"},
+        ],
+        "pages_read": 2,
+        "notes": [],
+    }
+    assert FRONT_MATTER_OFFERS == [(["Grade 9"], ["Subject ENG"])]
+    assert not library.root.exists() or not any(library.root.rglob("*")), "nothing is stored"
+
+    # The reading is a valid book as it stands.
+    created = await library.teacher.post(
+        f"{API}/books",
+        json={
+            key: body[key]
+            for key in ("title", "publisher", "version", "class_id", "subject_id", "chapters")
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert [c["title"] for c in created.json()["chapters"]] == [
+        "Numbers",
+        "Shapes",
+        "Telling the time",
+    ]
+
+
+async def test_a_reading_suggests_only_where_the_caller_may_file_the_book(
+    library: Library,
+) -> None:
+    subject = await library.head.post(f"{API}/subjects", json={"code": "MTH", "name": "Maths"})
+    assert subject.status_code == 201, subject.text
+    linked = await library.head.post(
+        f"{API}/classes/{library.class_id}/subjects", json={"subject_id": subject.json()["id"]}
+    )
+    assert linked.status_code == 201, linked.text
+    cover = (None, "TITLE: New Countdown 9\nCLASS: Grade 9\nSUBJECT: Maths")
+
+    # The campus head may file it under any subject of the class.
+    by_head = await scan(library.head, photos({161: cover}))
+    assert by_head.status_code == 200, by_head.text
+    assert by_head.json()["subject_id"] == subject.json()["id"]
+
+    # The English teacher is offered only English: the subject stays as printed.
+    FRONT_MATTER_OFFERS.clear()
+    by_teacher = await scan(library.other_teacher, photos({161: cover}))
+    assert by_teacher.status_code == 200, by_teacher.text
+    assert FRONT_MATTER_OFFERS == [(["Grade 9"], ["Subject ENG"])]
+    assert by_teacher.json()["class_id"] == library.class_id
+    assert by_teacher.json()["subject_id"] is None
+    assert by_teacher.json()["subject_printed"] == "Maths"
+
+    # A class the campus does not have is left for the teacher to choose.
+    elsewhere = await scan(library.head, photos({162: (None, "TITLE: Science 7\nCLASS: Grade 7")}))
+    assert elsewhere.status_code == 200, elsewhere.text
+    assert elsewhere.json()["class_id"] is None
+    assert elsewhere.json()["class_printed"] == "Grade 7"
+
+
+async def test_a_whole_book_pdf_is_read_only_up_to_its_first_pages(library: Library) -> None:
+    filler = f"{BODY} {BODY}"
+    pages: list[tuple[int | None, str]] = [(None, f"TITLE: Big Book of Science\n{filler}")]
+    pages += [(n, f"CH {n}: Topic {n}\n{filler}") for n in range(2, 21)]
+    pdf = make_pdf(pages)
+
+    read = await scan(library.teacher, [("files", ("book.pdf", pdf, "application/pdf"))])
+
+    assert read.status_code == 200, read.text
+    body = read.json()
+    assert body["title"] == "Big Book of Science"
+    assert body["pages_read"] == 16
+    assert [c["number"] for c in body["chapters"]] == list(range(2, 17))
+    assert body["notes"] and "first 16 pages" in body["notes"][0]
+
+
+async def test_pages_that_show_no_book_are_refused(library: Library) -> None:
+    blank = await scan(library.teacher, photos({171: (None, "A photo of a desk.")}))
+    assert blank.status_code == 422, blank.text
+    assert blank.json()["code"] == "NOTHING_READ"
+
+    not_a_page = await scan(
+        library.teacher, [("files", ("cover.jpg", b"just some text", "image/jpeg"))]
+    )
+    assert not_a_page.status_code == 422, not_a_page.text
+    assert not_a_page.json()["code"] == "UNSUPPORTED_FILE"
+
+
+async def test_the_dialog_learns_before_any_upload_whether_ai_reading_will_work(
+    library: Library,
+) -> None:
+    ready = await library.teacher.get(f"{API}/books/scan/status")
+    assert ready.status_code == 200, ready.text
+    assert ready.json()["ready"] is True
+    assert ready.json()["problem"] is None
+
+    SCAN_PROBLEM[0] = "kie.ai rejected the API key."
+    try:
+        broken = await library.teacher.get(f"{API}/books/scan/status")
+        assert broken.json()["ready"] is False
+        assert broken.json()["problem"] == "kie.ai rejected the API key."
+
+        # Nothing is sent to a provider that will refuse it.
+        FRONT_MATTER_OFFERS.clear()
+        refused = await scan(library.teacher, photos({181: (None, "TITLE: Science 9")}))
+        assert refused.status_code == 503, refused.text
+        assert refused.json()["code"] == "AI_NOT_READY"
+        assert FRONT_MATTER_OFFERS == []
+    finally:
+        SCAN_PROBLEM[0] = None
+
+    # A provider whose key is missing from .env says which setting to fill in.
+    def unconfigured() -> Any:
+        raise AgentNotConfiguredError(
+            "OpenRouter is chosen (BOOKS_SCAN_PROVIDER=openrouter) but OPENROUTER_API_KEY "
+            "is not set in backend/.env."
+        )
+
+    app = library.tenant.client._transport.app  # type: ignore[attr-defined]
+    app.dependency_overrides[get_scan_reader_factory] = lambda: unconfigured
+    missing = (await library.teacher.get(f"{API}/books/scan/status")).json()
+    assert missing["ready"] is False
+    assert "OPENROUTER_API_KEY" in missing["problem"]

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 
+import { selectFieldClasses } from "@/components/ui/field-styles";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,10 +29,8 @@ export const NativeSelect = React.forwardRef<
     <select
       ref={ref}
       className={cn(
-        "h-9 w-full appearance-none rounded-md border border-input bg-card px-3 pe-8 text-sm shadow-sm",
-        "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        "aria-[invalid=true]:border-destructive",
+        selectFieldClasses,
+        "h-9 cursor-pointer appearance-none px-3 pe-8",
         className,
       )}
       {...props}

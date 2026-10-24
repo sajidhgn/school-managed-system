@@ -117,6 +117,25 @@ export function useCreateBook() {
   });
 }
 
+/** Whether "Read with AI" will work, checked when the dialog opens. */
+export function useScanStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.books.scanStatus,
+    queryFn: () => booksApi.scanStatus(),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/** Read a new book's details off its cover and contents pages. */
+export function useScanBook() {
+  return useMutation({
+    mutationFn: (files: File[]) => booksApi.scan(files),
+    onError: (error) =>
+      toast.error("Couldn't read the pages", errorMessage(error)),
+  });
+}
+
 export function useUpdateBook(bookId: string) {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateBooks();

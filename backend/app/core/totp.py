@@ -69,7 +69,7 @@ def verify_totp(
     return None
 
 
-def provisioning_uri(*, secret: str, email: str, issuer: str = "EduCloud") -> str:
+def provisioning_uri(*, secret: str, email: str, issuer: str = "SchoolYar") -> str:
     label = quote(f"{issuer}:{email}")
     return (
         f"otpauth://totp/{label}?secret={quote(secret)}&issuer={quote(issuer)}"

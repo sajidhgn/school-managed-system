@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ChevronDown, ChevronRight, NotebookPen } from "lucide-react";
 
-import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-states";
+import { EmptyState, ErrorState, TableCardSkeleton } from "@/components/data-states";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,11 @@ export function DiaryAgentPanel({ canManage }: { canManage: boolean }) {
         Teachers send a photo of the day&apos;s diary to the school&apos;s WhatsApp number. The agent
         reads it, writes it in this format, shows the teacher a preview, and posts it to the class
         group when they reply OK.
+      </p>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        Teachers can also take attendance on the same number: a message such as{" "}
+        <span className="font-medium text-foreground">Nursery-A absent 12, 13, 15</span> is matched
+        to the students&apos; names, shown back, and submitted to the register when they reply OK.
       </p>
       <DiaryFormatEditor canManage={canManage} />
       <RecentDiaries />
@@ -126,7 +131,7 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
   const debounced = useDebouncedValue(draft, 400);
   const preview = useDiaryAgentPreview(debounced, !!settings.data);
 
-  if (settings.isLoading) return <TableSkeleton columns={2} rows={4} />;
+  if (settings.isLoading) return <TableCardSkeleton columns={2} rows={4} />;
   if (settings.isError)
     return <ErrorState error={settings.error} onRetry={() => void settings.refetch()} />;
 
@@ -231,7 +236,7 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
               className={cn("transition-opacity", stale && "opacity-60")}
             />
           ) : (
-            <TableSkeleton columns={1} rows={4} />
+            <TableCardSkeleton columns={1} rows={4} />
           )}
         </CardContent>
       </Card>
@@ -272,7 +277,7 @@ function RecentDiaries() {
       </CardHeader>
       <CardContent>
         {drafts.isLoading ? (
-          <TableSkeleton columns={5} />
+          <TableCardSkeleton columns={5} />
         ) : drafts.isError ? (
           <ErrorState error={drafts.error} onRetry={() => void drafts.refetch()} />
         ) : !drafts.data?.items.length ? (

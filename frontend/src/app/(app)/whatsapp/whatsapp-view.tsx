@@ -3,7 +3,7 @@
 import * as React from "react";
 import { MessageCircle, Pencil, RotateCw, Send, Trash2, X } from "lucide-react";
 
-import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-states";
+import { EmptyState, ErrorState, TableCardSkeleton } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,7 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
       </CardHeader>
       <CardContent>
         {groups.isLoading ? (
-          <TableSkeleton columns={5} rows={3} />
+          <TableCardSkeleton columns={5} rows={3} />
         ) : groups.isError ? (
           <ErrorState error={groups.error} onRetry={() => void groups.refetch()} />
         ) : !groups.data?.length ? (
@@ -231,7 +231,7 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
     setNote(settings.data.monthly_note ?? "");
   }, [settings.data]);
 
-  if (settings.isLoading) return <TableSkeleton columns={2} rows={4} />;
+  if (settings.isLoading) return <TableCardSkeleton columns={2} rows={4} />;
   if (settings.isError)
     return <ErrorState error={settings.error} onRetry={() => void settings.refetch()} />;
 
@@ -336,7 +336,7 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
         </CardHeader>
         <CardContent className="space-y-4">
           {preview.isLoading ? (
-            <TableSkeleton columns={1} rows={3} />
+            <TableCardSkeleton columns={1} rows={3} />
           ) : preview.isError ? (
             <ErrorState error={preview.error} onRetry={() => void preview.refetch()} />
           ) : !preview.data?.length ? (
@@ -406,7 +406,7 @@ function SendPanel() {
       </CardHeader>
       <CardContent>
         {groups.isLoading ? (
-          <TableSkeleton columns={1} rows={3} />
+          <TableCardSkeleton columns={1} rows={3} />
         ) : active.length === 0 ? (
           <EmptyState title="No active groups" description="Link a class group first." />
         ) : (
@@ -523,7 +523,7 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
       </CardHeader>
       <CardContent>
         {messages.isLoading ? (
-          <TableSkeleton columns={4} />
+          <TableCardSkeleton columns={4} />
         ) : messages.isError ? (
           <ErrorState error={messages.error} onRetry={() => void messages.refetch()} />
         ) : !messages.data?.items.length ? (

@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { RolesView } from "./roles-view";
 import { serverGetRequired } from "@/lib/api/server";
-import type { PermissionCategory, RoleRead } from "@/lib/api/types";
-import { requireSchoolContext } from "@/lib/auth/session";
+import { PERMISSIONS, type PermissionCategory, type RoleRead } from "@/lib/api/types";
+import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Roles" };
 
 export default async function RolesPage() {
   const { user, schoolId } = await requireSchoolContext();
+
+  // Hidden from the nav for anyone without the permission, but the URL still
+  // resolves. Without this the API's 403 surfaced as a 500 page; a teacher who
+  // types the address is sent home instead, as /fees and /schools already do.
+  if (!hasPermission(user, PERMISSIONS.roleRead)) redirect("/dashboard");
 
   const [roles, catalog] = await Promise.all([
     serverGetRequired<RoleRead[]>(`/schools/${schoolId}/roles`),

@@ -4,7 +4,7 @@ Status: accepted — 2026-08-22
 
 ## Decision
 
-EduCloud uses keyset pagination for append-only, high-churn timelines and bounded
+SchoolYar uses keyset pagination for append-only, high-churn timelines and bounded
 offset pagination for operator/catalog and ordinary CRUD lists.
 
 - Tenant audit logs use `before=<created_at>` and a stable descending timestamp

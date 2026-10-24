@@ -26,7 +26,7 @@ def render_invoice_pdf(invoice: Invoice, organization: Organization) -> bytes:
         topMargin=18 * mm,
         bottomMargin=18 * mm,
         title=f"Invoice {invoice.number}",
-        author="EduCloud",
+        author="SchoolYar",
     )
     styles = getSampleStyleSheet()
     muted = colors.HexColor("#64748B")
@@ -44,7 +44,7 @@ def render_invoice_pdf(invoice: Invoice, organization: Organization) -> bytes:
             [
                 [
                     Paragraph(
-                        "<b>EduCloud</b><br/><font size='9'>School management platform</font>",
+                        "<b>SchoolYar</b><br/><font size='9'>School management platform</font>",
                         styles["BodyText"],
                     ),
                     Paragraph("INVOICE", heading),
@@ -91,7 +91,7 @@ def render_invoice_pdf(invoice: Invoice, organization: Organization) -> bytes:
             [
                 ["Description", "Amount"],
                 [
-                    "EduCloud subscription services",
+                    "SchoolYar subscription services",
                     _money(invoice.amount_subtotal, invoice.currency),
                 ],
                 ["Tax", _money(invoice.amount_tax, invoice.currency)],
@@ -114,7 +114,7 @@ def render_invoice_pdf(invoice: Invoice, organization: Organization) -> bytes:
         ),
         Spacer(1, 18 * mm),
         Paragraph(
-            "Thank you for using EduCloud. Please quote the invoice number when "
+            "Thank you for using SchoolYar. Please quote the invoice number when "
             "contacting billing support.",
             small,
         ),

@@ -27,7 +27,7 @@ ROLE-AWARENESS, THE PART THAT IS ACCESS CONTROL
     permission check and the same tenant/campus scoping.
 
     Concretely, out of the box (spec §5.2):
-      * a PRINCIPAL holds every code, so they search all eleven kinds
+      * a PRINCIPAL holds every code, so they search all twelve kinds
       * a TEACHER holds `student:read`, `class:read`, `school:read` but not
         `member:read` -- so staff, vouchers, roles, invitations and the audit log
         are simply not part of their search. Not hidden. Not empty. Not queried.
@@ -85,6 +85,7 @@ class SearchEntity(StrEnum):
     VOUCHER = "voucher"
     FEE_HEAD = "fee_head"
     FEE_STRUCTURE = "fee_structure"
+    ATTENDANCE = "attendance"
     AUDIT = "audit"
 
 
@@ -127,11 +128,12 @@ class ProviderDef:
     here so "where does clicking a result go?" is answerable in one place.
 
     =========================================================================
-    ONLY THREE OF THESE ARE PRECISE, AND THE REST SAY SO BY NOT PRETENDING
+    ONLY FOUR OF THESE ARE PRECISE, AND THE REST SAY SO BY NOT PRETENDING
     =========================================================================
         Students, vouchers and campuses have detail pages, so their links land on
-        the exact record. The other eight modules have list pages with no filter UI
-        and no `q` parameter, so their links land on the LIST.
+        the exact record; an attendance register opens in place on the board via
+        `?session=`, which the board reads. The other modules have list pages with
+        no filter UI and no `q` parameter, so their links land on the LIST.
 
         An earlier version of this carried `?q=…` and `?role=…` on those templates.
         It looked more precise and was not: nothing reads those parameters, so the
@@ -208,6 +210,15 @@ PROVIDERS: tuple[ProviderDef, ...] = (
         url_template="/schools/{id}",
     ),
     ProviderDef(
+        entity=SearchEntity.ATTENDANCE,
+        label="Attendance",
+        icon="CalendarCheck",
+        permissions=frozenset({"attendance:read"}),
+        filters=("status", "class", "section", "school", "after", "before"),
+        weight=0.70,
+        url_template="/attendance?session={id}",
+    ),
+    ProviderDef(
         entity=SearchEntity.INVITATION,
         label="Invitations",
         icon="Mail",
@@ -268,6 +279,8 @@ BY_ENTITY: Mapping[SearchEntity, ProviderDef] = {p.entity: p for p in PROVIDERS}
 # Holding `attendance:mark` does.
 _WORK_SIGNALS: tuple[tuple[str, tuple[SearchEntity, ...], float], ...] = (
     ("attendance:mark", (SearchEntity.STUDENT, SearchEntity.SECTION), 0.30),
+    ("attendance:mark", (SearchEntity.ATTENDANCE,), 0.25),
+    ("attendance:amend", (SearchEntity.ATTENDANCE,), 0.20),
     ("grade:manage", (SearchEntity.STUDENT, SearchEntity.SECTION), 0.25),
     ("student:create", (SearchEntity.STUDENT,), 0.20),
     ("student:update", (SearchEntity.STUDENT,), 0.15),
@@ -309,11 +322,12 @@ _SYSTEM_ROLE_NUDGE: Mapping[str, Mapping[SearchEntity, float]] = {
         SearchEntity.ROLE: 0.20,
         SearchEntity.INVITATION: 0.15,
     },
-    # In front of a class. Students and the section they sit in, nothing else.
+    # In front of a class. Students, the section they sit in, and its registers.
     "teacher": {
         SearchEntity.STUDENT: 0.40,
         SearchEntity.SECTION: 0.30,
         SearchEntity.CLASS: 0.25,
+        SearchEntity.ATTENDANCE: 0.20,
         SearchEntity.MEMBER: -0.20,
     },
     # At the front desk taking payments. The voucher IS the job; a student is

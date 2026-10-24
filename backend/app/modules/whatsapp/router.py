@@ -30,6 +30,7 @@ from app.api.deps import AuthContext, DbSession, Pagination, SettingsDep, requir
 from app.common.schemas import Page
 from app.common.whatsapp.waha import WahaClient, verify_webhook
 from app.core.exceptions import AuthenticationError
+from app.modules.attendance_agent.agent import AttendanceAgent, build_attendance_agent
 from app.modules.diary_agent.agent import DiaryAgent, build_diary_agent
 from app.modules.diary_agent.conversation import DiaryConversation, parse_webhook
 from app.modules.whatsapp.models import WhatsAppMessageStatus
@@ -65,8 +66,17 @@ def get_diary_agent_factory(settings: SettingsDep) -> AgentFactory:
     return lambda: build_diary_agent(settings)
 
 
+AttendanceAgentFactory = Callable[[], AttendanceAgent]
+
+
+def get_attendance_agent_factory(settings: SettingsDep) -> AttendanceAgentFactory:
+    """A factory for the same reason: most registers are read without the model."""
+    return lambda: build_attendance_agent(settings)
+
+
 WahaDep = Annotated[WahaClient, Depends(get_waha_client)]
 AgentFactoryDep = Annotated[AgentFactory, Depends(get_diary_agent_factory)]
+AttendanceAgentFactoryDep = Annotated[AttendanceAgentFactory, Depends(get_attendance_agent_factory)]
 
 ReadCtx = Annotated[AuthContext, Depends(require("whatsapp:read"))]
 SendCtx = Annotated[AuthContext, Depends(require("whatsapp:send"))]
@@ -225,9 +235,11 @@ async def receive_webhook(
     settings: SettingsDep,
     waha: WahaDep,
     agent_factory: AgentFactoryDep,
+    attendance_agent_factory: AttendanceAgentFactoryDep,
 ) -> dict[str, str]:
     """An incoming WhatsApp message from WAHA -- verified, then handed to the diary
-    agent after the response. Anything that is not a person's message is ignored."""
+    agent (which passes registers on to the attendance agent) after the response.
+    Anything that is not a person's message is ignored."""
     raw = await request.body()
     if not verify_webhook(
         raw,
@@ -238,6 +250,11 @@ async def receive_webhook(
         raise AuthenticationError("Invalid webhook signature.", code="INVALID_SIGNATURE")
     event = parse_webhook(raw)
     if event is not None:
-        conversation = DiaryConversation(settings, waha=waha, agent_factory=agent_factory)
+        conversation = DiaryConversation(
+            settings,
+            waha=waha,
+            agent_factory=agent_factory,
+            attendance_agent_factory=attendance_agent_factory,
+        )
         background.add_task(conversation.handle, event)
     return {"status": "ok"}

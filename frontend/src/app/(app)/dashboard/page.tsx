@@ -5,10 +5,12 @@ import { Building2, Mail, Users } from "lucide-react";
 import { Can } from "@/components/auth/can";
 import { UsageCard } from "@/components/billing/usage-card";
 import { AnalyticsBoard } from "@/components/dashboard/analytics";
+import { AttendanceOverview } from "@/components/dashboard/attendance-overview";
 import { Button } from "@/components/ui/button";
 import { serverGet } from "@/lib/api/server";
 import {
   PERMISSIONS,
+  type AttendanceAnalytics,
   type DashboardAnalytics,
   type InvitationRead,
   type MemberRead,
@@ -38,11 +40,16 @@ export default async function DashboardPage() {
   const [user, t] = await Promise.all([requireUser(), getTranslations()]);
   const schoolId = user.school_id;
 
-  const [schools, usage, members, invitations, analytics] = await Promise.all([
+  const [schools, usage, members, invitations, analytics, attendance] = await Promise.all([
     hasPermission(user, PERMISSIONS.schoolRead)
       ? serverGet<SchoolRead[]>("/schools", [])
       : Promise.resolve<SchoolRead[]>([]),
-    serverGet<UsageResponse | null>("/org/usage", null),
+    // The plan's caps are the organization's business, shown to whoever can see
+    // Billing (the same rule as the Billing link in the sidebar). A teacher has
+    // no decision to make about staff seats or campus limits.
+    hasPermission(user, PERMISSIONS.billingRead) || hasPermission(user, PERMISSIONS.billingManage)
+      ? serverGet<UsageResponse | null>("/org/usage", null)
+      : Promise.resolve<UsageResponse | null>(null),
     // Only the total is displayed, so ask for the smallest page the endpoint
     // allows and read the count from its metadata.
     schoolId && hasPermission(user, PERMISSIONS.memberRead)
@@ -54,6 +61,12 @@ export default async function DashboardPage() {
     // Gated per section on the server; a caller with none of the permissions gets
     // an all-null board, which renders as nothing.
     serverGet<DashboardAnalytics | null>("/dashboard/analytics", null),
+    // The overall ratio and the class ranking. Asked for only with `attendance:read`
+    // — the endpoint would 403 without it — and bounded by the server: the campus
+    // for a principal, their own sections for a teacher.
+    hasPermission(user, PERMISSIONS.attendanceRead)
+      ? serverGet<AttendanceAnalytics | null>("/attendance/analytics", null)
+      : Promise.resolve<AttendanceAnalytics | null>(null),
   ]);
 
   const pendingInvites = invitations.filter((i) => i.status === "pending");
@@ -71,13 +84,21 @@ export default async function DashboardPage() {
         </p>
       </header>
 
+      {/* Attendance leads: it is the number a principal checks first every morning,
+          and the one a teacher is accountable for. */}
+      {attendance ? (
+        <div className="mb-4">
+          <AttendanceOverview data={attendance} schools={schools} />
+        </div>
+      ) : null}
+
       {analytics ? (
         <div className="mb-8">
           <AnalyticsBoard data={analytics} />
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="panel-stagger grid gap-4 sm:grid-cols-3">
         <Can anyOf={SCHOOL_ADMIN_PERMISSIONS}>
           <StatCard icon={Building2} label={t.nav.schools} value={schools.length} href="/schools" />
         </Can>
@@ -142,10 +163,12 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/50"
+      className="panel-lift rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)] hover:border-primary/40"
     >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icon className="size-4" aria-hidden />
+        <span className="grid size-7 place-items-center rounded-lg bg-accent text-primary">
+          <Icon className="size-4" aria-hidden />
+        </span>
         {label}
       </div>
       <p className="mt-2 text-3xl font-semibold tabular-nums">{value}</p>

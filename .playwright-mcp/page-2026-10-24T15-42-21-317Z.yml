@@ -1,0 +1,670 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - link "New Add a book from two photos of its cover and contents page" [ref=e6] [cursor=pointer]:
+        - /url: /features/test-paper-generator
+        - generic [ref=e7]: New
+        - generic [ref=e8]: Add a book from two photos of its cover and contents page
+      - generic [ref=e11]: Free for one school and 50 students. No card required.
+    - banner [ref=e13]:
+      - generic [ref=e14]:
+        - link "SchoolYar" [ref=e15] [cursor=pointer]:
+          - /url: /
+        - navigation "Site" [ref=e22]:
+          - list [ref=e23]:
+            - listitem [ref=e24]:
+              - button "Product" [ref=e25] [cursor=pointer]
+            - listitem [ref=e30]:
+              - button "Features" [ref=e31] [cursor=pointer]
+            - listitem [ref=e36]:
+              - link "Pricing" [ref=e37] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e39]:
+              - button "Support" [ref=e40] [cursor=pointer]
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - button "English" [ref=e48] [cursor=pointer]
+            - button "Switch to dark theme" [ref=e1301] [cursor=pointer]
+          - link "Sign in" [ref=e50] [cursor=pointer]:
+            - /url: /login
+          - link "Get started" [ref=e51] [cursor=pointer]:
+            - /url: /signup
+    - main [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - paragraph [ref=e58]:
+              - generic [ref=e60]: For schools and school groups
+            - heading "School management that does the typing for you." [level=1] [ref=e61]
+            - paragraph [ref=e62]: Fees and bank challans, attendance, exams and test papers in one place, with AI that turns a photo of the class diary into a message for parents on WhatsApp. For one school or a whole group.
+            - generic [ref=e63]:
+              - link "Start free" [ref=e64] [cursor=pointer]:
+                - /url: /signup
+              - link "See pricing" [ref=e65] [cursor=pointer]:
+                - /url: /pricing
+            - list [ref=e66]:
+              - listitem [ref=e67]: Free for one school
+              - listitem [ref=e71]: Every screen in Urdu
+              - listitem [ref=e75]: Ready for many campuses
+          - generic [ref=e79]:
+            - paragraph [ref=e80]: "Example: a campus's SchoolYar dashboard, with 1,248 students, 82% of October's challans paid and 94% present today, a chart of fee collection over six months, and a live list of challans paid, diaries posted and registers submitted."
+            - generic [aria-hidden] [ref=e81]:
+              - generic [ref=e82]: Search students, staff, challans
+              - generic [ref=e93]:
+                - complementary [ref=e94]:
+                  - generic [ref=e102]: Dashboard
+                  - generic [ref=e109]: Students
+                  - generic [ref=e116]: Fees
+                  - generic [ref=e122]: Attendance
+                  - generic [ref=e130]: Exams
+                  - generic [ref=e136]: WhatsApp
+                  - generic [ref=e140]: Test papers
+                - generic [ref=e148]:
+                  - generic [ref=e149]:
+                    - generic [ref=e150]:
+                      - paragraph [ref=e151]: Good morning
+                      - paragraph [ref=e152]: Main campus
+                    - generic [ref=e153]: Live activity
+                  - generic [ref=e155]:
+                    - generic [ref=e156]:
+                      - generic [ref=e157]: Students
+                      - generic [ref=e158]: 1,248
+                      - generic [ref=e159]: +36 this term
+                    - generic [ref=e160]:
+                      - generic [ref=e161]: Fees collected
+                      - generic [ref=e162]: 82%
+                      - generic [ref=e163]: of October's challans
+                    - generic [ref=e164]:
+                      - generic [ref=e165]: Present today
+                      - generic [ref=e166]: 94%
+                      - generic [ref=e167]: 1,173 of 1,248
+                    - generic [ref=e168]:
+                      - generic [ref=e169]: Diaries posted
+                      - generic [ref=e170]: "32"
+                      - generic [ref=e171]: today, on WhatsApp
+                  - generic [ref=e172]:
+                    - generic [ref=e173]:
+                      - generic [ref=e174]:
+                        - generic [ref=e175]: Fee collection
+                        - generic [ref=e176]: Challans paid, last six months
+                      - generic [ref=e177]:
+                        - generic [ref=e178]: May
+                        - generic [ref=e182]: Jun
+                        - generic [ref=e186]: Jul
+                        - generic [ref=e190]: Aug
+                        - generic [ref=e194]: Sep
+                        - generic [ref=e198]: Oct
+                    - generic [ref=e202]:
+                      - generic [ref=e203]: Today's register
+                      - img [ref=e204]:
+                        - generic [ref=e209]: 94%
+                      - list [ref=e210]:
+                        - listitem [ref=e211]:
+                          - generic [ref=e213]: Present
+                          - generic [ref=e214]: 94%
+                        - listitem [ref=e215]:
+                          - generic [ref=e217]: Absent
+                          - generic [ref=e218]: 4%
+                        - listitem [ref=e219]:
+                          - generic [ref=e221]: Late
+                          - generic [ref=e222]: 2%
+                  - generic [ref=e223]:
+                    - text: Live activity
+                    - list [ref=e224]:
+                      - listitem [ref=e1302]:
+                        - generic [ref=e1310]: Register submitted · Nursery-A
+                        - generic [ref=e1311]: just now
+                      - listitem [ref=e1312]:
+                        - generic [ref=e1320]: Test paper drafted · Grade 7 Science
+                        - generic [ref=e1321]: 2 min
+                      - listitem [ref=e1322]:
+                        - generic [ref=e1328]: Late fee added to 18 challans
+                        - generic [ref=e1329]: 6 min
+            - generic [ref=e254]:
+              - generic [ref=e255]: Diary posted
+              - generic [ref=e256]: 9-A parents' group
+            - generic [ref=e263]:
+              - generic [ref=e264]: Challan paid
+              - generic [ref=e265]: No. 10482 · bank copy
+            - generic [ref=e272]:
+              - generic [ref=e273]: Register submitted
+              - generic [ref=e274]: 28 present · 2 absent
+        - generic [ref=e275]:
+          - paragraph [ref=e276]: Everything a school office runs on
+          - generic [aria-hidden] [ref=e277]:
+            - generic [ref=e278]:
+              - generic [ref=e279]: Fee challans
+              - generic [ref=e281]: WhatsApp diary
+              - generic [ref=e283]: Test papers
+              - generic [ref=e285]: Attendance
+              - generic [ref=e287]: Exams
+              - generic [ref=e289]: Admissions
+              - generic [ref=e291]: ID cards
+              - generic [ref=e293]: Every campus
+              - generic [ref=e295]: Fee challans
+              - generic [ref=e297]: WhatsApp diary
+              - generic [ref=e299]: Test papers
+              - generic [ref=e301]: Attendance
+              - generic [ref=e303]: Exams
+              - generic [ref=e305]: Admissions
+              - generic [ref=e307]: ID cards
+              - generic [ref=e309]: Every campus
+              - generic [ref=e311]: Fee challans
+              - generic [ref=e313]: WhatsApp diary
+              - generic [ref=e315]: Test papers
+              - generic [ref=e317]: Attendance
+              - generic [ref=e319]: Exams
+              - generic [ref=e321]: Admissions
+              - generic [ref=e323]: ID cards
+              - generic [ref=e325]: Every campus
+            - generic [ref=e327]:
+              - generic [ref=e328]: Concessions
+              - generic [ref=e330]: Late fees
+              - generic [ref=e332]: Ledgers
+              - generic [ref=e334]: Result cards
+              - generic [ref=e336]: Roles
+              - generic [ref=e338]: Audit log
+              - generic [ref=e340]: Urdu
+              - generic [ref=e342]: Search
+              - generic [ref=e344]: Concessions
+              - generic [ref=e346]: Late fees
+              - generic [ref=e348]: Ledgers
+              - generic [ref=e350]: Result cards
+              - generic [ref=e352]: Roles
+              - generic [ref=e354]: Audit log
+              - generic [ref=e356]: Urdu
+              - generic [ref=e358]: Search
+              - generic [ref=e360]: Concessions
+              - generic [ref=e362]: Late fees
+              - generic [ref=e364]: Ledgers
+              - generic [ref=e366]: Result cards
+              - generic [ref=e368]: Roles
+              - generic [ref=e370]: Audit log
+              - generic [ref=e372]: Urdu
+              - generic [ref=e374]: Search
+        - generic [ref=e377]:
+          - generic [ref=e378]:
+            - generic [ref=e379]:
+              - paragraph [ref=e381]:
+                - generic [ref=e383]: Platform
+              - heading "One platform for the whole school office" [level=2] [ref=e385]
+              - paragraph [ref=e387]: Each part works on its own, and all of them share one list of students, classes and staff. Turn on what you need, when you need it.
+            - link "See all features" [ref=e389] [cursor=pointer]:
+              - /url: /features
+          - list [ref=e392]:
+            - listitem [ref=e393]:
+              - link "WhatsApp diary Teachers photograph the paper diary; parents get it in the class WhatsApp group once the teacher says OK. Read more" [ref=e395] [cursor=pointer]:
+                - /url: /features/whatsapp-diary
+                - generic [ref=e399]: WhatsApp diary
+                - generic [ref=e400]: Teachers photograph the paper diary; parents get it in the class WhatsApp group once the teacher says OK.
+                - generic [ref=e401]: Read more
+            - listitem [ref=e404]:
+              - link "WhatsApp attendance Teachers text the class and roll numbers; the register is submitted once they confirm the names. Read more" [ref=e406] [cursor=pointer]:
+                - /url: /features/whatsapp-attendance
+                - generic [ref=e410]: WhatsApp attendance
+                - generic [ref=e411]: Teachers text the class and roll numbers; the register is submitted once they confirm the names.
+                - generic [ref=e412]: Read more
+            - listitem [ref=e415]:
+              - link "Fees & challans Monthly bank challans in three copies, with concessions, late fees and arrears handled for you. Read more" [ref=e417] [cursor=pointer]:
+                - /url: /features/fee-management
+                - generic [ref=e422]: Fees & challans
+                - generic [ref=e423]: Monthly bank challans in three copies, with concessions, late fees and arrears handled for you.
+                - generic [ref=e424]: Read more
+            - listitem [ref=e427]:
+              - link "Test papers Upload chapters as PDFs or photos, then build MCQ, short and long question papers from them in English or Urdu. Read more" [ref=e429] [cursor=pointer]:
+                - /url: /features/test-paper-generator
+                - generic [ref=e434]: Test papers
+                - generic [ref=e435]: Upload chapters as PDFs or photos, then build MCQ, short and long question papers from them in English or Urdu.
+                - generic [ref=e436]: Read more
+            - listitem [ref=e439]:
+              - link "Attendance Registers by date and period, marked on screen or by WhatsApp message, with percentages that stay right after promotion. Read more" [ref=e441] [cursor=pointer]:
+                - /url: /features/attendance
+                - generic [ref=e446]: Attendance
+                - generic [ref=e447]: Registers by date and period, marked on screen or by WhatsApp message, with percentages that stay right after promotion.
+                - generic [ref=e448]: Read more
+            - listitem [ref=e451]:
+              - link "Multi-campus Every campus in one account, each with its own staff, students, fees and challan design. Read more" [ref=e453] [cursor=pointer]:
+                - /url: /features/multi-campus
+                - generic [ref=e459]: Multi-campus
+                - generic [ref=e460]: Every campus in one account, each with its own staff, students, fees and challan design.
+                - generic [ref=e461]: Read more
+            - listitem [ref=e464]:
+              - link "Urdu A full right-to-left Urdu interface, with test papers printed in Nastaliq. Read more" [ref=e466] [cursor=pointer]:
+                - /url: /features/urdu
+                - generic [ref=e472]: Urdu
+                - generic [ref=e473]: A full right-to-left Urdu interface, with test papers printed in Nastaliq.
+                - generic [ref=e474]: Read more
+            - listitem [ref=e477]:
+              - generic [ref=e478]:
+                - paragraph [ref=e479]: Also included
+                - list [ref=e480]:
+                  - listitem [ref=e481]:
+                    - generic [ref=e485]: An online admission form for each campus
+                  - listitem [ref=e486]:
+                    - generic [ref=e490]: Exams, marks and result cards
+                  - listitem [ref=e491]:
+                    - generic [ref=e496]: Student ID cards in your own design
+                  - listitem [ref=e497]:
+                    - generic [ref=e501]: One search across students, staff and challans
+                  - listitem [ref=e502]:
+                    - generic [ref=e506]: Staff invitations by email
+                  - listitem [ref=e507]:
+                    - generic [ref=e512]: An audit log of who changed what
+        - generic [ref=e514]:
+          - generic [ref=e515]:
+            - paragraph [ref=e517]:
+              - generic [ref=e519]: AI
+            - heading "AI that does the typing, then waits for your OK" [level=2] [ref=e521]
+            - paragraph [ref=e523]: "Each one starts with something your staff already have: a photo, a message or a book. SchoolYar does the reading and the writing, and a person approves the result before it is used."
+          - list [ref=e524]:
+            - listitem [ref=e525]:
+              - generic [ref=e527]:
+                - generic [ref=e528]: "01"
+                - heading "WhatsApp diary" [level=3] [ref=e529]
+                - paragraph [ref=e530]: You send
+                - paragraph [ref=e531]: A photo of the paper diary
+                - paragraph [ref=e535]: You get
+                - paragraph [ref=e536]: The diary in your campus's format, posted to the class parents' group once the teacher replies OK
+                - link "Read more" [ref=e537] [cursor=pointer]:
+                  - /url: /features/whatsapp-diary
+            - listitem [ref=e540]:
+              - generic [ref=e542]:
+                - generic [ref=e543]: "02"
+                - heading "WhatsApp attendance" [level=3] [ref=e544]
+                - paragraph [ref=e545]: You send
+                - paragraph [ref=e546]: “Nursery-A absent 12, 13”
+                - paragraph [ref=e550]: You get
+                - paragraph [ref=e551]: The students' names shown back, and the register submitted once the teacher replies OK
+                - link "Read more" [ref=e552] [cursor=pointer]:
+                  - /url: /features/whatsapp-attendance
+            - listitem [ref=e555]:
+              - generic [ref=e557]:
+                - generic [ref=e558]: "03"
+                - heading "A new book" [level=3] [ref=e559]
+                - paragraph [ref=e560]: You send
+                - paragraph [ref=e561]: Photos of its cover and contents page
+                - paragraph [ref=e565]: You get
+                - paragraph [ref=e566]: Title, class, subject, publisher, edition and the chapter list, filled in for a teacher to check
+                - link "Read more" [ref=e567] [cursor=pointer]:
+                  - /url: /features/test-paper-generator
+            - listitem [ref=e570]:
+              - generic [ref=e572]:
+                - generic [ref=e573]: "04"
+                - heading "Test papers" [level=3] [ref=e574]
+                - paragraph [ref=e575]: You send
+                - paragraph [ref=e576]: The chapters to test, from your own books
+                - paragraph [ref=e580]: You get
+                - paragraph [ref=e581]: A draft paper with the questions you asked for, ready to edit and print
+                - link "Read more" [ref=e582] [cursor=pointer]:
+                  - /url: /features/test-paper-generator
+        - generic [ref=e586]:
+          - generic [ref=e587]:
+            - paragraph [ref=e589]:
+              - generic [ref=e591]: Product tour
+            - heading "See SchoolYar at work" [level=2] [ref=e593]
+            - paragraph [ref=e595]: Pick a part of the school office and watch what it does.
+          - generic [ref=e597]:
+            - tablist "See SchoolYar at work" [ref=e598]:
+              - tab "WhatsApp diary" [selected] [ref=e599]
+              - tab "Fees & challans" [ref=e604]
+              - tab "Attendance" [ref=e609]
+              - tab "Test papers" [ref=e614]
+              - tab "Multi-campus" [ref=e619]
+              - tab "Urdu" [ref=e625]
+            - tabpanel "WhatsApp diary" [ref=e631]:
+              - generic [ref=e633]:
+                - generic [ref=e634]:
+                  - heading "The class diary, in the parents' group before the last bell" [level=3] [ref=e635]
+                  - paragraph [ref=e636]: Teachers keep writing the diary on paper. They photograph the page and send it to the school's WhatsApp number. SchoolYar reads it, writes it in your campus's format, and posts it to the right class group once the teacher replies OK.
+                  - list [ref=e638]:
+                    - listitem [ref=e639]:
+                      - generic [ref=e643]:
+                        - paragraph [ref=e644]: Nothing posts without OK
+                        - paragraph [ref=e645]: The diary is posted only after the teacher replies OK to the exact text they were shown.
+                    - listitem [ref=e646]:
+                      - generic [ref=e650]:
+                        - paragraph [ref=e651]: Only your staff get an answer
+                        - paragraph [ref=e652]: The school's number answers staff of that campus whose saved phone matches. Parents and strangers get no reply at all.
+                    - listitem [ref=e653]:
+                      - generic [ref=e657]:
+                        - paragraph [ref=e658]: Only their own classes
+                        - paragraph [ref=e659]: A teacher can post to the section they class-teach or the classes they teach a subject in. The AI suggests a class from that list and cannot pick one outside it.
+                  - link "Read more" [ref=e660] [cursor=pointer]:
+                    - /url: /features/whatsapp-diary
+                - generic [ref=e664]:
+                  - paragraph [ref=e665]: "Demo: a teacher sends a photo of the class diary to the school's WhatsApp number. SchoolYar reads it and replies with the diary for Grade 9-A. The teacher adds a line, replies OK, and the diary is posted to the 9-A parents' group."
+                  - generic [aria-hidden] [ref=e666]:
+                    - generic [ref=e668]:
+                      - generic [ref=e669]: Class 9-AThursday 15-10-26
+                      - generic [ref=e672]:
+                        - generic [ref=e673]: "Maths: Ex 4.3, Q1-6"
+                        - generic [ref=e674]: "English: poem Daffodils"
+                        - generic [ref=e675]: "Urdu: lesson 5 exercise"
+                        - generic [ref=e676]: "Science: lab notebook"
+                      - paragraph [ref=e677]: Ms. Hina
+                    - generic [ref=e681]:
+                      - generic [ref=e682]: 2:43
+                      - generic [ref=e692]:
+                        - generic [ref=e695]: S
+                        - generic [ref=e696]:
+                          - generic [ref=e697]: Sunrise School
+                          - generic [ref=e698]: SchoolYar assistant
+                      - generic [ref=e699]: Today
+                      - generic [ref=e701]: Message
+                    - generic [ref=e716]:
+                      - generic [ref=e717]:
+                        - generic [ref=e718]: 9-A Parents
+                        - generic [ref=e719]: now
+                      - paragraph [ref=e720]: "Sunrise School: 📚 Diary · Thursday 15 Oct"
+                      - paragraph [ref=e721]: "Maths: Exercise 4.3, Q1–6 · English: Learn the…"
+                  - generic [ref=e722]:
+                    - list [ref=e723]:
+                      - listitem [ref=e724]:
+                        - paragraph [ref=e726]: 1 Teacher sends a photo
+                      - listitem [ref=e727]:
+                        - paragraph [ref=e729]: 2 SchoolYar reads it
+                      - listitem [ref=e730]:
+                        - paragraph [ref=e732]: 3 Teacher checks it
+                      - listitem [ref=e733]:
+                        - paragraph [ref=e735]: 4 Parents get it
+                    - button "Pause the demo" [ref=e736]
+        - generic [ref=e742]:
+          - generic [ref=e743]:
+            - generic [ref=e744]:
+              - paragraph [ref=e746]:
+                - generic [ref=e748]: Security
+              - heading "Online, secure and ready to grow" [level=2] [ref=e750]
+              - paragraph [ref=e752]: Run every campus from one account in the browser, with the walls in the right places.
+            - generic [ref=e753]:
+              - generic [ref=e759]:
+                - term [ref=e760]: Nothing to install
+                - definition [ref=e761]: Staff use SchoolYar in the browser, on the office computer or a phone. There is no server for your school to keep.
+              - generic [ref=e768]:
+                - term [ref=e769]: Isolated by the database
+                - definition [ref=e770]: Each organization's data is kept apart by the database itself, not by a filter someone remembered to write.
+              - generic [ref=e775]:
+                - term [ref=e776]: WhatsApp built in
+                - definition [ref=e777]: Link a campus's WhatsApp number once, and the diary, attendance and fee notices run through it.
+              - generic [ref=e783]:
+                - term [ref=e784]: Roles and permissions
+                - definition [ref=e785]: Each person sees only what their role and campus allow, and revoking access takes effect immediately.
+              - generic [ref=e792]:
+                - term [ref=e793]: An audit log
+                - definition [ref=e794]: Payment reversals, register changes and role edits are recorded with who made them and when.
+          - generic [aria-hidden] [ref=e795]:
+            - generic [ref=e811]: SchoolYar
+            - generic [ref=e818]: Students
+            - generic [ref=e826]: Fees
+            - generic [ref=e832]: Attendance
+            - generic [ref=e838]: Exams
+            - generic [ref=e844]: Test papers
+            - generic [ref=e850]: WhatsApp
+            - generic [ref=e855]: Admissions
+            - generic [ref=e861]: ID cards
+        - generic [ref=e869]:
+          - generic [ref=e870]:
+            - paragraph [ref=e872]:
+              - generic [ref=e874]: For every role
+            - heading "Made for everyone in the school" [level=2] [ref=e876]
+            - paragraph [ref=e878]: One system, and each person sees the part that is theirs.
+          - list [ref=e879]:
+            - listitem [ref=e880]:
+              - generic [ref=e882]:
+                - heading "Owners and principals" [level=3] [ref=e888]
+                - paragraph [ref=e889]: Every campus at a glance, and the final word on changes.
+                - list [ref=e890]:
+                  - listitem [ref=e891]:
+                    - generic [ref=e895]: Switch between campuses
+                  - listitem [ref=e896]:
+                    - generic [ref=e900]: Approve changes to submitted registers
+                  - listitem [ref=e901]:
+                    - generic [ref=e905]: Reverse a payment, with a recorded reason
+                  - listitem [ref=e906]:
+                    - generic [ref=e910]: Build the roles your school uses
+            - listitem [ref=e911]:
+              - generic [ref=e913]:
+                - heading "Teachers" [level=3] [ref=e918]
+                - paragraph [ref=e919]: Work from the phone already in their pocket.
+                - list [ref=e920]:
+                  - listitem [ref=e921]:
+                    - generic [ref=e925]: Send the diary as a photo
+                  - listitem [ref=e926]:
+                    - generic [ref=e930]: Take the register in one WhatsApp message
+                  - listitem [ref=e931]:
+                    - generic [ref=e935]: Build test papers from the class's own books
+                  - listitem [ref=e936]:
+                    - generic [ref=e940]: Mark registers on the web by date or period
+            - listitem [ref=e941]:
+              - generic [ref=e943]:
+                - heading "Accountants" [level=3] [ref=e947]
+                - paragraph [ref=e948]: Challans, payments and ledgers without the arithmetic.
+                - list [ref=e949]:
+                  - listitem [ref=e950]:
+                    - generic [ref=e954]: Issue a month's challans for a class or campus
+                  - listitem [ref=e955]:
+                    - generic [ref=e959]: Record payments against each challan
+                  - listitem [ref=e960]:
+                    - generic [ref=e964]: Concessions and late fees applied by rule
+                  - listitem [ref=e965]:
+                    - generic [ref=e969]: A running ledger for every student
+            - listitem [ref=e970]:
+              - generic [ref=e972]:
+                - heading "Parents" [level=3] [ref=e979]
+                - paragraph [ref=e980]: Nothing to install and nothing to learn.
+                - list [ref=e981]:
+                  - listitem [ref=e982]:
+                    - generic [ref=e986]: The class diary in their WhatsApp group
+                  - listitem [ref=e987]:
+                    - generic [ref=e991]: The month's fee and due date on WhatsApp
+                  - listitem [ref=e992]:
+                    - generic [ref=e996]: A printed challan to pay at the bank
+                  - listitem [ref=e997]:
+                    - generic [ref=e1001]: An online admission form for each campus
+        - generic [ref=e1004]:
+          - generic [ref=e1005]:
+            - paragraph [ref=e1007]:
+              - generic [ref=e1009]: In numbers
+            - heading "SchoolYar in numbers" [level=2] [ref=e1011]
+          - generic [ref=e1012]:
+            - generic [ref=e1013]:
+              - term [ref=e1014]: students free, on one school
+              - definition [ref=e1015]: "0"
+            - generic [ref=e1016]:
+              - term [ref=e1017]: attendance marks, not two
+              - definition [ref=e1018]: "0"
+            - generic [ref=e1019]:
+              - term [ref=e1020]: challan copies on one page
+              - definition [ref=e1021]: "0"
+            - generic [ref=e1022]:
+              - term [ref=e1023]: questions in a single test paper
+              - definition [ref=e1024]: "0"
+        - generic [ref=e1026]:
+          - generic [ref=e1027]:
+            - paragraph [ref=e1029]:
+              - generic [ref=e1031]: Why SchoolYar
+            - heading "Why school offices choose SchoolYar" [level=2] [ref=e1033]
+            - paragraph [ref=e1035]: Less retyping, fewer calculators, and nothing that runs without a person's OK.
+          - list [ref=e1036]:
+            - listitem [ref=e1037]:
+              - generic [ref=e1045]:
+                - heading "Free to start" [level=3] [ref=e1046]
+                - paragraph [ref=e1047]: One school and 50 students cost nothing, and no card is needed.
+            - listitem [ref=e1048]:
+              - generic [ref=e1054]:
+                - heading "Ready the same day" [level=3] [ref=e1055]
+                - paragraph [ref=e1056]: Create your organization, add classes and invite staff in an afternoon.
+            - listitem [ref=e1057]:
+              - generic [ref=e1064]:
+                - heading "Nothing to install" [level=3] [ref=e1065]
+                - paragraph [ref=e1066]: Staff work in the browser; teachers use the WhatsApp they already have.
+            - listitem [ref=e1067]:
+              - generic [ref=e1077]:
+                - heading "Your school's format" [level=3] [ref=e1078]
+                - paragraph [ref=e1079]: Your challan design, your diary template and your own role names.
+            - listitem [ref=e1080]:
+              - generic [ref=e1088]:
+                - heading "Grows with your group" [level=3] [ref=e1089]
+                - paragraph [ref=e1090]: Add campuses as you open them, all in the same account.
+            - listitem [ref=e1091]:
+              - generic [ref=e1098]:
+                - heading "Secure by design" [level=3] [ref=e1099]
+                - paragraph [ref=e1100]: Data isolated by the database, and sensitive changes logged with a name.
+            - listitem [ref=e1101]:
+              - generic [ref=e1109]:
+                - heading "People stay in charge" [level=3] [ref=e1110]
+                - paragraph [ref=e1111]: AI drafts the work; nothing reaches parents or the register without OK.
+            - listitem [ref=e1112]:
+              - generic [ref=e1119]:
+                - heading "Records never locked" [level=3] [ref=e1120]
+                - paragraph [ref=e1121]: If a payment fails, the panel turns read-only. Nothing is deleted.
+            - listitem [ref=e1122]:
+              - generic [ref=e1130]:
+                - heading "In your language" [level=3] [ref=e1131]
+                - paragraph [ref=e1132]: Every screen in English or Urdu, chosen by each person.
+        - generic [ref=e1134]:
+          - generic [ref=e1135]:
+            - paragraph [ref=e1137]:
+              - generic [ref=e1139]: Getting started
+            - heading "Start in three steps" [level=2] [ref=e1141]
+          - list [ref=e1143]:
+            - listitem [ref=e1144]:
+              - generic [aria-hidden] [ref=e1145]: "1"
+              - heading "Create your organization" [level=3] [ref=e1146]
+              - paragraph [ref=e1147]: Sign up free and add your first school. No card required.
+            - listitem [ref=e1148]:
+              - generic [aria-hidden] [ref=e1149]: "2"
+              - heading "Add classes and staff" [level=3] [ref=e1150]
+              - paragraph [ref=e1151]: Set up classes and sections, add your students, and invite staff by email with the role each one needs.
+            - listitem [ref=e1152]:
+              - generic [aria-hidden] [ref=e1153]: "3"
+              - heading "Turn on what you need" [level=3] [ref=e1154]
+              - paragraph [ref=e1155]: Link the school's WhatsApp number for the diary and attendance, set up fee heads for challans, and add your books for test papers.
+        - generic [ref=e1158]:
+          - paragraph [aria-hidden] [ref=e1159]: Yaar.
+          - generic [ref=e1160]:
+            - paragraph [ref=e1162]:
+              - generic [ref=e1164]: Our name
+            - heading "Yaar means friend." [level=2] [ref=e1166]
+            - paragraph [ref=e1168]: SchoolYar is the friend in your school office. It does the retyping, the adding up and the reminding, so your staff can spend their time on the children.
+        - generic [ref=e1171]:
+          - generic [ref=e1172]:
+            - paragraph [ref=e1174]:
+              - generic [ref=e1176]: Questions
+            - heading "Questions schools ask" [level=2] [ref=e1178]
+            - paragraph [ref=e1180]:
+              - text: Something else?
+              - link "Start free" [ref=e1181] [cursor=pointer]:
+                - /url: /signup
+              - text: and try it with your own classes.
+          - generic [ref=e1183]:
+            - heading [level=3] [ref=e1185]:
+              - button "Is there a free plan?" [ref=e1186] [cursor=pointer]
+            - heading [level=3] [ref=e1190]:
+              - button "Do teachers or parents need to install an app?" [ref=e1191] [cursor=pointer]
+            - heading [level=3] [ref=e1195]:
+              - button "Does the AI post anything on its own?" [ref=e1196] [cursor=pointer]
+            - heading [level=3] [ref=e1200]:
+              - button "Does it work in Urdu?" [ref=e1201] [cursor=pointer]
+            - heading [level=3] [ref=e1205]:
+              - button "Can we run several campuses?" [ref=e1206] [cursor=pointer]
+            - heading [level=3] [ref=e1210]:
+              - button "Is our data kept private?" [ref=e1211] [cursor=pointer]
+        - generic [ref=e1217]:
+          - paragraph [ref=e1219]:
+            - generic [ref=e1221]: Start
+          - heading "Ready when you are" [level=2] [ref=e1223]
+          - paragraph [ref=e1225]: Create your organization, add your first school, and invite your staff. It takes a few minutes.
+          - generic [ref=e1226]:
+            - link "Start free" [ref=e1227] [cursor=pointer]:
+              - /url: /signup
+            - link "See pricing" [ref=e1228] [cursor=pointer]:
+              - /url: /pricing
+          - paragraph [ref=e1230]: Free for one school and 50 students. No card required.
+    - contentinfo [ref=e1231]:
+      - generic [ref=e1232]:
+        - generic [ref=e1233]:
+          - generic [ref=e1234]:
+            - link "SchoolYar" [ref=e1235] [cursor=pointer]:
+              - /url: /
+            - paragraph [ref=e1241]: "School management for schools and school groups: fees and bank challans, attendance, exams, test papers from your own books, and a WhatsApp diary teachers send as a photo."
+            - link "Start free" [ref=e1242] [cursor=pointer]:
+              - /url: /signup
+          - navigation "Features" [ref=e1244]:
+            - paragraph [ref=e1245]: Features
+            - list [ref=e1246]:
+              - listitem [ref=e1247]:
+                - link "WhatsApp diary" [ref=e1248] [cursor=pointer]:
+                  - /url: /features/whatsapp-diary
+              - listitem [ref=e1249]:
+                - link "WhatsApp attendance" [ref=e1250] [cursor=pointer]:
+                  - /url: /features/whatsapp-attendance
+              - listitem [ref=e1251]:
+                - link "Fees & challans" [ref=e1252] [cursor=pointer]:
+                  - /url: /features/fee-management
+              - listitem [ref=e1253]:
+                - link "Test papers" [ref=e1254] [cursor=pointer]:
+                  - /url: /features/test-paper-generator
+              - listitem [ref=e1255]:
+                - link "Attendance" [ref=e1256] [cursor=pointer]:
+                  - /url: /features/attendance
+              - listitem [ref=e1257]:
+                - link "Multi-campus" [ref=e1258] [cursor=pointer]:
+                  - /url: /features/multi-campus
+              - listitem [ref=e1259]:
+                - link "Urdu" [ref=e1260] [cursor=pointer]:
+                  - /url: /features/urdu
+          - navigation "Product" [ref=e1262]:
+            - paragraph [ref=e1263]: Product
+            - list [ref=e1264]:
+              - listitem [ref=e1265]:
+                - link "Overview" [ref=e1266] [cursor=pointer]:
+                  - /url: /#platform
+              - listitem [ref=e1267]:
+                - link "Product tour" [ref=e1268] [cursor=pointer]:
+                  - /url: /#tour
+              - listitem [ref=e1269]:
+                - link "Why schools choose us" [ref=e1270] [cursor=pointer]:
+                  - /url: /#why
+              - listitem [ref=e1271]:
+                - link "Security and privacy" [ref=e1272] [cursor=pointer]:
+                  - /url: /#security
+              - listitem [ref=e1273]:
+                - link "All features" [ref=e1274] [cursor=pointer]:
+                  - /url: /features
+              - listitem [ref=e1275]:
+                - link "Pricing" [ref=e1276] [cursor=pointer]:
+                  - /url: /pricing
+          - navigation "Support" [ref=e1278]:
+            - paragraph [ref=e1279]: Support
+            - list [ref=e1280]:
+              - listitem [ref=e1281]:
+                - link "Questions schools ask" [ref=e1282] [cursor=pointer]:
+                  - /url: /#questions
+              - listitem [ref=e1283]:
+                - link "Plans and billing" [ref=e1284] [cursor=pointer]:
+                  - /url: /pricing#questions
+              - listitem [ref=e1285]:
+                - link "Sign in" [ref=e1286] [cursor=pointer]:
+                  - /url: /login
+              - listitem [ref=e1287]:
+                - link "Forgot password" [ref=e1288] [cursor=pointer]:
+                  - /url: /forgot-password
+              - listitem [ref=e1289]:
+                - link "Operator console" [ref=e1290] [cursor=pointer]:
+                  - /url: /platform/login
+        - generic [ref=e1291]:
+          - paragraph [ref=e1292]: © 2026 SchoolYar. All rights reserved.
+          - generic [ref=e1293]:
+            - generic [ref=e1294]: Language
+            - radiogroup "Language" [ref=e1295]:
+              - radio "English" [checked] [ref=e1296] [cursor=pointer]
+              - radio "Urdu" [ref=e1297] [cursor=pointer]
+            - button "Switch to dark theme" [ref=e1330] [cursor=pointer]
+      - paragraph [aria-hidden] [ref=e1300]: SchoolYar
+  - region "Notifications (F8)":
+    - list
+  - button "Open Tanstack query devtools" [ref=e1381] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e1435] [cursor=pointer]
+  - alert [ref=e1439]

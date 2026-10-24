@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { CalendarCheck, CircleAlert, CircleCheck, CircleDashed } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CalendarCheck, CircleAlert, CircleCheck, CircleDashed, Lock } from "lucide-react";
 
+import { AttendanceTabs } from "@/components/attendance/attendance-tabs";
 import { EmptyState, ErrorState } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDailyOverview, useOpenRegister } from "@/hooks/use-attendance";
+import { useAttendanceSession, useDailyOverview, useOpenRegister } from "@/hooks/use-attendance";
 import type { SectionDayStatus } from "@/lib/api/types";
 import { RegisterDialog } from "./register-dialog";
 
@@ -77,11 +79,34 @@ export function AttendanceView({
   canMark: boolean;
   canAmend: boolean;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [date, setDate] = React.useState(todayIso);
   const [openSessionId, setOpenSessionId] = React.useState<string | null>(null);
 
   const query = useDailyOverview(date);
   const openRegister = useOpenRegister();
+
+  // A register linked from global search (`?session=`) opens on arrival, and the
+  // board behind it moves to that register's day — so closing the dialog lands on
+  // its own row, not on today's. Same query key as the dialog's, so one fetch.
+  const linkedSessionId = searchParams.get("session");
+  const linkedDate = useAttendanceSession(linkedSessionId).data?.session_date;
+
+  React.useEffect(() => {
+    if (linkedSessionId) setOpenSessionId(linkedSessionId);
+  }, [linkedSessionId]);
+
+  React.useEffect(() => {
+    if (linkedDate) setDate(linkedDate);
+  }, [linkedDate]);
+
+  function closeRegister() {
+    setOpenSessionId(null);
+    // Drop the link once followed, so a refresh does not reopen the register and
+    // the same search result can be opened again.
+    if (linkedSessionId) router.replace("/attendance");
+  }
 
   const isToday = date === todayIso();
 
@@ -106,6 +131,9 @@ export function AttendanceView({
   }
 
   const overview = query.data;
+  // The day after a register's date is the last day `attendance:mark` can touch it.
+  // An amender can still open and correct it, so only they keep the buttons.
+  const lockedForMe = (overview?.locked ?? false) && !canAmend;
 
   return (
     <div className="space-y-6">
@@ -138,6 +166,20 @@ export function AttendanceView({
           </div>
         }
       />
+      {/* Registers, class analytics and every student's attendance are three views
+          of one module; the tabs are how a head teacher moves between them. */}
+      <AttendanceTabs />
+
+      {lockedForMe && (
+        <p className="flex items-start gap-2 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
+          <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="text-pretty">
+            Attendance for {date} is locked. Registers can be taken or changed until the
+            end of the following day; after that only someone with the &ldquo;amend
+            attendance&rdquo; permission can correct them.
+          </span>
+        </p>
+      )}
 
       {overview && (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -225,12 +267,12 @@ export function AttendanceView({
                         <Button
                           size="sm"
                           variant={row.session_id ? "outline" : "default"}
-                          disabled={!canMark && row.session_id === null}
+                          disabled={(!canMark || lockedForMe) && row.session_id === null}
                           onClick={() => void handleOpen(row)}
                         >
                           {row.session_id === null
                             ? "Take"
-                            : row.status === "submitted"
+                            : row.status === "submitted" || lockedForMe
                               ? "View"
                               : "Continue"}
                         </Button>
@@ -246,7 +288,7 @@ export function AttendanceView({
 
       <RegisterDialog
         sessionId={openSessionId}
-        onClose={() => setOpenSessionId(null)}
+        onClose={closeRegister}
         canMark={canMark}
         canAmend={canAmend}
       />
@@ -269,7 +311,7 @@ function SummaryTile({
     <Card>
       <CardContent className="flex items-center gap-3 py-4">
         <Icon
-          className={emphasis ? "h-5 w-5 text-amber-600" : "h-5 w-5 text-muted-foreground"}
+          className={emphasis ? "h-5 w-5 text-warning" : "h-5 w-5 text-muted-foreground"}
           aria-hidden
         />
         <div>

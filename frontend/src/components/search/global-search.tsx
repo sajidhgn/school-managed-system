@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarCheck,
   CornerDownLeft,
   GraduationCap,
   Layers,
@@ -61,6 +62,7 @@ import { cn } from "@/lib/utils";
 
 /** Icons the server can name, resolved explicitly so the bundler can tree-shake. */
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  CalendarCheck,
   GraduationCap,
   Users,
   Receipt,
@@ -325,8 +327,11 @@ function SearchTrigger({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-9 items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-muted-foreground shadow-sm transition-colors",
-        "hover:border-ring hover:text-foreground",
+        // HeroUI's search field as a pill: a gray fill that deepens under the
+        // pointer and presses in, rather than a bordered box.
+        "flex h-9 cursor-pointer items-center gap-2 rounded-full bg-[var(--default)] px-3 text-sm text-muted-foreground",
+        "transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98]",
+        "hover:bg-[var(--default-hover)] hover:text-foreground",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         // Icon-only below `sm`, where a full search field would crowd out the
         // campus name the header exists to show.
@@ -336,7 +341,7 @@ function SearchTrigger({
     >
       <Search className="size-4 shrink-0" aria-hidden />
       <span className="hidden truncate sm:inline">{placeholder}</span>
-      <kbd className="ms-auto hidden rounded border border-border px-1.5 py-0.5 text-[10px] sm:inline">
+      <kbd className="ms-auto hidden rounded-md bg-card px-1.5 py-0.5 text-[10px] shadow-[var(--shadow-card)] sm:inline">
         ⌘K
       </kbd>
     </button>

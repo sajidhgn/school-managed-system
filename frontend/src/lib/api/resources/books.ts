@@ -4,6 +4,8 @@ import type {
   BookDetail,
   BookPageRead,
   BookRead,
+  BookScan,
+  BookScanStatus,
   BookSearchHit,
   BookUpdate,
   ChapterInput,
@@ -21,6 +23,15 @@ export const booksApi = {
     api.get<BookRead[]>("/books", { params: { class_id: classId ?? undefined } }),
   get: (id: string) => api.get<BookDetail>(`/books/${id}`),
   create: (body: BookCreate) => api.post<BookDetail>("/books", body),
+  /** Photos or a PDF of a new book's cover and contents pages -> its details as
+   * the AI read them. Nothing is saved; the answer pre-fills "Add a book". */
+  scan: (files: File[]) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file, file.name);
+    return api.upload<BookScan>("/books/scan", form);
+  },
+  /** Whether reading with AI will work: the provider's key, model and server. */
+  scanStatus: () => api.get<BookScanStatus>("/books/scan/status"),
   update: (id: string, body: BookUpdate) => api.patch<BookDetail>(`/books/${id}`, body),
   remove: (id: string) => api.delete<void>(`/books/${id}`),
 

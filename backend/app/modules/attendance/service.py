@@ -47,6 +47,13 @@ THE TWO RULES THAT SHAPE EVERY METHOD BELOW
     on. It is the same separation `fee:collect` and `fee:void` draw across a cash
     drawer.
 
+3.  A REGISTER LOCKS ONCE THE DAY AFTER ITS DATE IS OVER.
+    `attendance:mark` may open, mark, submit or discard a register only through
+    the day after its date -- a full 24 hours after the school day it records has
+    ended. After that it is LOCKED, draft or not, and only `attendance:amend` can
+    change it. Without the lock, "submitted" is the only thing protecting history,
+    and a register nobody submitted could be rewritten by its teacher weeks later.
+
 =============================================================================
 THE TEACHER'S BOUNDARY
 =============================================================================
@@ -104,12 +111,21 @@ from app.modules.students.service import EnrollmentService
 
 logger = get_logger(__name__)
 
-# How far back an ordinary `attendance:mark` holder may open a register.
+# How many days after its date a register stays open to `attendance:mark` -- rule 3
+# in the module docstring. 1 = today's and yesterday's registers; the day before
+# yesterday's is locked.
 #
-# NOT A SECURITY BOUNDARY -- `attendance:amend` has no such limit, and the window is
-# generous. It exists because the overwhelmingly common cause of a register dated
-# three months ago is a mistyped date, and a system that accepts it silently files a
-# class's attendance into a term that has already been reported on.
+# The day after, not just the day itself: registers are routinely finished the next
+# morning (a late note from home, a teacher off sick), and a lock that shut at
+# midnight would send every one of those to the principal.
+_MARK_WINDOW_DAYS = 1
+
+# How far back even an `attendance:amend` holder may open a register.
+#
+# NOT A SECURITY BOUNDARY -- the marking window above is the one that holds teachers
+# back. This exists because the overwhelmingly common cause of a register dated three
+# months ago is a mistyped date, and a system that accepts it silently files a class's
+# attendance into a term that has already been reported on.
 _BACKDATE_LIMIT_DAYS = 30
 
 
@@ -128,7 +144,12 @@ class AttendanceService:
     # -- opening ------------------------------------------------------------
 
     async def open_session(
-        self, payload: AttendanceSessionOpen, *, actor_id: UUID, teacher_id: UUID | None = None
+        self,
+        payload: AttendanceSessionOpen,
+        *,
+        actor_id: UUID,
+        may_amend: bool,
+        teacher_id: UUID | None = None,
     ) -> AttendanceSessionDetail:
         """Open (or return) the register for one section, date and period.
 
@@ -142,6 +163,7 @@ class AttendanceService:
         await self._assert_teaches(section.id, teacher_id, "Section not found.")
         session_date = payload.session_date or datetime.now(UTC).date()
         self._assert_markable_date(session_date)
+        self._assert_not_locked(session_date, may_amend=may_amend)
 
         existing = await self.sessions.find_register(section.id, session_date, payload.period)
         if existing is not None:
@@ -360,6 +382,7 @@ class AttendanceService:
         not_started = sum(1 for r in rows if r.session_id is None)
         return DailyOverview(
             session_date=day,
+            locked=self._is_locked(day),
             sections=rows,
             sections_total=len(rows),
             sections_submitted=submitted,
@@ -382,12 +405,15 @@ class AttendanceService:
         `may_amend` is passed in by the router rather than resolved here, because
         permission resolution is an HTTP-layer concern and this service must stay
         callable from a CLI or a worker. What the service owns is the RULE: a
-        SUBMITTED register is closed to `attendance:mark`, and every change to one
-        is audited individually with the reason given.
+        SUBMITTED or LOCKED register is closed to `attendance:mark`, and every change
+        to a submitted one is audited individually with the reason given.
         """
         register = await self._get_or_404(session_id, teacher_id)
         is_amendment = register.status is AttendanceSessionStatus.SUBMITTED
 
+        # Before the submitted check: past the window, reopening would not hand the
+        # register back to its teacher either, so "locked" is the honest answer.
+        self._assert_not_locked(register.session_date, may_amend=may_amend)
         if is_amendment and not may_amend:
             raise ConflictError(
                 "This register has been submitted. Correcting it requires the "
@@ -480,16 +506,23 @@ class AttendanceService:
         return await self.detail(session_id)
 
     async def submit(
-        self, session_id: UUID, *, actor_id: UUID, teacher_id: UUID | None = None
+        self,
+        session_id: UUID,
+        *,
+        actor_id: UUID,
+        may_amend: bool,
+        teacher_id: UUID | None = None,
     ) -> AttendanceSessionDetail:
         """Assert that the register is complete and correct.
 
         From here it feeds reports and absence alerts, and further changes need
-        `attendance:amend`.
+        `attendance:amend`. A draft left past the marking window is submitted by an
+        amender, not by the teacher who abandoned it.
         """
         register = await self._get_or_404(session_id, teacher_id)
         if register.status is AttendanceSessionStatus.SUBMITTED:
             raise ConflictError("This register has already been submitted.")
+        self._assert_not_locked(register.session_date, may_amend=may_amend)
 
         tally = self._tally(await self.records.list_for_session(session_id))
         await self.sessions.update(
@@ -533,7 +566,12 @@ class AttendanceService:
         return await self.detail(session_id)
 
     async def discard(
-        self, session_id: UUID, *, actor_id: UUID, teacher_id: UUID | None = None
+        self,
+        session_id: UUID,
+        *,
+        actor_id: UUID,
+        may_amend: bool,
+        teacher_id: UUID | None = None,
     ) -> None:
         """Delete a DRAFT register and its pre-filled lines.
 
@@ -547,6 +585,7 @@ class AttendanceService:
             raise ConflictError(
                 "A submitted register cannot be discarded. Reopen and amend it instead."
             )
+        self._assert_not_locked(register.session_date, may_amend=may_amend)
 
         await self.records.delete_for_session(session_id)
         await self.session.delete(register)
@@ -717,6 +756,27 @@ class AttendanceService:
                 code="DATE_TOO_OLD",
             )
 
+    @staticmethod
+    def _is_locked(session_date: date) -> bool:
+        """Whether `session_date` is past the marking window -- rule 3.
+
+        Same clock as `_assert_markable_date` and the daily overview, so the date a
+        register can be opened for and the date it locks on cannot disagree.
+        """
+        return (datetime.now(UTC).date() - session_date).days > _MARK_WINDOW_DAYS
+
+    @classmethod
+    def _assert_not_locked(cls, session_date: date, *, may_amend: bool) -> None:
+        """409 for an `attendance:mark`-only caller writing to a locked date."""
+        if may_amend or not cls._is_locked(session_date):
+            return
+        raise ConflictError(
+            f"Attendance for {session_date:%d %b %Y} is locked. Registers can be changed "
+            "until the end of the following day; correcting it now requires the "
+            "'attendance:amend' permission.",
+            code="ATTENDANCE_LOCKED",
+        )
+
     async def _all_sections(
         self, teacher_id: UUID | None = None
     ) -> list[tuple[Section, SchoolClass]]:
@@ -787,6 +847,7 @@ class AttendanceService:
             "taken_by_user_id": register.taken_by_user_id,
             "submitted_at": register.submitted_at,
             "notes": register.notes,
+            "locked": self._is_locked(register.session_date),
             "present_count": self._present_from(tally),
             "absent_count": tally.get(AttendanceStatus.ABSENT.value, 0),
             "total_count": sum(tally.values()),

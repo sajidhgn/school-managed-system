@@ -1,5 +1,9 @@
 import type { StructureListParams, VoucherListParams } from "@/lib/api/resources/fees";
-import type { SessionListParams } from "@/lib/api/resources/attendance";
+import type {
+  AnalyticsParams,
+  SessionListParams,
+  StudentAttendanceParams,
+} from "@/lib/api/resources/attendance";
 import type { ExamListParams } from "@/lib/api/resources/exams";
 import type { PaperListParams, QuestionBankParams } from "@/lib/api/resources/papers";
 import type { SubjectListParams } from "@/lib/api/resources/subjects";
@@ -76,6 +80,8 @@ export const queryKeys = {
     // Not under `detail`: polling the book while a chapter is processed must not
     // refetch every search the teacher already ran.
     search: (bookId: string, q: string) => ["books-search", bookId, q] as const,
+    // Not under `all`: adding a book must not re-check the AI provider.
+    scanStatus: ["books-scan-status"] as const,
   },
 
   papers: {
@@ -115,6 +121,10 @@ export const queryKeys = {
       ["attendance", "student", studentId, from, to] as const,
     sectionReport: (sectionId: string, from: string, to: string) =>
       ["attendance", "section", sectionId, from, to] as const,
+    analytics: (params: AnalyticsParams) => ["attendance", "analytics", params] as const,
+    students: (params: StudentAttendanceParams) => ["attendance", "students", params] as const,
+    calendar: (studentId: string, from: string | null, to: string | null) =>
+      ["attendance", "calendar", studentId, from, to] as const,
   },
 
   fees: {

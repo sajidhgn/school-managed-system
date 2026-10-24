@@ -6,82 +6,109 @@
 /*
  * Design tokens.
  *
- * A school admin tool is read far more than it is clicked: registers, rosters,
- * fee tables. So the palette stays quiet — near-neutral surfaces, one indigo
- * accent for action, and saturated colour reserved exclusively for status, so
- * a red cell always means something is wrong.
+ * The public site's palette, carried into the panel: black, white and gray, with
+ * one blue. The sidebar is a black band like the site's header, the page is fog
+ * gray, cards are white, and blue is kept for the thing to do next — the primary
+ * button, the open page in the nav, focus. Saturated colour beyond that blue is
+ * reserved for status, so a red cell always means something is wrong.
+ *
+ * TWO NAMES ARE PREFIXED, AND IT IS DELIBERATE
+ *   HeroUI (heroui.css) reads `--muted` as a text colour and `--accent` as the
+ *   brand colour. The panel's shadcn tokens used the same names for a background
+ *   and a hover fill. The panel's own values therefore live on `--panel-muted`
+ *   and `--panel-accent`, and the `bg-muted` / `bg-accent` utilities point at
+ *   them, so both libraries can read their own meaning on one page.
  */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
-  --background: oklch(0.995 0.001 250);
-  --foreground: oklch(0.21 0.02 260);
+  --background: #f3f4f6;
+  --foreground: #0a0c10;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.02 260);
+  --card: #ffffff;
+  --card-foreground: #0a0c10;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.02 260);
+  --popover: #ffffff;
+  --popover-foreground: #0a0c10;
 
-  --primary: oklch(0.51 0.19 268);
-  --primary-foreground: oklch(0.99 0.005 260);
+  --primary: #2447f5;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.968 0.005 260);
-  --secondary-foreground: oklch(0.31 0.03 262);
+  --secondary: #eceef2;
+  --secondary-foreground: #0a0c10;
 
-  --muted: oklch(0.968 0.005 260);
-  --muted-foreground: oklch(0.53 0.02 260);
+  --panel-muted: #eceef1;
+  --muted-foreground: #5c626e;
 
-  --accent: oklch(0.955 0.012 268);
-  --accent-foreground: oklch(0.36 0.08 268);
+  /* Hover and selection fill: the site's soft blue, never a second hue. */
+  --panel-accent: #edf0ff;
+  --panel-accent-foreground: #1b37c9;
 
   --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.99 0.005 260);
+  --destructive-foreground: #ffffff;
 
   --success: oklch(0.62 0.15 155);
-  --success-foreground: oklch(0.99 0.005 260);
+  --success-foreground: #ffffff;
 
   --warning: oklch(0.75 0.15 75);
   --warning-foreground: oklch(0.26 0.05 75);
 
-  --border: oklch(0.918 0.006 260);
-  --input: oklch(0.918 0.006 260);
-  --ring: oklch(0.51 0.19 268);
+  --border: #e3e5ea;
+  --input: #d8dbe2;
+  --ring: #2447f5;
 
-  --sidebar: oklch(0.985 0.003 260);
-  --sidebar-foreground: oklch(0.31 0.02 260);
-  --sidebar-accent: oklch(0.95 0.012 268);
-  --sidebar-accent-foreground: oklch(0.36 0.09 268);
-  --sidebar-border: oklch(0.92 0.006 260);
+  /* The sidebar is a night band in both modes (see `.panel-night`). */
+  --sidebar: #0a0c10;
+  --sidebar-foreground: #a1a7b3;
+  --sidebar-accent: rgb(255 255 255 / 0.07);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ink: #8ea2ff;
 
-  /* Categorical chart hues, in fixed order. Validated as a pair (CVD and
-     normal-vision separation, contrast) against each mode's surface; dark mode
-     has its own steps rather than an automatic flip. */
-  --chart-1: oklch(0.51 0.19 268);
-  --chart-2: oklch(0.62 0.12 195);
+  /* Two series, one blue family. Validated as a pair against each mode's card
+     surface (CVD and normal-vision separation, lightness band, chroma); dark
+     mode has its own steps rather than an automatic flip. */
+  --chart-1: #2447f5;
+  --chart-2: #5f8fe8;
+
+  --shadow-card: 0 1px 2px 0 rgb(10 12 16 / 0.04), 0 0 1px 0 rgb(10 12 16 / 0.06);
+  --shadow-overlay:
+    0 2px 8px 0 rgb(10 12 16 / 0.06), 0 -6px 12px 0 rgb(10 12 16 / 0.03),
+    0 14px 28px 0 rgb(10 12 16 / 0.1);
+
+  /* HeroUI's motion curves. Its component CSS reads these at runtime, and an
+     undefined one invalidates the whole `transition` it appears in — the press
+     and hover animations then snap instead of easing. */
+  --ease-smooth: ease;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-linear: linear;
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-out-fluid: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .dark {
-  --background: oklch(0.17 0.014 264);
-  --foreground: oklch(0.96 0.004 260);
+  --background: #0b0d12;
+  --foreground: #f2f3f5;
 
-  --card: oklch(0.213 0.016 264);
-  --card-foreground: oklch(0.96 0.004 260);
+  --card: #14171e;
+  --card-foreground: #f2f3f5;
 
-  --popover: oklch(0.213 0.016 264);
-  --popover-foreground: oklch(0.96 0.004 260);
+  --popover: #181c24;
+  --popover-foreground: #f2f3f5;
 
-  --primary: oklch(0.68 0.16 268);
-  --primary-foreground: oklch(0.19 0.03 268);
+  --primary: #8ea2ff;
+  --primary-foreground: #0a0c10;
 
-  --secondary: oklch(0.27 0.018 264);
-  --secondary-foreground: oklch(0.96 0.004 260);
+  --secondary: #1d2129;
+  --secondary-foreground: #f2f3f5;
 
-  --muted: oklch(0.27 0.018 264);
-  --muted-foreground: oklch(0.70 0.015 260);
+  --panel-muted: #1d2129;
+  --muted-foreground: #9aa1ad;
 
-  --accent: oklch(0.30 0.035 268);
-  --accent-foreground: oklch(0.92 0.03 268);
+  --panel-accent: rgb(142 162 255 / 0.12);
+  --panel-accent-foreground: #c9d2ff;
 
   --destructive: oklch(0.66 0.19 25);
   --destructive-foreground: oklch(0.16 0.02 25);
@@ -92,18 +119,151 @@
   --warning: oklch(0.80 0.14 75);
   --warning-foreground: oklch(0.20 0.04 75);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.68 0.16 268);
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.14);
+  --ring: #8ea2ff;
 
-  --sidebar: oklch(0.196 0.015 264);
-  --sidebar-foreground: oklch(0.93 0.004 260);
-  --sidebar-accent: oklch(0.30 0.035 268);
-  --sidebar-accent-foreground: oklch(0.92 0.03 268);
-  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar: #050609;
+  --sidebar-border: rgb(255 255 255 / 0.07);
 
-  --chart-1: oklch(0.62 0.17 268);
-  --chart-2: oklch(0.66 0.12 195);
+  --chart-1: #6c85ff;
+  --chart-2: #3050e0;
+
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 0.08), 0 18px 40px 0 rgb(0 0 0 / 0.5);
+}
+
+/*
+ * The black band. Re-points the tokens, the way the site's `.mk-night` does, so
+ * anything placed inside — a ghost button, a logo tile, a separator — reads on
+ * black without a variant of its own. Tokens only: the element itself takes
+ * `bg-sidebar text-foreground`, which stay overridable as utilities.
+ */
+.panel-night {
+  --background: var(--sidebar);
+  --foreground: #f4f5f7;
+  --card: #14171e;
+  --card-foreground: #f4f5f7;
+  --popover: #181c24;
+  --popover-foreground: #f4f5f7;
+  --primary: #8ea2ff;
+  --primary-foreground: #0a0c10;
+  --panel-muted: rgb(255 255 255 / 0.08);
+  --muted-foreground: #a1a7b3;
+  --panel-accent: rgb(255 255 255 / 0.08);
+  --panel-accent-foreground: #ffffff;
+  --border: rgb(255 255 255 / 0.09);
+  --input: rgb(255 255 255 / 0.14);
+  --ring: #8ea2ff;
+  color-scheme: dark;
+}
+
+/*
+ * HeroUI, mapped onto the panel.
+ *
+ * Its component CSS (heroui.css) reads these names. They are derived from the
+ * tokens above, and declared on `:root` and again on each band, because a
+ * variable built from `var(--card)` resolves where it is declared — a band that
+ * re-points `--card` must re-derive everything built from it.
+ *
+ * The public site keeps its own values on `.mk-heroui` (marketing/heroui.css),
+ * which is closer to its elements and wins there.
+ */
+:root,
+.panel-night {
+  --white: #ffffff;
+  --black: #000000;
+  --snow: #fcfcfc;
+  --eclipse: var(--foreground);
+
+  --border-width: 1px;
+  --field-border-width: 1px;
+  --disabled-opacity: 0.5;
+  --ring-offset-width: 2px;
+  --cursor-interactive: pointer;
+  --cursor-disabled: not-allowed;
+  --field-radius: calc(var(--radius) * 1.25);
+  --skeleton-animation: shimmer;
+  --z-index-overlay: 60;
+  --z-index-toast: 100;
+
+  --surface: var(--card);
+  --surface-foreground: var(--card-foreground);
+  --surface-secondary: color-mix(in oklab, var(--card) 94%, var(--foreground) 6%);
+  --surface-secondary-foreground: var(--card-foreground);
+  --surface-tertiary: color-mix(in oklab, var(--card) 90%, var(--foreground) 10%);
+  --surface-tertiary-foreground: var(--card-foreground);
+  --overlay: var(--popover);
+  --overlay-foreground: var(--popover-foreground);
+  --muted: var(--muted-foreground);
+  --default: color-mix(in oklab, var(--card) 91%, var(--foreground) 9%);
+  --default-foreground: var(--foreground);
+  --field-background: var(--card);
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--muted-foreground);
+  --field-border: var(--input);
+  --danger: var(--destructive);
+  --danger-foreground: var(--destructive-foreground);
+  --segment: var(--card);
+  --segment-foreground: var(--foreground);
+  --separator: var(--border);
+  --focus: var(--ring);
+  --link: var(--primary);
+  --backdrop: rgb(10 12 16 / 0.5);
+
+  --surface-shadow: var(--shadow-card);
+  --overlay-shadow: var(--shadow-overlay);
+  --field-shadow: 0 1px 2px 0 rgb(10 12 16 / 0.04);
+
+  --surface-hover: color-mix(in oklab, var(--surface) 92%, var(--surface-foreground) 8%);
+  --background-secondary: color-mix(in oklab, var(--background) 96%, var(--foreground) 4%);
+  --background-tertiary: color-mix(in oklab, var(--background) 92%, var(--foreground) 8%);
+  --background-inverse: var(--foreground);
+  --default-hover: color-mix(in oklab, var(--default) 92%, var(--default-foreground) 8%);
+  --accent-hover: color-mix(in oklab, var(--accent) 88%, var(--black) 12%);
+  --success-hover: color-mix(in oklab, var(--success) 90%, var(--success-foreground) 10%);
+  --warning-hover: color-mix(in oklab, var(--warning) 90%, var(--warning-foreground) 10%);
+  --danger-hover: color-mix(in oklab, var(--danger) 88%, var(--black) 12%);
+  --field-hover: var(--field-background);
+  --field-focus: var(--field-background);
+  --field-border-hover: color-mix(in oklab, var(--field-border) 70%, var(--field-foreground) 30%);
+  --field-border-focus: var(--ring);
+  --default-soft: color-mix(in oklab, var(--default) 60%, transparent);
+  --default-soft-foreground: var(--default-foreground);
+  --default-soft-hover: color-mix(in oklab, var(--default) 80%, transparent);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 80%, var(--foreground) 20%);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 18%, transparent);
+  --danger-soft: color-mix(in oklab, var(--danger) 12%, transparent);
+  --danger-soft-foreground: color-mix(in oklab, var(--danger) 80%, var(--foreground) 20%);
+  --danger-soft-hover: color-mix(in oklab, var(--danger) 18%, transparent);
+  --warning-soft: color-mix(in oklab, var(--warning) 18%, transparent);
+  --warning-soft-foreground: color-mix(in oklab, var(--warning) 45%, var(--foreground) 55%);
+  --warning-soft-hover: color-mix(in oklab, var(--warning) 24%, transparent);
+  --success-soft: color-mix(in oklab, var(--success) 13%, transparent);
+  --success-soft-foreground: color-mix(in oklab, var(--success) 70%, var(--foreground) 30%);
+  --success-soft-hover: color-mix(in oklab, var(--success) 20%, transparent);
+  --separator-secondary: color-mix(in oklab, var(--surface) 85%, var(--surface-foreground) 15%);
+  --separator-tertiary: color-mix(in oklab, var(--surface) 81%, var(--surface-foreground) 19%);
+  --border-secondary: color-mix(in oklab, var(--surface) 78%, var(--surface-foreground) 22%);
+  --border-tertiary: color-mix(in oklab, var(--surface) 66%, var(--surface-foreground) 34%);
+}
+
+/* The call-to-action pair is the site's: a primary button stays solid brand
+   blue with white text in both modes, where `--primary` turns pale on black for
+   legibility as text. */
+:root {
+  --accent: #2447f5;
+  --accent-foreground: #ffffff;
+}
+
+.dark {
+  --accent: #3554ff;
+}
+
+.panel-night {
+  --accent: #3554ff;
+  --accent-foreground: #ffffff;
 }
 
 @theme inline {
@@ -117,10 +277,10 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
+  --color-muted: var(--panel-muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--panel-accent);
+  --color-accent-foreground: var(--panel-accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
@@ -135,6 +295,7 @@
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ink: var(--sidebar-ink);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
 
@@ -142,6 +303,33 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* HeroUI's curves as utilities: `ease-fluid` is its drawer and toast curve,
+     fast out of the gate and settling softly. */
+  --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+
+  /* Public site only. The values live on `.mk` in (marketing)/marketing.css, so
+     these utilities resolve to nothing outside the marketing layout. */
+  --color-mk-paper: var(--mk-paper);
+  --color-mk-fog: var(--mk-fog);
+  --color-mk-card: var(--mk-card);
+  --color-mk-text: var(--mk-text);
+  --color-mk-muted: var(--mk-muted);
+  --color-mk-line: var(--mk-line);
+  --color-mk-ink: var(--mk-ink);
+  --color-mk-ink-soft: var(--mk-ink-soft);
+  --color-mk-ink-fg: var(--mk-ink-fg);
+
+  /* The public site's stacks. marketing.css composes `--mk-font-*` so that on
+     Urdu pages the Urdu face (Noto Sans Arabic) leads; the Urdu entry here is
+     the last resort for Urdu text anywhere else. */
+  --font-mk-display: var(--mk-font-display), var(--mk-font-urdu), ui-sans-serif, system-ui, sans-serif;
+  --font-mk-body: var(--mk-font-body), var(--mk-font-urdu), ui-sans-serif, system-ui, sans-serif;
+  --font-mk-hand: var(--mk-font-hand), var(--mk-font-urdu), "Segoe Print", cursive;
+  --font-mk-mono: var(--mk-font-mono), ui-monospace, monospace;
+  --font-mk-urdu: var(--mk-font-urdu), "Noto Sans Arabic", sans-serif;
 }
 
 @layer base {
@@ -166,3 +354,81 @@
     outline-offset: 2px;
   }
 }
+
+/*
+ * Motion.
+ *
+ * HeroUI's language, applied to the panel's own pieces: things arrive by fading
+ * up a few pixels on the fluid curve, and leave faster than they came. Pages
+ * enter with `.panel-enter` (the (app) template wraps every page in it), and a
+ * grid of cards can stagger its children with `.panel-stagger`.
+ *
+ * `backwards`, not `both`: the start frame holds through the delay, and nothing
+ * is left applied afterwards. A transform kept on a page wrapper would become the
+ * containing block for every `position: fixed` element inside it.
+ */
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@layer components {
+  .panel-enter {
+    animation: panel-enter 420ms var(--ease-out-fluid) backwards;
+  }
+
+  .panel-stagger > * {
+    animation: panel-enter 480ms var(--ease-out-fluid) backwards;
+  }
+
+  .panel-stagger > :nth-child(2) { animation-delay: 45ms; }
+  .panel-stagger > :nth-child(3) { animation-delay: 90ms; }
+  .panel-stagger > :nth-child(4) { animation-delay: 135ms; }
+  .panel-stagger > :nth-child(5) { animation-delay: 180ms; }
+  .panel-stagger > :nth-child(6) { animation-delay: 225ms; }
+  .panel-stagger > :nth-child(7) { animation-delay: 270ms; }
+  .panel-stagger > :nth-child(n + 8) { animation-delay: 300ms; }
+
+  /* A card that opens something lifts a little under the pointer. */
+  .panel-lift {
+    transition:
+      transform 250ms var(--ease-out-quart),
+      box-shadow 200ms var(--ease-out),
+      border-color 200ms var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    .panel-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-overlay);
+    }
+  }
+
+  .panel-lift:active {
+    transform: scale(0.99);
+  }
+
+  /* HeroUI puts a "left" drawer at the inline start, which is the right edge in
+     Urdu, but slides it with a physical `translate: -100%`. Mirrored, it enters
+     from the edge it sits on. */
+  [dir="rtl"] .drawer__content--left:is([data-entering="true"], [data-exiting="true"]) .drawer__dialog {
+    translate: 100% 0;
+  }
+}
+
+/* Everything above, and every library animation, collapses for a reader who has
+   asked for less motion. Durations shrink rather than vanish, so code waiting on
+   `animationend` (Radix's exit animations) still hears it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+

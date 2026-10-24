@@ -19,6 +19,27 @@ import { LOCALES, LOCALE_COOKIE, LOCALE_NAMES } from "@/lib/i18n/config";
  * handler for what is a display preference.
  */
 export function LocaleSwitcher() {
+  const { locale, pending, select } = useLocaleChoice();
+
+  return (
+    <select
+      aria-label="Language"
+      value={locale}
+      disabled={pending}
+      onChange={(event) => select(event.target.value)}
+      className="h-9 cursor-pointer rounded-full bg-transparent px-3 text-sm text-muted-foreground outline-none transition-[background-color,color] duration-150 ease-out hover:bg-[var(--default)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+    >
+      {LOCALES.map((code) => (
+        <option key={code} value={code}>
+          {LOCALE_NAMES[code]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** The current locale and a way to change it, for pickers drawn another way. */
+export function useLocaleChoice() {
   const { locale } = useTranslations();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -30,19 +51,5 @@ export function LocaleSwitcher() {
     startTransition(() => router.refresh());
   }
 
-  return (
-    <select
-      aria-label="Language"
-      value={locale}
-      disabled={pending}
-      onChange={(event) => select(event.target.value)}
-      className="h-8 rounded-md border border-border bg-card px-2 text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-    >
-      {LOCALES.map((code) => (
-        <option key={code} value={code}>
-          {LOCALE_NAMES[code]}
-        </option>
-      ))}
-    </select>
-  );
+  return { locale, pending, select };
 }

@@ -1,15 +1,15 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { Button as HeroButton, Drawer, useOverlayState } from "@heroui/react";
+import { Menu } from "lucide-react";
 
 import { OrganizationBanner } from "@/components/layout/organization-banner";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { LogoMark } from "@/components/marketing/logo";
 import { GlobalSearch } from "@/components/search/global-search";
 import { useRequiredSession } from "@/components/providers/session-provider";
-import { Button } from "@/components/ui/button";
 import { SchoolLogo } from "@/components/ui/school-logo";
 import type { SchoolRead } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
  * administrator on a phone in a corridor is a real user of this product, so the
  * small-screen path is not an afterthought — but the primary target is a desk, where
  * a persistent nav beats a hamburger.
+ *
+ * It is a black band (`panel-night`), like the public site's header, so the
+ * product reads as one thing from the home page to the register. Below `lg` the
+ * same nav slides in as HeroUI's drawer.
  */
 export function AppShell({
   children,
@@ -42,7 +46,7 @@ export function AppShell({
   logoUrl?: string | null;
 }) {
   const user = useRequiredSession();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileNav = useOverlayState();
   const brandName = activeSchoolName ?? user.organization_name ?? null;
 
   return (
@@ -50,51 +54,40 @@ export function AppShell({
       {/* Desktop sidebar. `border-e` (inline-end), not `border-r`: under RTL the
           divider belongs on the other side, and a physical border would sit
           against the content instead of beside the nav. */}
-      <aside className="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
+      <aside className="panel-night hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar text-foreground lg:block">
         <div className="sticky top-0 flex h-svh flex-col">
           <Brand logoUrl={logoUrl} name={brandName} />
           <SidebarNav activeSchoolName={activeSchoolName} />
         </div>
       </aside>
 
-      {/* Mobile drawer */}
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            aria-label="Close navigation"
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside className="absolute inset-y-0 start-0 flex w-64 flex-col border-e border-sidebar-border bg-sidebar">
-            <div className="flex items-center">
-              <Brand logoUrl={logoUrl} name={brandName} />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="me-2 ms-auto"
-                onClick={() => setMobileOpen(false)}
-              >
-                <X className="size-4" aria-hidden />
-                <span className="sr-only">Close</span>
-              </Button>
-            </div>
-            <SidebarNav activeSchoolName={activeSchoolName} onNavigate={() => setMobileOpen(false)} />
-          </aside>
-        </div>
-      ) : null}
-
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur sm:px-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={() => setMobileOpen(true)}
-          >
-            <Menu className="size-4" aria-hidden />
-            <span className="sr-only">Open navigation</span>
-          </Button>
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/80 px-4 backdrop-blur-xl backdrop-saturate-150 sm:px-6">
+          {/* Mobile navigation: HeroUI's drawer, which brings the backdrop fade,
+              the slide on its fluid curve, focus trapping and Escape. */}
+          <Drawer state={mobileNav}>
+            <HeroButton
+              isIconOnly
+              variant="ghost"
+              size="sm"
+              aria-label="Open navigation"
+              className="lg:hidden"
+            >
+              <Menu className="size-4" aria-hidden />
+            </HeroButton>
+            <Drawer.Backdrop variant="blur">
+              <Drawer.Content placement="left" className="lg:hidden">
+                <Drawer.Dialog
+                  aria-label="Navigation"
+                  className="panel-night w-72 max-w-[85vw] bg-sidebar p-0 text-foreground sm:w-72"
+                >
+                  <Brand logoUrl={logoUrl} name={brandName} />
+                  <Drawer.CloseTrigger aria-label="Close navigation" />
+                  <SidebarNav activeSchoolName={activeSchoolName} onNavigate={mobileNav.close} />
+                </Drawer.Dialog>
+              </Drawer.Content>
+            </Drawer.Backdrop>
+          </Drawer>
 
           {/* Where you are, as a plain label rather than the dropdown this used to
               be — both switchers moved into the account menu.
@@ -143,7 +136,7 @@ export function AppShell({
           scheduledDeletionAt={user.scheduled_deletion_at ?? null}
         />
 
-        <main id="main" className={cn("flex-1 px-4 py-6 sm:px-6 sm:py-8")}>
+        <main id="main" className={cn("min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8")}>
           {children}
         </main>
       </div>
@@ -168,24 +161,23 @@ function campusLocation(school: SchoolRead | null): string | null {
 
 /**
  * The sidebar's masthead. A school that has a logo (its own, or its
- * organization's) sees its own brand here; EduCloud's mark is only the fallback
- * for one that has not uploaded anything yet.
+ * organization's) sees its own brand here; SchoolYar's mark — the same one the
+ * public site wears — is only the fallback for one that has not uploaded
+ * anything yet.
  */
 function Brand({ logoUrl, name }: { logoUrl: string | null; name: string | null }) {
   if (logoUrl) {
     return (
-      <div className="flex h-16 min-w-0 items-center gap-2 px-5 font-semibold tracking-tight">
-        <SchoolLogo src={logoUrl} name={name} />
-        <span className="truncate">{name ?? "EduCloud"}</span>
+      <div className="flex h-16 min-w-0 shrink-0 items-center gap-2.5 px-5 pe-12 font-semibold tracking-tight lg:pe-5">
+        <SchoolLogo src={logoUrl} name={name} className="bg-white p-0.5" />
+        <span className="truncate">{name ?? "SchoolYar"}</span>
       </div>
     );
   }
   return (
-    <div className="flex h-16 items-center gap-2 px-5 font-semibold tracking-tight">
-      <span className="grid size-7 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-        E
-      </span>
-      EduCloud
+    <div className="flex h-16 shrink-0 items-center gap-2.5 px-5 text-[1.05rem] font-bold tracking-[-0.02em]">
+      <LogoMark className="size-7" />
+      SchoolYar
     </div>
   );
 }

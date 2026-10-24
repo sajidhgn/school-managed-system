@@ -1,0 +1,70 @@
+[    5227ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[   10703ms] [WARNING] THREE.Clock: This module has been deprecated. Please use THREE.Timer instead. @ webpack-internal:///(app-pages-browser)/./node_modules/three/build/three.core.js:1990
+[   10797ms] [WARNING] THREE.Clock: This module has been deprecated. Please use THREE.Timer instead. @ webpack-internal:///(app-pages-browser)/./node_modules/three/build/three.core.js:1990
+[   78147ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[   96857ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[   97180ms] [LOG] [Fast Refresh] done in 323ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[  112652ms] [LOG] [Fast Refresh] done in 15793ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[  113097ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/:0
+[  115410ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(pages-dir-browser)/./node_modules/react-dom/cjs/react-dom-client.development.js:28004
+[  116332ms] SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at loadManifest (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/load-manifest.external.js:43:25)
+    at loadManifestFromRelativePath (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/load-manifest.external.js:84:16)
+    at AppPageRouteModule.loadManifests (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.dev.js:42:29290)
+    at AppPageRouteModule.prepare (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.dev.js:42:37336)
+    at async handler (webpack-internal:///(rsc)/./node_modules/next/dist/build/webpack/loaders/next-app-loader/index.js?name=app%2F(marketing)%2Fpage&page=%2F(marketing)%2Fpage&appPaths=%2F(marketing)%2Fpage&pagePath=private-next-app-dir%2F(marketing)%2Fpage.tsx&appDir=%2Fhome%2Fraweb%2FPROJECTS%2FSchool%20Management%20System%2Ffrontend%2Fsrc%2Fapp&pageExtensions=tsx&pageExtensions=ts&pageExtensions=jsx&pageExtensions=js&rootDir=%2Fhome%2Fraweb%2FPROJECTS%2FSchool%20Management%20System%2Ffrontend&isDev=true&tsconfigPath=tsconfig.json&basePath=&assetPrefix=&nextConfigOutput=standalone&preferredRegion=&middlewareConfig=e30%3D&isGlobalNotFoundEnabled=!:192:27)
+    at async DevServer.renderToResponseWithComponentsImpl (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/base-server.js:1430:9)
+    at async DevServer.renderPageComponent (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/base-server.js:1482:24)
+    at async DevServer.renderToResponseImpl (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/base-server.js:1522:32)
+    at async DevServer.pipeImpl (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/base-server.js:1026:25)
+    at async NextNodeServer.handleCatchallRenderRequest (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/next-server.js:394:17)
+    at async DevServer.handleRequestImpl (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/base-server.js:917:17)
+    at async (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/dev/next-dev-server.js:400:20)
+    at async Span.traceAsyncFn (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/trace/trace.js:157:20)
+    at async DevServer.handleRequest (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/dev/next-dev-server.js:396:24)
+    at async invokeRender (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/lib/router-server.js:240:21)
+    at async handleRequest (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/lib/router-server.js:437:24)
+    at async requestHandlerImpl (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/lib/router-server.js:485:13)
+    at async Server.requestListener (file:///home/raweb/PROJECTS/School Management System/frontend/node_modules/next/dist/server/lib/start-server.js:226:13)
+[  116271ms] [LOG] [HMR] connected @ webpack-internal:///(pages-dir-browser)/./node_modules/next/dist/client/dev/hot-reloader/pages/websocket.js:45
+[  142177ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[  399156ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  404985ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  406172ms] [LOG] [Fast Refresh] done in 1187ms @ :13
+[  409833ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  415309ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  417577ms] [LOG] [Fast Refresh] done in 2268ms @ :13
+[  418551ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  426376ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  430117ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  463950ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  516403ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  519824ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  524072ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  527391ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  531797ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  556802ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  616196ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  625405ms] [LOG] [Fast Refresh] done in 9211ms @ :13
+[  630734ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ :25630
+[  689290ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  701089ms] [LOG] [Fast Refresh] done in 11800ms @ :13
+[  709606ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  713267ms] [LOG] [Fast Refresh] done in 3661ms @ :13
+[  713697ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  715833ms] [LOG] [Fast Refresh] done in 2136ms @ :13
+[  716232ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  718399ms] [LOG] [Fast Refresh] done in 2167ms @ :13
+[  718832ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  722209ms] [LOG] [Fast Refresh] done in 3378ms @ :13
+[  722806ms] [LOG] [Fast Refresh] rebuilding @ :196
+[  725204ms] [LOG] [Fast Refresh] done in 2398ms @ :13
+[ 1444628ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[ 1469254ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[ 1494575ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[ 1499033ms] [LOG] [Fast Refresh] done in 4459ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[ 1523586ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[ 1532294ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[ 1709926ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[ 1715152ms] [LOG] [Fast Refresh] done in 5228ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13

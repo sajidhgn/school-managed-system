@@ -210,7 +210,7 @@ export function SidebarNav({
       ],
     },
     {
-      heading: "Organization",
+      heading: t.nav.organization,
       items: [
         {
           href: "/billing",
@@ -230,7 +230,7 @@ export function SidebarNav({
   };
 
   return (
-    <nav className="flex-1 overflow-y-auto px-3 pb-6" aria-label="Main">
+    <nav className="flex-1 overflow-y-auto px-3 pb-6 [scrollbar-color:rgb(255_255_255/0.15)_transparent]" aria-label="Main">
       {sections.map((section, index) => {
         const items = section.items.filter(visible);
         if (items.length === 0) return null;
@@ -238,8 +238,11 @@ export function SidebarNav({
         return (
           <div key={index} className="mb-5">
             {section.heading ? (
-              <h2 className="truncate px-2 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {section.heading}
+              // The public site's section label: a blue dot, then small tracked
+              // capitals.
+              <h2 className="flex items-center gap-2 px-2.5 pb-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <span className="size-1.5 shrink-0 rounded-full bg-sidebar-ink" aria-hidden />
+                <span className="truncate">{section.heading}</span>
               </h2>
             ) : null}
             <ul className="grid gap-0.5">
@@ -258,14 +261,30 @@ export function SidebarNav({
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                        "relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm",
+                        "transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98]",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         active
                           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent/60",
+                          : "text-sidebar-foreground hover:bg-white/5 hover:text-white",
                       )}
                     >
-                      <Icon className="size-4 shrink-0" aria-hidden />
-                      {label}
+                      {/* The open page's marker grows in where the reader is
+                          going, so moving between pages has a sense of arrival. */}
+                      {active ? (
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-1.5 -start-3 w-[3px] rounded-e-full bg-sidebar-ink animate-in fade-in-0 zoom-in-50 duration-300 ease-fluid"
+                        />
+                      ) : null}
+                      <Icon
+                        className={cn(
+                          "size-4 shrink-0 transition-colors duration-150",
+                          active ? "text-sidebar-ink" : "text-current",
+                        )}
+                        aria-hidden
+                      />
+                      <span className="truncate">{label}</span>
                     </Link>
                   </li>
                 );

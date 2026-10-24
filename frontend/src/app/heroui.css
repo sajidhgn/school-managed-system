@@ -1,0 +1,31 @@
+/*
+ * HeroUI v3 component styles shared by every part of the app.
+ *
+ * Only the component CSS, never `@import "@heroui/styles"`: the full import also
+ * declares HeroUI's own theme on `:root`. The variables these components read are
+ * declared in globals.css instead, mapped onto the panel's tokens (and, on the
+ * public site, re-declared on `.mk-heroui` in (marketing)/heroui.css).
+ *
+ * The panel's primitives render these classes rather than HeroUI's React
+ * components: `Button` is `buttonVariants`, `Badge` is a chip, `Skeleton` is
+ * HeroUI's shimmer. That keeps the panel's API — `asChild`, Radix triggers,
+ * server components — while the look and the press/hover motion are HeroUI's.
+ * The mobile navigation uses HeroUI's `Drawer` component itself.
+ *
+ * The public site's stylesheet adds the components only it uses. It loads after
+ * this one, which keeps HeroUI's own order (shared pieces first) intact.
+ */
+
+@reference "tailwindcss";
+@reference "tw-animate-css";
+
+@import "@heroui/styles/themes/shared/theme.css";
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/variants";
+
+/* In the order HeroUI's index imports them. */
+@import "@heroui/styles/components/close-button.css" layer(components);
+@import "@heroui/styles/components/button.css" layer(components);
+@import "@heroui/styles/components/chip.css" layer(components);
+@import "@heroui/styles/components/skeleton.css" layer(components);
+@import "@heroui/styles/components/drawer.css" layer(components);

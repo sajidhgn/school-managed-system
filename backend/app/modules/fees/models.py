@@ -692,7 +692,7 @@ class FeeConcession(
         and should not have to become a permanent scheme to be recorded.
 
     NOT A DISCOUNT ON THE SAAS BILL. This reduces what a PARENT owes the school.
-    What the school owes EduCloud is `billing`, and the two never meet.
+    What the school owes SchoolYar is `billing`, and the two never meet.
     """
 
     __tablename__ = "fee_concessions"

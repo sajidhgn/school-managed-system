@@ -83,6 +83,8 @@ _APP_TABLES = (
     # emptied before `students` and `sections` even though TRUNCATE ... CASCADE
     # would otherwise sort it out. Listing them explicitly keeps the dependency
     # order readable rather than relying on CASCADE to discover it.
+    # WhatsApp registers point at sessions and sections (SET NULL).
+    "attendance_chat_drafts",
     "attendance_records",
     "attendance_sessions",
     # Before `students`, `classes` and `academic_years` -- RESTRICT on the last two.

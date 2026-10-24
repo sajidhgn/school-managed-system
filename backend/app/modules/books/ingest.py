@@ -85,21 +85,24 @@ def count_pages(data: bytes, kind: FileKind) -> int:
         pdf.close()
 
 
-def split_file(data: bytes, kind: FileKind) -> list[RawPage]:
-    """Every page of one upload, in the file's own order."""
+def split_file(data: bytes, kind: FileKind, *, max_pages: int | None = None) -> list[RawPage]:
+    """Every page of one upload, in the file's own order -- or only its first
+    `max_pages`, so reading a whole-book PDF's front matter renders a dozen pages,
+    not three hundred."""
     if kind is FileKind.IMAGE:
         return [RawPage(0, normalize_image(data), "image/jpeg", "")]
-    return _split_pdf(data)
+    return _split_pdf(data, max_pages)
 
 
-def _split_pdf(data: bytes) -> list[RawPage]:
+def _split_pdf(data: bytes, max_pages: int | None = None) -> list[RawPage]:
     try:
         pdf = pdfium.PdfDocument(data)
     except pdfium.PdfiumError as exc:
         raise UnsupportedFileError("That PDF could not be opened.") from exc
     pages: list[RawPage] = []
     try:
-        for index in range(len(pdf)):
+        count = len(pdf) if max_pages is None else min(len(pdf), max_pages)
+        for index in range(count):
             page = pdf[index]
             try:
                 textpage = page.get_textpage()

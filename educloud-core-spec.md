@@ -1,4 +1,4 @@
-# EduCloud — Multi-Tenant School Management Platform
+# SchoolYar — Multi-Tenant School Management Platform
 ### Core Spec: Identity, Tenancy, RBAC, Plans & Invitations
 
 **Stack:** Python · FastAPI · PostgreSQL 16 · Next.js (App Router) · TypeScript · TailwindCSS

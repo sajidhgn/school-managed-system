@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { MembersView } from "./members-view";
 import { serverGet, serverGetRequired } from "@/lib/api/server";
-import type {
-  InvitationRead,
-  MemberRead,
-  Page,
-  RoleRead,
-  SchoolRead,
-  UsageResponse,
+import {
+  PERMISSIONS,
+  type InvitationRead,
+  type MemberRead,
+  type Page,
+  type RoleRead,
+  type SchoolRead,
+  type UsageResponse,
 } from "@/lib/api/types";
-import { requireSchoolContext } from "@/lib/auth/session";
+import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Members" };
 
@@ -33,6 +35,11 @@ export default async function MembersPage({
     requireSchoolContext(),
     searchParams,
   ]);
+
+  // Hidden from the nav for anyone without the permission, but the URL still
+  // resolves. Without this the API's 403 surfaced as a 500 page; a teacher who
+  // types the address is sent home instead, as /fees and /schools already do.
+  if (!hasPermission(user, PERMISSIONS.memberRead)) redirect("/dashboard");
 
   // The backend rejects page < 1, so a mangled or negative `?page=` falls back to 1
   // rather than turning a bookmarkable URL into a 422.

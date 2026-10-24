@@ -81,7 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         summary="Multi-tenant school management platform",
         description=(
-            "EduCloud API -- identity, tenancy, RBAC, plans and invitations.\n\n"
+            "SchoolYar API -- identity, tenancy, RBAC, plans and invitations.\n\n"
             "**Tenant isolation** is enforced by PostgreSQL Row-Level Security. The "
             "`org` claim in your access token scopes every query at the database "
             "level; cross-tenant reads return 404, never 403, so resource existence "

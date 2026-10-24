@@ -8,7 +8,7 @@ WHY THIS FILE EXISTS
 
     It mirrors `billing/jobs.py`, which does the same walk one level up (per
     organization rather than per school). The two are deliberately separate jobs:
-    one collects what schools owe EduCloud, the other fines what parents owe schools,
+    one collects what schools owe SchoolYar, the other fines what parents owe schools,
     and folding them together would put a customer-facing penalty inside our own
     revenue path.
 

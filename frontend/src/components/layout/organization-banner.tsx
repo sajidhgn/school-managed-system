@@ -64,7 +64,7 @@ export function OrganizationBanner({
         </div>
         <Link
           href="/billing"
-          className="shrink-0 self-start rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 sm:self-center"
+          className="shrink-0 self-start rounded-full bg-destructive px-3.5 py-1.5 text-xs font-medium text-destructive-foreground transition-[background-color,transform] duration-150 ease-out hover:bg-destructive/90 active:scale-[0.97] sm:self-center"
         >
           {t.billing.upgradePlan}
         </Link>
@@ -75,14 +75,14 @@ export function OrganizationBanner({
   const config = {
     over_limit: {
       icon: AlertTriangle,
-      tone: "bg-warning/15 text-warning-foreground",
+      tone: "bg-warning/15 text-warning-foreground dark:text-warning",
       title: t.billing.overLimitTitle,
       body: t.billing.overLimitBody,
       cta: t.billing.changePlan,
     },
     past_due: {
       icon: CreditCard,
-      tone: "bg-warning/15 text-warning-foreground",
+      tone: "bg-warning/15 text-warning-foreground dark:text-warning",
       title: t.billing.pastDueTitle,
       body: t.billing.pastDueBody,
       cta: t.nav.billing,
@@ -116,7 +116,7 @@ export function OrganizationBanner({
       </div>
       <Link
         href="/billing"
-        className="shrink-0 self-center rounded-md border border-current/30 px-3 py-1.5 text-xs font-medium hover:bg-current/10"
+        className="shrink-0 self-center rounded-full border border-current/30 px-3.5 py-1.5 text-xs font-medium transition-[background-color,transform] duration-150 ease-out hover:bg-current/10 active:scale-[0.97]"
       >
         {cta}
       </Link>

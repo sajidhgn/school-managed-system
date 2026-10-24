@@ -3,7 +3,7 @@
   "info": {
     "title": "School Management System",
     "summary": "Multi-tenant school management platform",
-    "description": "EduCloud API -- identity, tenancy, RBAC, plans and invitations.\n\n**Tenant isolation** is enforced by PostgreSQL Row-Level Security. The `org` claim in your access token scopes every query at the database level; cross-tenant reads return 404, never 403, so resource existence is never disclosed.\n\n**School scoping** is a second, softer boundary inside the organization: a school-scoped membership sees only its own campus, while an organization owner spans all of them.\n\n**Permissions** are `resource:action` strings resolved per request from the caller's role. They are deliberately not embedded in the token, so revoking access takes effect on the very next request.",
+    "description": "SchoolYar API -- identity, tenancy, RBAC, plans and invitations.\n\n**Tenant isolation** is enforced by PostgreSQL Row-Level Security. The `org` claim in your access token scopes every query at the database level; cross-tenant reads return 404, never 403, so resource existence is never disclosed.\n\n**School scoping** is a second, softer boundary inside the organization: a school-scoped membership sees only its own campus, while an organization owner spans all of them.\n\n**Permissions** are `resource:action` strings resolved per request from the caller's role. They are deliberately not embedded in the token, so revoking access takes effect on the very next request.",
     "version": "0.1.0"
   },
   "paths": {
@@ -6895,6 +6895,391 @@
         }
       }
     },
+    "/api/v1/attendance/analytics": {
+      "get": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "Attendance by class and section over a date range, with at-risk students",
+        "description": "The head teacher's class-by-class view.\n\nPer-section rates against the previous period of equal length, marking coverage\nagainst the days the school was marking, today's register state, a daily trend,\na weekday pattern, the students under `threshold`, and the today / this month /\nlast month / year-to-date headline. A teacher without `class:view_all` gets the\nsame view of their own sections only. Ranges over 366 days are refused.",
+        "operationId": "attendance_analytics_api_v1_attendance_analytics_get",
+        "parameters": [
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive. Defaults to 29 days before `to_date`.",
+              "title": "From Date"
+            },
+            "description": "Inclusive. Defaults to 29 days before `to_date`."
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive. Defaults to today.",
+              "title": "To Date"
+            },
+            "description": "Inclusive. Defaults to today."
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this class's sections.",
+              "title": "Class Id"
+            },
+            "description": "Only this class's sections."
+          },
+          {
+            "name": "threshold",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 0,
+              "description": "A student below this percentage over the range is at risk.",
+              "default": 75.0,
+              "title": "Threshold"
+            },
+            "description": "A student below this percentage over the range is at risk."
+          },
+          {
+            "name": "min_sessions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 1,
+              "description": "Counted registers a student needs before they can be flagged.",
+              "default": 5,
+              "title": "Min Sessions"
+            },
+            "description": "Counted registers a student needs before they can be flagged."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceAnalytics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/students": {
+      "get": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "Every student's attendance: today, this month, last month and overall",
+        "description": "One row per active student the caller may see, worst overall rate first.\n\n`sort_by` is one of `overall` (default), `this_month`, `previous_month`, `name`,\n`admission_number`, `roll_number`, `class`. `q` matches a name or admission\nnumber anywhere, or a roll number exactly. `today_register` tells \"not marked\nyet\" apart from \"present\"; `today_status` is set only once the register is\nsubmitted.",
+        "operationId": "student_attendance_list_api_v1_attendance_students_get",
+        "parameters": [
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Students seated in this class.",
+              "title": "Class Id"
+            },
+            "description": "Students seated in this class."
+          },
+          {
+            "name": "section_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Students seated in this section.",
+              "title": "Section Id"
+            },
+            "description": "Students seated in this section."
+          },
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start of the `overall` window. Defaults to the academic year's start.",
+              "title": "From Date"
+            },
+            "description": "Start of the `overall` window. Defaults to the academic year's start."
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End of the `overall` window. Defaults to today.",
+              "title": "To Date"
+            },
+            "description": "End of the `overall` window. Defaults to today."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortDirection",
+              "default": "asc"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search term",
+              "title": "Q"
+            },
+            "description": "Search term"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentAttendancePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/students/{student_id}/calendar": {
+      "get": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "One student's attendance day by day, with a rate per month",
+        "description": "The drill-down behind a student row: every whole-day register the child is\non, the month-by-month rates, and the rate over the whole range. A draft day\ncarries no status. 404 -- worded as for an unknown id -- for a student outside a\nteacher's sections.",
+        "operationId": "student_attendance_calendar_api_v1_attendance_students__student_id__calendar_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          },
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive. Defaults to the academic year's start.",
+              "title": "From Date"
+            },
+            "description": "Inclusive. Defaults to the academic year's start."
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive. Defaults to today.",
+              "title": "To Date"
+            },
+            "description": "Inclusive. Defaults to today."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentAttendanceCalendar"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/attendance": {
       "get": {
         "tags": [
@@ -7183,7 +7568,7 @@
           "Attendance"
         ],
         "summary": "Set statuses for some of the students on a register",
-        "description": "Partial: students not named keep the status they already have.\n\nOn a SUBMITTED register this becomes an AMENDMENT -- it requires\n`attendance:amend` as well, requires a `reason`, and writes one audit row per\nchanged student. The permission is resolved here and passed to the service as a\nflag, so the service stays callable from a CLI or a worker.",
+        "description": "Partial: students not named keep the status they already have.\n\nOn a SUBMITTED register this becomes an AMENDMENT -- it requires\n`attendance:amend` as well, requires a `reason`, and writes one audit row per\nchanged student. A LOCKED register (past the day after its date) refuses\n`attendance:mark` alone with `ATTENDANCE_LOCKED`. The permission is resolved here\nand passed to the service as a flag, so the service stays callable from a CLI or a\nworker.",
         "operationId": "mark_attendance_api_v1_attendance__session_id__entries_patch",
         "parameters": [
           {
@@ -8368,6 +8753,84 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LibraryAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/scan/status": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Whether \"Add a book\" can read pages with AI right now",
+        "description": "Checks the key `BOOKS_SCAN_PROVIDER` needs is set, that the provider accepts\nit, and that it offers `BOOKS_SCAN_MODEL` -- one `GET /models` at most, its\nanswer remembered for a few minutes; no model is run.",
+        "operationId": "scan_status_api_v1_books_scan_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/scan": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Read a new book's details off photos or a PDF of its cover and contents pages",
+        "description": "Pre-fills \"Add a book\": title, publisher, edition, class, subject and the\nchapter list. Nothing is saved -- the teacher checks the form, then creates the\nbook with `POST /books`. Only the first 16 pages are read. 422 `NOTHING_READ`\nwhen the pages show neither a title nor a contents list.",
+        "operationId": "scan_book_api_v1_books_scan_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_scan_book_api_v1_books_scan_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookScan"
                 }
               }
             }
@@ -14029,6 +14492,340 @@
         ],
         "title": "AskRequest"
       },
+      "AtRiskStudent": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "admission_number": {
+            "type": "string",
+            "title": "Admission Number"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "roll_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roll Number"
+          },
+          "percentage": {
+            "type": "number",
+            "title": "Percentage"
+          },
+          "counted_sessions": {
+            "type": "integer",
+            "title": "Counted Sessions"
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent"
+          },
+          "absence_streak": {
+            "type": "integer",
+            "title": "Absence Streak"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "admission_number",
+          "full_name",
+          "section_id",
+          "class_name",
+          "section_name",
+          "roll_number",
+          "percentage",
+          "counted_sessions",
+          "absent",
+          "absence_streak"
+        ],
+        "title": "AtRiskStudent",
+        "description": "A student whose rate over the range is below the caller's threshold."
+      },
+      "AttendanceAnalytics": {
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "From Date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "To Date"
+          },
+          "previous_from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Previous From Date"
+          },
+          "previous_to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Previous To Date"
+          },
+          "today": {
+            "type": "string",
+            "format": "date",
+            "title": "Today"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "min_sessions": {
+            "type": "integer",
+            "title": "Min Sessions"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/AttendanceHeadline"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AttendanceAnalyticsSummary"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionAttendanceAnalytics"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceTrendDay"
+            },
+            "type": "array",
+            "title": "Days"
+          },
+          "weekdays": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceWeekday"
+            },
+            "type": "array",
+            "title": "Weekdays"
+          },
+          "at_risk": {
+            "items": {
+              "$ref": "#/components/schemas/AtRiskStudent"
+            },
+            "type": "array",
+            "title": "At Risk"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceAnalyticsClass"
+            },
+            "type": "array",
+            "title": "Classes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_date",
+          "to_date",
+          "previous_from_date",
+          "previous_to_date",
+          "today",
+          "class_id",
+          "threshold",
+          "min_sessions",
+          "headline",
+          "summary",
+          "sections",
+          "days",
+          "weekdays",
+          "at_risk",
+          "classes"
+        ],
+        "title": "AttendanceAnalytics",
+        "description": "Attendance across every section the caller may see, over one date range."
+      },
+      "AttendanceAnalyticsClass": {
+        "properties": {
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "School Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_id",
+          "class_name",
+          "level",
+          "school_id"
+        ],
+        "title": "AttendanceAnalyticsClass",
+        "description": "One option for the class filter -- bounded exactly as the data is, so a teacher\nis never offered a class the endpoint would answer with a 404."
+      },
+      "AttendanceAnalyticsSummary": {
+        "properties": {
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "previous_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Percentage"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AttendanceStatusCounts"
+          },
+          "counted": {
+            "type": "integer",
+            "title": "Counted"
+          },
+          "school_days": {
+            "type": "integer",
+            "title": "School Days"
+          },
+          "sections": {
+            "type": "integer",
+            "title": "Sections"
+          },
+          "registers_submitted": {
+            "type": "integer",
+            "title": "Registers Submitted"
+          },
+          "registers_expected": {
+            "type": "integer",
+            "title": "Registers Expected"
+          },
+          "coverage_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Percentage"
+          },
+          "at_risk_students": {
+            "type": "integer",
+            "title": "At Risk Students"
+          }
+        },
+        "type": "object",
+        "required": [
+          "percentage",
+          "previous_percentage",
+          "counts",
+          "counted",
+          "school_days",
+          "sections",
+          "registers_submitted",
+          "registers_expected",
+          "coverage_percentage",
+          "at_risk_students"
+        ],
+        "title": "AttendanceAnalyticsSummary"
+      },
+      "AttendanceDateRange": {
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "From Date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "To Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_date",
+          "to_date"
+        ],
+        "title": "AttendanceDateRange",
+        "description": "An inclusive date range, as resolved by the server."
+      },
       "AttendanceDay": {
         "properties": {
           "day": {
@@ -14174,6 +14971,38 @@
         ],
         "title": "AttendanceEntryRead"
       },
+      "AttendanceHeadline": {
+        "properties": {
+          "today": {
+            "$ref": "#/components/schemas/AttendanceWindowRate"
+          },
+          "this_month": {
+            "$ref": "#/components/schemas/AttendanceWindowRate"
+          },
+          "previous_month": {
+            "$ref": "#/components/schemas/AttendanceWindowRate"
+          },
+          "year_to_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceWindowRate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "today",
+          "this_month",
+          "previous_month",
+          "year_to_date"
+        ],
+        "title": "AttendanceHeadline",
+        "description": "The numbers a principal quotes: fixed to the CALENDAR, not to the selected\nrange, so they do not move when someone changes the date picker. Bounded exactly\nlike the rest of the response -- a teacher's are their own sections'."
+      },
       "AttendanceMarkRequest": {
         "properties": {
           "entries": {
@@ -14254,6 +15083,36 @@
         ],
         "title": "AttendancePulse"
       },
+      "AttendanceRate": {
+        "properties": {
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "counted": {
+            "type": "integer",
+            "title": "Counted"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AttendanceStatusCounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "percentage",
+          "counted",
+          "counts"
+        ],
+        "title": "AttendanceRate",
+        "description": "A rate and what it was computed from."
+      },
       "AttendanceSessionDetail": {
         "properties": {
           "id": {
@@ -14330,6 +15189,11 @@
             ],
             "title": "Notes"
           },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "description": "Past the marking window -- the day after `session_date` is over -- so only `attendance:amend` can change it, draft or submitted. Computed when read."
+          },
           "present_count": {
             "type": "integer",
             "title": "Present Count",
@@ -14375,6 +15239,7 @@
           "taken_by_user_id",
           "submitted_at",
           "notes",
+          "locked",
           "created_at",
           "updated_at",
           "entries"
@@ -14519,6 +15384,11 @@
             ],
             "title": "Notes"
           },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "description": "Past the marking window -- the day after `session_date` is over -- so only `attendance:amend` can change it, draft or submitted. Computed when read."
+          },
           "present_count": {
             "type": "integer",
             "title": "Present Count",
@@ -14557,6 +15427,7 @@
           "taken_by_user_id",
           "submitted_at",
           "notes",
+          "locked",
           "created_at",
           "updated_at"
         ],
@@ -14583,6 +15454,40 @@
         ],
         "title": "AttendanceStatus",
         "description": "What one student's line on one register says.\n\nWHY FIVE VALUES AND NOT TWO\n    Present/absent is what a database designer writes and what no school uses.\n    Each extra value below exists because it changes a downstream number:\n\n      LATE      counts as attended for the percentage a report card prints, but\n                is what a punctuality warning is issued from. Folding it into\n                PRESENT loses the warning; folding it into ABSENT understates\n                attendance and triggers absence alerts for children who are in\n                the building.\n      EXCUSED   an absence the school authorised -- illness with a note, a\n                funeral, a sanctioned trip. Excluded from the DENOMINATOR of the\n                attendance percentage, which is the whole point: a child off\n                sick for a fortnight with notes should not fail an attendance\n                threshold they were excused from.\n      HALF_DAY  counts as half a day present. Standard in this market for a\n                child collected after the morning session.\n\n    `is_present` and `counts_toward_attendance` below are where those rules are\n    stated once, so no report re-derives them."
+      },
+      "AttendanceStatusCounts": {
+        "properties": {
+          "present": {
+            "type": "integer",
+            "title": "Present"
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent"
+          },
+          "late": {
+            "type": "integer",
+            "title": "Late"
+          },
+          "excused": {
+            "type": "integer",
+            "title": "Excused"
+          },
+          "half_day": {
+            "type": "integer",
+            "title": "Half Day"
+          }
+        },
+        "type": "object",
+        "required": [
+          "present",
+          "absent",
+          "late",
+          "excused",
+          "half_day"
+        ],
+        "title": "AttendanceStatusCounts",
+        "description": "Register lines by status. Counts of LINES (student-days), not of students.\n\nNo defaults: every response states all five, so the generated client type has no\noptional field for a caller to null-check."
       },
       "AttendanceToday": {
         "properties": {
@@ -14617,6 +15522,121 @@
           "rate"
         ],
         "title": "AttendanceToday"
+      },
+      "AttendanceTrendDay": {
+        "properties": {
+          "session_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Session Date"
+          },
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "counted": {
+            "type": "integer",
+            "title": "Counted"
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_date",
+          "percentage",
+          "counted",
+          "absent"
+        ],
+        "title": "AttendanceTrendDay",
+        "description": "One school day in the range. Only dates with a submitted register appear: a\nweekend is not a day of zero attendance, and listing it as one would draw every\nSunday as a cliff."
+      },
+      "AttendanceWeekday": {
+        "properties": {
+          "weekday": {
+            "type": "integer",
+            "title": "Weekday"
+          },
+          "school_days": {
+            "type": "integer",
+            "title": "School Days"
+          },
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "weekday",
+          "school_days",
+          "percentage",
+          "absent"
+        ],
+        "title": "AttendanceWeekday",
+        "description": "The rate on one day of the week, across the range.\n\nExists for the pattern a principal looks for and a daily line hides: Mondays\nafter a long weekend, Saturdays in a five-and-a-half-day week."
+      },
+      "AttendanceWindowRate": {
+        "properties": {
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "counted": {
+            "type": "integer",
+            "title": "Counted"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AttendanceStatusCounts"
+          },
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "From Date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "To Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "percentage",
+          "counted",
+          "counts",
+          "from_date",
+          "to_date"
+        ],
+        "title": "AttendanceWindowRate",
+        "description": "A rate over a named calendar window, with the window's dates."
       },
       "AuditLogRead": {
         "properties": {
@@ -14840,6 +15860,24 @@
           "reason"
         ],
         "title": "Body_reopen_session_api_v1_attendance__session_id__reopen_post"
+      },
+      "Body_scan_book_api_v1_books_scan_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Photos (JPEG, PNG, WebP) or a PDF of the cover and contents pages."
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_scan_book_api_v1_books_scan_post"
       },
       "Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post": {
         "properties": {
@@ -15122,6 +16160,121 @@
           "can_edit"
         ],
         "title": "BookRead"
+      },
+      "BookScan": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "class_printed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Printed"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_printed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Printed"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterInput"
+            },
+            "type": "array",
+            "title": "Chapters"
+          },
+          "pages_read": {
+            "type": "integer",
+            "title": "Pages Read"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "publisher",
+          "version",
+          "class_id",
+          "class_printed",
+          "subject_id",
+          "subject_printed",
+          "chapters",
+          "pages_read"
+        ],
+        "title": "BookScan",
+        "description": "A book's details as the AI read them off its cover and contents pages.\n\nA draft for the \"Add a book\" form, never saved by itself: every field is\nwhat the teacher sees pre-filled and checks before adding the book."
       },
       "BookSearchHit": {
         "properties": {
@@ -16289,6 +17442,11 @@
             "format": "date",
             "title": "Session Date"
           },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "description": "Registers for this date are past the marking window: `attendance:mark` can no longer open or change them, only `attendance:amend` can."
+          },
           "sections": {
             "items": {
               "$ref": "#/components/schemas/SectionDayStatus"
@@ -16312,6 +17470,7 @@
         "type": "object",
         "required": [
           "session_date",
+          "locked",
           "sections",
           "sections_total",
           "sections_submitted",
@@ -25747,6 +26906,16 @@
         "title": "RegisterResponse",
         "description": "Signup result. Carries no token: login is blocked until email is verified."
       },
+      "RegisterState": {
+        "type": "string",
+        "enum": [
+          "not_started",
+          "draft",
+          "submitted"
+        ],
+        "title": "RegisterState",
+        "description": "Where a section's register for TODAY stands.\n\nThree values, not `AttendanceSessionStatus | None`, because \"nobody has opened\nit\" is the state this field exists to surface, and a null is too easy to render\nas a blank cell. Same distinction `SectionDayStatus.session_id is None` draws on\nthe daily overview."
+      },
       "ReplaceRequest": {
         "properties": {
           "difficulty": {
@@ -26139,6 +27308,41 @@
         "type": "object",
         "title": "RoleUpdate",
         "description": "Rename only. Permissions change through the dedicated endpoint.\n\nSeparate on purpose: a rename is cosmetic, a permission change alters authority.\nMerging them would blur the audit trail and churn `permissions_version` -- which\ninvalidates every token for the role -- each time someone fixes a typo."
+      },
+      "ScanStatus": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready",
+          "provider",
+          "model"
+        ],
+        "title": "ScanStatus",
+        "description": "Whether \"Add a book\" can read pages with AI right now, and with what."
       },
       "SchoolCreate": {
         "properties": {
@@ -26612,6 +27816,7 @@
           "voucher",
           "fee_head",
           "fee_structure",
+          "attendance",
           "audit"
         ],
         "title": "SearchEntity",
@@ -26912,6 +28117,137 @@
         ],
         "title": "SearchSuggestion",
         "description": "A typeahead row: the same hit, minus everything the dropdown does not draw."
+      },
+      "SectionAttendanceAnalytics": {
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Section Id"
+          },
+          "section_name": {
+            "type": "string",
+            "title": "Section Name"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "class_level": {
+            "type": "integer",
+            "title": "Class Level"
+          },
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "School Id"
+          },
+          "class_teacher_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Id"
+          },
+          "class_teacher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Name"
+          },
+          "students_on_roll": {
+            "type": "integer",
+            "title": "Students On Roll"
+          },
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "previous_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Percentage"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AttendanceStatusCounts"
+          },
+          "registers_submitted": {
+            "type": "integer",
+            "title": "Registers Submitted"
+          },
+          "registers_draft": {
+            "type": "integer",
+            "title": "Registers Draft"
+          },
+          "coverage_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Percentage"
+          },
+          "today_status": {
+            "$ref": "#/components/schemas/RegisterState"
+          },
+          "at_risk_students": {
+            "type": "integer",
+            "title": "At Risk Students"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section_id",
+          "section_name",
+          "class_id",
+          "class_name",
+          "class_level",
+          "school_id",
+          "class_teacher_id",
+          "class_teacher_name",
+          "students_on_roll",
+          "percentage",
+          "previous_percentage",
+          "counts",
+          "registers_submitted",
+          "registers_draft",
+          "coverage_percentage",
+          "today_status",
+          "at_risk_students"
+        ],
+        "title": "SectionAttendanceAnalytics",
+        "description": "One section's attendance over the range."
       },
       "SectionAttendanceDay": {
         "properties": {
@@ -27786,6 +29122,335 @@
         ],
         "title": "StudentAdmissionRequest",
         "description": "Public admissions form payload (PDF: \"Digital Admissions Form\").\n\nHas no `admission_number`, no `section_id` and no `status`: an applicant cannot\nassign themselves a roll number, place themselves in a class, or admit\nthemselves. The service generates the number and forces status to PENDING."
+      },
+      "StudentAttendanceCalendar": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "admission_number": {
+            "type": "string",
+            "title": "Admission Number"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "roll_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roll Number"
+          },
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "From Date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "To Date"
+          },
+          "today": {
+            "type": "string",
+            "format": "date",
+            "title": "Today"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/AttendanceRate"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/StudentAttendanceMonth"
+            },
+            "type": "array",
+            "title": "Months"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/StudentAttendanceCalendarDay"
+            },
+            "type": "array",
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "admission_number",
+          "full_name",
+          "section_id",
+          "class_name",
+          "section_name",
+          "roll_number",
+          "from_date",
+          "to_date",
+          "today",
+          "overall",
+          "months",
+          "days"
+        ],
+        "title": "StudentAttendanceCalendar",
+        "description": "One child, day by day, with a rate for the range and for each month in it."
+      },
+      "StudentAttendanceCalendarDay": {
+        "properties": {
+          "session_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Session Date"
+          },
+          "register_state": {
+            "$ref": "#/components/schemas/RegisterState"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_date",
+          "register_state",
+          "status"
+        ],
+        "title": "StudentAttendanceCalendarDay",
+        "description": "One whole-day register the child is on."
+      },
+      "StudentAttendanceMonth": {
+        "properties": {
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "counted": {
+            "type": "integer",
+            "title": "Counted"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AttendanceStatusCounts"
+          },
+          "month": {
+            "type": "string",
+            "title": "Month"
+          }
+        },
+        "type": "object",
+        "required": [
+          "percentage",
+          "counted",
+          "counts",
+          "month"
+        ],
+        "title": "StudentAttendanceMonth"
+      },
+      "StudentAttendancePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StudentAttendanceRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          },
+          "today": {
+            "type": "string",
+            "format": "date",
+            "title": "Today"
+          },
+          "this_month": {
+            "$ref": "#/components/schemas/AttendanceDateRange"
+          },
+          "previous_month": {
+            "$ref": "#/components/schemas/AttendanceDateRange"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/AttendanceDateRange"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta",
+          "today",
+          "this_month",
+          "previous_month",
+          "overall"
+        ],
+        "title": "StudentAttendancePage",
+        "description": "`Page[StudentAttendanceRow]`'s envelope -- `items` and `meta` exactly as every\npaginated list (ADR 0001) -- plus the windows the row rates refer to, stated once\nrather than repeated on every row."
+      },
+      "StudentAttendanceRow": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "admission_number": {
+            "type": "string",
+            "title": "Admission Number"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "roll_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roll Number"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "today_register": {
+            "$ref": "#/components/schemas/RegisterState"
+          },
+          "today_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "this_month": {
+            "$ref": "#/components/schemas/AttendanceRate"
+          },
+          "previous_month": {
+            "$ref": "#/components/schemas/AttendanceRate"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/AttendanceRate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "admission_number",
+          "full_name",
+          "roll_number",
+          "section_id",
+          "class_id",
+          "class_name",
+          "section_name",
+          "today_register",
+          "today_status",
+          "this_month",
+          "previous_month",
+          "overall"
+        ],
+        "title": "StudentAttendanceRow",
+        "description": "One student: today's line, this month, last month and the overall range."
       },
       "StudentAttendanceSummary": {
         "properties": {

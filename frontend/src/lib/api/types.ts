@@ -179,6 +179,8 @@ export type DiaryDraftStatus = S["DiaryDraftStatus"];
 export type BookRead = S["BookRead"];
 export type BookDetail = S["BookDetail"];
 export type BookCreate = S["BookCreate"];
+export type BookScan = S["BookScan"];
+export type BookScanStatus = S["ScanStatus"];
 export type BookUpdate = S["BookUpdate"];
 export type ChapterInput = S["ChapterInput"];
 export type ChapterUpdate = S["ChapterUpdate"];
@@ -251,6 +253,25 @@ export type SectionDayStatus = S["SectionDayStatus"];
 export type StudentAttendanceSummary = S["StudentAttendanceSummary"];
 export type SectionAttendanceReport = S["SectionAttendanceReport"];
 export type SectionAttendanceDay = S["SectionAttendanceDay"];
+// Analytics: the class-by-class view, every child, and one child's calendar. Every
+// percentage in these is 0-100 and null -- never 0 -- when nothing is countable.
+export type AttendanceAnalytics = S["AttendanceAnalytics"];
+export type AttendanceHeadline = S["AttendanceHeadline"];
+export type AttendanceAnalyticsSummary = S["AttendanceAnalyticsSummary"];
+export type SectionAttendanceAnalytics = S["SectionAttendanceAnalytics"];
+export type AttendanceTrendDay = S["AttendanceTrendDay"];
+export type AttendanceWeekday = S["AttendanceWeekday"];
+export type AtRiskStudent = S["AtRiskStudent"];
+export type AttendanceAnalyticsClass = S["AttendanceAnalyticsClass"];
+export type AttendanceRate = S["AttendanceRate"];
+export type AttendanceWindowRate = S["AttendanceWindowRate"];
+export type AttendanceStatusCounts = S["AttendanceStatusCounts"];
+export type RegisterState = S["RegisterState"];
+export type StudentAttendancePage = S["StudentAttendancePage"];
+export type StudentAttendanceRow = S["StudentAttendanceRow"];
+export type StudentAttendanceCalendar = S["StudentAttendanceCalendar"];
+export type StudentAttendanceCalendarDay = S["StudentAttendanceCalendarDay"];
+export type StudentAttendanceMonth = S["StudentAttendanceMonth"];
 
 // --- Pagination ------------------------------------------------------------
 export type PageMeta = S["PageMeta"];
@@ -528,6 +549,11 @@ export const VOUCHER_STATUS_LABELS: Record<string, string> = {
   paid: "Paid",
   overdue: "Overdue",
   void: "Void",
+};
+
+export const ATTENDANCE_REGISTER_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  submitted: "Submitted",
 };
 
 export const FEE_RECURRENCE_LABELS: Record<string, string> = {

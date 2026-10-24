@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 
+import { menuItemClasses, popoverClasses } from "@/components/ui/overlay-styles";
 import { cn } from "@/lib/utils";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -18,9 +19,8 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
-        "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+        "z-50 min-w-40 overflow-hidden p-1 origin-[var(--radix-dropdown-menu-content-transform-origin)]",
+        popoverClasses,
         className,
       )}
       {...props}
@@ -36,10 +36,8 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors",
-      "focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "[&_svg]:size-4 [&_svg]:shrink-0",
-      destructive && "text-destructive focus:bg-destructive/10 focus:text-destructive",
+      menuItemClasses,
+      destructive && "text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive",
       className,
     )}
     {...props}
@@ -53,7 +51,7 @@ const DropdownMenuLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn("px-2 py-1.5 text-sm font-semibold", className)}
+    className={cn("px-2.5 py-1.5 text-sm font-semibold", className)}
     {...props}
   />
 ));

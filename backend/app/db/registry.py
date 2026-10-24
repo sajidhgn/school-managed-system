@@ -44,6 +44,9 @@ from app.modules.academics import models as academics_models
 # which import order does not affect (foreign keys resolve lazily -- see ON ORDERING).
 from app.modules.attendance import models as attendance_models
 
+# --- Attendance agent: registers teachers send on WhatsApp, until they say OK --
+from app.modules.attendance_agent import models as attendance_agent_models
+
 # --- Identity (global, no tenant column): users, sessions, email tokens -----
 from app.modules.auth import models as auth_models
 
@@ -88,6 +91,7 @@ from app.modules.whatsapp import models as whatsapp_models
 __all__ = [
     "Base",
     "academics_models",
+    "attendance_agent_models",
     "attendance_models",
     "auth_models",
     "billing_models",

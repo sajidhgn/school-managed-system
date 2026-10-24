@@ -25,6 +25,13 @@ ASK THE LIBRARY (`search_library`, `ask`)
     must answer from them or say the books do not cover it. Both run inside the
     caller's teaching scope, so a teacher can only be answered from books they see.
 
+READING A NEW BOOK'S FRONT MATTER (`scan`)
+    Photos or a PDF of the cover, title, imprint and contents pages go to the
+    agent's front-matter reader, and its reading comes back as a draft for the
+    "Add a book" form. Nothing is stored -- not the files, not the reading -- and
+    the class and subject it may suggest are only those the caller could file the
+    book under. Only the first `_SCAN_MAX_PAGES` pages are read.
+
 UPLOAD RULES
     * The file type is decided from the bytes (`ingest.sniff_kind`), never from the
       filename or the browser's content type.
@@ -59,8 +66,20 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
-from app.modules.books.agent import Answerer, Passage
-from app.modules.books.ingest import UnsupportedFileError, count_pages, sniff_kind
+from app.modules.books.agent import (
+    Answerer,
+    FrontMatterChapter,
+    FrontMatterReader,
+    FrontPage,
+    Passage,
+)
+from app.modules.books.ingest import (
+    UnsupportedFileError,
+    count_pages,
+    sniff_kind,
+    split_file,
+    text_layer_is_usable,
+)
 from app.modules.books.models import (
     Book,
     BookChapter,
@@ -83,6 +102,7 @@ from app.modules.books.schemas import (
     BookCreate,
     BookDetail,
     BookRead,
+    BookScan,
     BookSearchHit,
     BookUpdate,
     ChapterFileRead,
@@ -98,6 +118,10 @@ from app.modules.books.schemas import (
 logger = get_logger(__name__)
 
 _MAX_FILES_PER_UPLOAD = 60
+_SCAN_MAX_FILES = 10
+_SCAN_MAX_PAGES = 16
+"""Pages one front-matter reading looks at. A textbook's cover, imprint and
+contents are nearly always within its first sixteen; more only adds cost."""
 
 Embedder = Callable[[str], Awaitable[list[float]]]
 
@@ -214,6 +238,99 @@ class BookService:
         await self._audit(book, caller, AuditAction.BOOK_CREATED, after=_book_snapshot(book))
         logger.info("book_created", book_id=str(book.id), chapters=len(payload.chapters))
         return await self.detail(book.id, caller)
+
+    async def scan(
+        self, incoming: Sequence[IncomingFile], reader: FrontMatterReader, caller: Caller
+    ) -> BookScan:
+        """A new book's details read off its cover and contents pages -- a draft for
+        the teacher to check, nothing saved."""
+        self._assert_may_create(caller)
+        if not incoming:
+            raise ValidationError(
+                "Choose photos or a PDF of the book's cover and contents pages.", code="NO_FILES"
+            )
+        if len(incoming) > _SCAN_MAX_FILES:
+            raise ValidationError(
+                f"Upload at most {_SCAN_MAX_FILES} files: the cover and the contents pages.",
+                code="TOO_MANY_FILES",
+            )
+        max_bytes = self.settings.BOOKS_MAX_UPLOAD_MB * 1024 * 1024
+        pages: list[FrontPage] = []
+        skipped = False
+        for item in incoming:
+            if len(item.data) > max_bytes:
+                raise ValidationError(
+                    f"{item.filename} is larger than {self.settings.BOOKS_MAX_UPLOAD_MB} MB.",
+                    code="FILE_TOO_LARGE",
+                )
+            room = _SCAN_MAX_PAGES - len(pages)
+            try:
+                kind, _ = sniff_kind(item.data)
+                total = await asyncio.to_thread(count_pages, item.data, kind)
+                raw = (
+                    await asyncio.to_thread(split_file, item.data, kind, max_pages=room)
+                    if room > 0
+                    else []
+                )
+            except UnsupportedFileError as exc:
+                raise ValidationError(f"{item.filename}: {exc}", code="UNSUPPORTED_FILE") from exc
+            skipped = skipped or total > len(raw)
+            pages.extend(
+                FrontPage(
+                    p.image,
+                    p.image_type,
+                    p.text_layer if text_layer_is_usable(p.text_layer) else "",
+                )
+                for p in raw
+            )
+
+        classes, curriculum = await self.lookup.filing_options(caller.teacher_id)
+        class_ids = _ids_by_unique_name(classes)
+        reading = await reader.read_front_matter(
+            pages, list(class_ids), list(dict.fromkeys(name for _, _, name in curriculum))
+        )
+        class_id = class_ids.get(reading.class_choice)
+        subject_id = next(
+            (
+                sid
+                for cid, sid, name in curriculum
+                if cid == class_id and name == reading.subject_choice
+            ),
+            None,
+        )
+        title = _scanned_text(reading.title, 200)
+        chapters = _scanned_chapters(reading.chapters)
+        if title is None and not chapters:
+            raise ValidationError(
+                "No title or chapter list could be read from these pages. Upload clear "
+                "photos of the book's cover and its contents page.",
+                code="NOTHING_READ",
+            )
+        notes = []
+        if skipped:
+            notes.append(
+                f"Only the first {_SCAN_MAX_PAGES} pages were read. If the contents "
+                "continue after them, add the missing chapters yourself."
+            )
+        logger.info(
+            "book_scanned",
+            pages=len(pages),
+            chapters=len(chapters),
+            input_tokens=reader.usage.input_tokens,
+            output_tokens=reader.usage.output_tokens,
+        )
+        return BookScan(
+            title=title,
+            publisher=_scanned_text(reading.publisher, 200),
+            version=_scanned_text(reading.version, 60),
+            class_id=class_id,
+            class_printed=_scanned_text(reading.class_printed, 80),
+            subject_id=subject_id,
+            subject_printed=_scanned_text(reading.subject_printed, 120),
+            chapters=chapters,
+            pages_read=len(pages),
+            notes=notes,
+        )
 
     async def update(self, book_id: UUID, payload: BookUpdate, caller: Caller) -> BookDetail:
         book = await self._editable_book(book_id, caller)
@@ -833,6 +950,40 @@ class BookService:
             before=before,
             after=after,
         )
+
+
+def _ids_by_unique_name(rows: Sequence[tuple[UUID, str]]) -> dict[str, UUID]:
+    """Name -> id, leaving out a name two rows share: picking it would be a guess.
+    (Class names are unique per campus, but not across an organization's campuses.)"""
+    ids: dict[str, UUID] = {}
+    shared: set[str] = set()
+    for row_id, name in rows:
+        if name in ids:
+            shared.add(name)
+        ids[name] = row_id
+    return {name: row_id for name, row_id in ids.items() if name not in shared}
+
+
+def _scanned_text(value: str | None, limit: int) -> str | None:
+    """A read value trimmed to what `BookCreate` accepts; None when blank."""
+    flat = " ".join((value or "").split())[:limit].strip()
+    return flat or None
+
+
+def _scanned_chapters(chapters: Sequence[FrontMatterChapter]) -> list[ChapterInput]:
+    """The read chapter list made valid for `BookCreate`: titled, at most 200, and
+    numbered 1-999 without repeats. A list whose printed numbers repeat (two parts
+    that each restart at 1) or fall outside that range is renumbered in order."""
+    titled = [
+        (c.number, title) for c in chapters if (title := _scanned_text(c.title, 200)) is not None
+    ][:200]
+    numbers = [number for number, _ in titled]
+    if len(set(numbers)) != len(numbers) or any(not 1 <= n <= 999 for n in numbers):
+        numbers = list(range(1, len(titled) + 1))
+    return [
+        ChapterInput(number=number, title=title)
+        for number, (_, title) in zip(numbers, titled, strict=True)
+    ]
 
 
 def _book_snapshot(book: Book) -> dict[str, Any]:

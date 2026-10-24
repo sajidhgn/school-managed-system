@@ -38,6 +38,8 @@ export default async function StudentDetailPage({
       // the accountant default — whoever takes the money must not be able to erase
       // the record of it.
       canVoid={hasPermission(user, PERMISSIONS.feeVoid)}
+      // Its own code, like the fees: a role can hold the record without the register.
+      canReadAttendance={hasPermission(user, PERMISSIONS.attendanceRead)}
     />
   );
 }

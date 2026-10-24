@@ -1,4 +1,4 @@
-# EduCloud implementation status and delivery guide
+# SchoolYar implementation status and delivery guide
 
 Last audited: 2026-08-24
 
@@ -472,11 +472,26 @@ Implemented:
   (not started / in progress / submitted) and a marking dialog that batches taps into
   one PATCH.
 
+- Analytics (spec §14): `GET /attendance/analytics` (per-section rates and trend,
+  marking coverage, weekday pattern, at-risk students with absence streaks),
+  `GET /attendance/students` (every child's today / this month / last month /
+  overall) and `GET /attendance/students/{id}/calendar`. Whole-day registers are the
+  unit. Teachers see their own sections; the principal sees the campus. Dashboard
+  card with the overall rate and the class ranking, plus `/attendance/analytics` and
+  `/attendance/students` pages. Tests in `test_attendance_analytics.py`.
+- Marking by WhatsApp (spec §15, `docs/modules/attendance-agent.md`): a teacher
+  sends "Nursery-A absent 12, 13, 15", confirms the matched names, and the register
+  is submitted through `AttendanceService`. Usual messages are read by a strict
+  parser, free-form ones by the model (roll numbers only, never names). Table
+  `attendance_chat_drafts` (migration `d4f6a8c0e2b4`). Tests in
+  `test_attendance_agent.py` (integration) and `tests/unit/test_attendance_agent.py`.
+
 Attendance consumes no plan capacity; there is no 402 path in this module.
 
-Deferred by agreement and recorded in the spec: absence notifications (the messaging
-transport does not exist yet — nothing about the schema changes when a sender is
-added), leave applications, staff attendance, and device-driven auto-marking.
+Deferred by agreement and recorded in the spec: absence notifications (the WhatsApp
+transport now exists, but the outbox only posts to groups and an absence alert must
+go to one parent, never the class group), leave applications, staff attendance, and
+device-driven auto-marking.
 
 ### Guidance for every future school module
 

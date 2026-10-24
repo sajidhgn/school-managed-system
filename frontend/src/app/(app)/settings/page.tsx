@@ -10,6 +10,7 @@ import {
   type SchoolRead,
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
+import { buildCurrencyCatalog } from "@/lib/currency-timezones";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -52,6 +53,9 @@ export default async function SettingsPage() {
       canEditOrg={canEditOrg}
       canTransferOwnership={canTransferOwnership}
       ownershipCandidates={ownershipCandidates}
+      // Computed here rather than in the view: the runtime's ICU data names
+      // currencies and lists zones, and Node's differs from the browser's.
+      currencyCatalog={buildCurrencyCatalog()}
     />
   );
 }

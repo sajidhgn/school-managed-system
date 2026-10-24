@@ -178,7 +178,7 @@ class Settings(BaseSettings):
     locally, refused in production by `_reject_console_sms_in_prod`. `null` accepts
     and discards without logging bodies. A real gateway becomes a third value and a
     new class in `common/sms/sender.py`; nothing else changes."""
-    SMS_SENDER_ID: str = "EduCloud"
+    SMS_SENDER_ID: str = "SchoolYar"
 
     # --- WhatsApp class groups ----------------------------------------------
     WHATSAPP_BACKEND: Literal["console", "null", "pywhatkit", "waha"] = "console"
@@ -268,6 +268,35 @@ class Settings(BaseSettings):
     """Process a chapter inside the API process right after "Process" is pressed,
     instead of waiting for `python -m app.cli process-books`. Convenient locally;
     in production run the worker so a deploy never kills a half-read chapter."""
+    BOOKS_SCAN_PROVIDER: Literal[
+        "kie", "openai", "openrouter", "gemini", "groq", "xai", "ollama", "custom"
+    ] = "kie"
+    """Who reads a new book's cover and contents pages for "Add a book" with AI.
+    Each named provider brings its own endpoint and reads its own key below
+    (`books.agent.SCAN_PROVIDERS`), so switching is this setting and, when the
+    model differs, `BOOKS_SCAN_MODEL`. `custom` is any other OpenAI-compatible
+    server, at `BOOKS_SCAN_BASE_URL` with `BOOKS_SCAN_API_KEY`."""
+    BOOKS_SCAN_MODEL: str = "gpt-6-luna"
+    """The model, as most providers name it; it is matched to the provider's own
+    id (`openai/gpt-6-luna` on OpenRouter). It must read images and follow a
+    JSON schema."""
+    BOOKS_SCAN_API: Literal["auto", "responses", "chat"] = "auto"
+    """Which OpenAI API the provider speaks: `auto` tries the Responses API and
+    falls back to Chat Completions when the provider does not offer it (most
+    besides OpenAI and kie.ai), once per process. Pin `responses` or `chat` to
+    skip the probe."""
+    BOOKS_SCAN_BASE_URL: str = ""
+    """Required for `custom`; for a named provider, empty means its own endpoint."""
+    BOOKS_SCAN_API_KEY: str = ""
+    """For `custom` (empty is fine for a local server that takes no key); for a
+    named provider, empty means its own key setting below."""
+
+    # Provider keys, each read by the provider of the same name.
+    KIE_API_TOKEN: str = ""
+    OPENROUTER_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    XAI_API_KEY: str = ""
 
     # --- Test papers and question bank (`modules/papers`) -------------------
     PAPERS_WRITE_MODEL: str = "gpt-5.5"

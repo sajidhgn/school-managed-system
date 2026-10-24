@@ -83,7 +83,7 @@ PLAN_SEEDS: tuple[dict[str, Any], ...] = (
     {
         "code": PlanCode.FREE.value,
         "name": "Free",
-        "marketing_tagline": "Try EduCloud with a single school.",
+        "marketing_tagline": "Try SchoolYar with a single school.",
         "description": "Everything you need to evaluate the platform, at no cost.",
         "price_monthly": Decimal("0"),
         "price_yearly": Decimal("0"),

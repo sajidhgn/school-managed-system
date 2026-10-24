@@ -9,7 +9,12 @@ vectors (pgvector) so it can be searched by meaning.
 ## The teacher's flow
 
 1. **Add a book**: Title, Class, Publisher, Version (and optionally a subject),
-   plus the **chapter list** as printed on the contents page.
+   plus the **chapter list** as printed on the contents page. Two ways:
+   - **Read with AI** (the default): upload photos or a PDF of the cover, the
+     imprint page and the contents pages. The AI fills in the whole form,
+     chapter list included; the teacher checks it and adds the book. See
+     [Add a book with AI](#add-a-book-with-ai).
+   - **Enter manually**: type it all in.
 2. **Upload each chapter**: drop a PDF or the page photos on the chapter.
    Uploading queues the agent.
 3. **Read the agent's report**: the chapter becomes **Ready**, or **Needs
@@ -100,6 +105,77 @@ most 3 times.
   `storage/books`, gitignored; `/data/books` volume in Docker).
   `app/common/storage.py` is local disk only. An S3 backend would be one more
   class with the same four methods.
+
+## Add a book with AI
+
+`POST /books/scan` (multipart `files`) reads a new book's details off its front
+pages and answers with a `BookScan`: title, publisher, version, `class_id`,
+`subject_id`, the chapter list, and what was printed for the class and subject.
+It stores nothing — not the files, not the reading. The "Add a book" dialog uses
+it to pre-fill the form, and the book is then created with `POST /books` as
+usual.
+
+- One Responses API vision call over at most 10 files and the first **16
+  pages**. A typeset PDF page's text layer is sent beside its image. When pages
+  are left out, `notes` says so. A cover plus a contents page takes about 20 s
+  and ~5k input tokens on `gpt-6-luna`.
+- Provider, model and API are set in `backend/.env`. **Switching
+  `BOOKS_SCAN_PROVIDER` (and, if it differs, `BOOKS_SCAN_MODEL`) is the whole
+  change.** Each named provider has its own endpoint and reads its own key
+  (`SCAN_PROVIDERS` in `agent.py`):
+
+  | `BOOKS_SCAN_PROVIDER` | Endpoint | Key setting |
+  | --- | --- | --- |
+  | `kie` (default) | `https://api.kie.ai/openai/v1` | `KIE_API_TOKEN` |
+  | `openai` | OpenAI | `OPENAI_API_KEY` |
+  | `openrouter` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+  | `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` | `GEMINI_API_KEY` |
+  | `groq` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` |
+  | `xai` | `https://api.x.ai/v1` | `XAI_API_KEY` |
+  | `ollama` | `http://localhost:11434/v1` | none |
+  | `custom` | `BOOKS_SCAN_BASE_URL` | `BOOKS_SCAN_API_KEY` (optional) |
+
+  `BOOKS_SCAN_BASE_URL` / `BOOKS_SCAN_API_KEY` also override a named
+  provider's endpoint or key. Adding a provider is a line in `SCAN_PROVIDERS`
+  plus its key setting and name in `config.py`.
+
+- **Checked before it works.** `GET /books/scan/status` answers whether reading
+  will work and, if not, why — the dialog asks when it opens, starts on Manual
+  when the answer is no, and shows the reason on the "Read with AI" tab:
+  - the provider's key setting is empty → `OPENROUTER_API_KEY is not set in backend/.env`;
+  - the provider rejects the key (401/403) → `kie.ai rejected the API key.`;
+  - the provider's model list has no such model → `Groq does not offer the model gpt-6-luna.`;
+  - the server cannot be reached → `Ollama could not be reached.`
+
+  It is one `GET /models` — no model call — remembered for 10 minutes (1
+  minute after a problem). `POST /books/scan` runs the same check first and
+  answers 503 `AI_NOT_READY` without sending the pages anywhere. The check
+  cannot tell whether a listed model reads images; a text-only model is
+  refused by its server on the first reading, with that message.
+
+- What providers disagree on is worked out once per process and provider:
+  - **the API**: with `BOOKS_SCAN_API=auto` the Responses API is tried and, when
+    the provider does not offer it (404/405/501, or kie.ai's "not supported"),
+    Chat Completions. A real failure (a refused image, a rate limit) is
+    reported as it is, never retried on the other API.
+  - **the model's id**: sent as given when the provider lists it, else as the
+    provider spells it (`gpt-6-luna` → `openai/gpt-6-luna` on OpenRouter,
+    `gpt-5.6-luna` → `gpt-5-6-luna` on kie.ai's `/codex/v1`).
+
+  A reading wrapped in a code fence or a "thinking" preamble is still parsed.
+  Every request sends `stream: false` (kie.ai streams by default). kie.ai
+  reports some errors as HTTP 200 with `{"code": 422, "msg": ...}`; that is
+  raised with its `msg`. Error messages name the configured provider.
+- Class and subject are picked from the campus's own names, as enums in the
+  Structured Outputs schema, so the model can only choose one that exists. A
+  bound teacher is offered only the classes and subjects they could file a book
+  under, and a subject must be on the chosen class's curriculum. Anything not
+  matched comes back as `null` with the printed text, for the teacher to choose.
+- The chapter list is made valid for `POST /books`: numbers that repeat (a book
+  whose parts each restart at 1) or fall outside 1–999 are renumbered in order.
+- Needs `book:write` or `book:manage`. 30 readings per user per hour.
+  422 `NOTHING_READ` when the pages show neither a title nor a contents list;
+  503 `AI_FAILED` when OpenAI refuses or fails.
 
 ## Rules
 

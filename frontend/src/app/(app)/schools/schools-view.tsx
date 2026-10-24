@@ -219,9 +219,7 @@ export function SchoolsView({
       />
 
       {exhausted ? (
-        <p className="mb-6 rounded-lg bg-warning/15 p-4 text-sm">
-          You are using all {schoolSeats?.allowed} schools on your plan. Upgrade to add another.
-        </p>
+        <p className="mb-6 rounded-lg bg-warning/15 p-4 text-sm">{t.schools.seatsExhausted}</p>
       ) : null}
 
       {schools.length === 0 ? (

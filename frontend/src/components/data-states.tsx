@@ -73,8 +73,8 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center justify-center gap-3 px-6 py-14 text-center", className)}>
-      <div className="rounded-full bg-muted p-3">
-        <Icon className="size-5 text-muted-foreground" />
+      <div className="rounded-2xl bg-accent p-3 animate-in fade-in-0 zoom-in-90 duration-300 ease-fluid">
+        <Icon className="size-5 text-primary" />
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold">{title}</p>
@@ -107,7 +107,7 @@ export function ErrorState({
 
   return (
     <div className={cn("flex flex-col items-center justify-center gap-3 px-6 py-14 text-center", className)}>
-      <div className="rounded-full bg-destructive/10 p-3">
+      <div className="rounded-2xl bg-destructive/10 p-3 animate-in fade-in-0 zoom-in-90 duration-300 ease-fluid">
         <AlertTriangle className="size-5 text-destructive" />
       </div>
       <div className="space-y-1">
@@ -131,7 +131,7 @@ export function ErrorState({
 export function PageSpinner() {
   return (
     <div className="flex items-center justify-center py-20">
-      <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      <Loader2 className="size-5 animate-spin text-primary" />
       <span className="sr-only">Loading</span>
     </div>
   );

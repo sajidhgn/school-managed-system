@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import {
+  ATTENDANCE_REGISTER_STATUS_LABELS,
   INVITATION_STATUS_LABELS,
   MEMBER_STATUS_LABELS,
   ORG_STATUS_LABELS,
@@ -38,6 +39,7 @@ const TONES: Record<string, Tone> = {
   active: "success",
   accepted: "success",
   paid: "success",
+  submitted: "success",
   trialing: "success",
 
   // Needs attention, still working
@@ -135,6 +137,7 @@ const ANY_STATUS_LABELS: Record<string, string> = {
   ...MEMBER_STATUS_LABELS,
   ...INVITATION_STATUS_LABELS,
   ...VOUCHER_STATUS_LABELS,
+  ...ATTENDANCE_REGISTER_STATUS_LABELS,
 };
 
 export function AnyStatusBadge({ status }: { status: string | null | undefined }) {

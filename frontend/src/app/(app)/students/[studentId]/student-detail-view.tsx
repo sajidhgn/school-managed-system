@@ -9,6 +9,7 @@ import { ArrowLeft, Check, ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { StudentFeesPanel } from "./student-fees-panel";
 import { StudentFormDialog } from "../student-form-dialog";
 import { STUDENTS_LIST_QUERY_KEY } from "../students-view";
+import { StudentAttendancePanel } from "@/components/attendance/student-attendance-panel";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorState, PageSpinner } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
@@ -108,6 +109,7 @@ export function StudentDetailView({
   canIssue,
   canCollect,
   canVoid,
+  canReadAttendance,
 }: {
   studentId: string;
   canManage: boolean;
@@ -116,6 +118,7 @@ export function StudentDetailView({
   canIssue: boolean;
   canCollect: boolean;
   canVoid: boolean;
+  canReadAttendance: boolean;
 }) {
   const router = useRouter();
   const query = useStudent(studentId);
@@ -282,6 +285,24 @@ export function StudentDetailView({
           </Card>
         </div>
       </div>
+
+      {/* --- Attendance ----------------------------------------------------
+          The same month calendar the per-student attendance table opens, so a
+          child's attendance reads identically wherever it is looked up. Gated on
+          `attendance:read`; the API additionally bounds a teacher to their own
+          sections. */}
+      {canReadAttendance ? (
+        <Card className="mt-5">
+          <CardHeader>
+            <CardTitle>Attendance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-w-xl">
+              <StudentAttendancePanel studentId={student.id} />
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* --- The money -----------------------------------------------------
           Gated on `fee:read`, not on `student:read`. A class teacher can open this

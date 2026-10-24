@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
-import { AuthLink } from "@/components/auth/auth-card";
+import { AuthLink } from "@/components/auth/auth-link";
 import { ContextPicker } from "@/components/auth/context-picker";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";

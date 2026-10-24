@@ -5,16 +5,21 @@ import { Providers } from "@/components/providers";
 import { directionFor } from "@/lib/i18n/config";
 import { getMessages } from "@/lib/i18n/messages";
 import { getLocale } from "@/lib/i18n/server";
+import { SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
 import "./globals.css";
+import "./heroui.css";
 
 export const metadata: Metadata = {
+  // Resolves relative canonical and Open Graph URLs to absolute ones.
+  metadataBase: new URL(SITE_URL),
+  applicationName: SITE_NAME,
   title: {
-    default: "EduCloud — School management for growing groups",
-    template: "%s · EduCloud",
+    default: `${SITE_NAME}: ${SITE_TAGLINE}`,
+    template: `%s · ${SITE_NAME}`,
   },
   description:
-    "Multi-tenant school management: students, staff, roles, invitations and billing across every campus.",
+    "Fees and bank challans, attendance, exams and test papers from your own textbooks, plus a WhatsApp diary teachers send as a photo. Free for one school.",
 };
 
 export const viewport: Viewport = {
@@ -22,7 +27,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#15171f" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },
   ],
 };
 

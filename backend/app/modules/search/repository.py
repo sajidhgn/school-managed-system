@@ -92,8 +92,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.academics.models import SchoolClass, Section
+from app.modules.academics.models import SchoolClass, Section, Subject
 from app.modules.academics.teaching_scope import taught_class_ids, taught_section_ids
+from app.modules.attendance.models import (
+    WHOLE_DAY_PERIOD,
+    AttendanceSession,
+    AttendanceSessionStatus,
+)
 from app.modules.auth.models import User
 from app.modules.fees.models import (
     FeeHead,
@@ -947,6 +952,86 @@ def _build_fee_structure(parsed: ParsedQuery, scope: SearchScope) -> Select[Any]
     return _order(stmt, score, FeeStructure.created_at)
 
 
+def _build_attendance(parsed: ParsedQuery, scope: SearchScope) -> Select[Any] | None:
+    """One register per row: a section on a day (and period).
+
+    The date is searchable as its ISO text, so `2026-10-24` finds that day's
+    registers -- and it is shown the same way, matching the board's own heading.
+    """
+    label = func.concat(SchoolClass.name, " — ", Section.name)
+    # `to_char`, not a cast: a cast's output follows the server's `DateStyle`, and
+    # the search would silently stop matching ISO dates on a server set otherwise.
+    day = func.to_char(AttendanceSession.session_date, "YYYY-MM-DD", type_=String)
+    columns = [
+        label,
+        Section.name,
+        SchoolClass.name,
+        day,
+        Subject.name,
+        User.full_name,
+        AttendanceSession.notes,
+    ]
+    text_conditions, score = _text_conditions(parsed, columns)
+
+    period_label = case(
+        (AttendanceSession.period == WHOLE_DAY_PERIOD, literal("Whole day")),
+        else_=func.concat(
+            "Period ",
+            cast(AttendanceSession.period, String),
+            case((Subject.name.is_(None), ""), else_=func.concat(" · ", Subject.name)),
+        ),
+    )
+
+    stmt = (
+        select(
+            AttendanceSession.id.label(_ID),
+            label.label(_TITLE),
+            func.concat(day, " · ", period_label).label(_SUBTITLE),
+            User.full_name.label(_CONTEXT),
+            cast(AttendanceSession.status, String).label(_STATUS),
+            AttendanceSession.school_id.label(_SCHOOL_ID),
+            School.name.label(_SCHOOL_NAME),
+            score.label(_SCORE),
+        )
+        .join(Section, Section.id == AttendanceSession.section_id)
+        .join(SchoolClass, SchoolClass.id == Section.class_id)
+        .outerjoin(Subject, Subject.id == AttendanceSession.subject_id)
+        .outerjoin(User, User.id == AttendanceSession.taken_by_user_id)
+        .outerjoin(School, School.id == AttendanceSession.school_id)
+    )
+
+    stmt = _apply(
+        stmt,
+        [
+            _scope_condition(AttendanceSession.school_id, scope, nullable=False),
+            # The same boundary the attendance service draws: a teacher sees the
+            # registers of the sections they teach, not the whole campus's.
+            None
+            if scope.teacher_id is None
+            else AttendanceSession.section_id.in_(taught_section_ids(scope.teacher_id)),
+            _school_filter(parsed, AttendanceSession.school_id),
+            *text_conditions,
+            _enum_condition(
+                AttendanceSession.status, AttendanceSessionStatus, parsed.filter_values("status")
+            ),
+            _enum_condition(
+                AttendanceSession.status,
+                AttendanceSessionStatus,
+                parsed.negated_filters.get("status", ()),
+                negate=True,
+            ),
+            _like_any(
+                [SchoolClass.name, cast(SchoolClass.level, String)], parsed.filter_values("class")
+            ),
+            _like_any([Section.name], parsed.filter_values("section")),
+            # The school day the register is FOR, not when the row was written: a
+            # register back-filled on Monday for last Friday is Friday's register.
+            *_date_conditions(parsed, AttendanceSession.session_date),
+        ],
+    )
+    return _order(stmt, score, AttendanceSession.session_date)
+
+
 def _build_audit(parsed: ParsedQuery, scope: SearchScope) -> Select[Any] | None:
     columns = [AuditLog.action, AuditLog.entity_type, User.full_name]
     text_conditions, score = _text_conditions(parsed, columns)
@@ -989,5 +1074,6 @@ _BUILDERS: dict[SearchEntity, Any] = {
     SearchEntity.ROLE: _build_role,
     SearchEntity.FEE_HEAD: _build_fee_head,
     SearchEntity.FEE_STRUCTURE: _build_fee_structure,
+    SearchEntity.ATTENDANCE: _build_attendance,
     SearchEntity.AUDIT: _build_audit,
 }

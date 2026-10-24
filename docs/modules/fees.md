@@ -44,7 +44,7 @@ store keeper knows is wrong and the finance office believes.
 module, which is a different money flow between different parties, denominated in a
 different currency, settled through a payment gateway. The two never share a table,
 a permission, or an invoice number sequence. `invoice:read` governs what the school
-owes EduCloud; `fee:read` governs what a parent owes the school.
+owes SchoolYar; `fee:read` governs what a parent owes the school.
 
 ## 2. What was deferred, and where it stands
 

@@ -43,6 +43,42 @@ class BookCreate(BaseSchema):
         return _squash(v)
 
 
+class BookScan(BaseSchema):
+    """A book's details as the AI read them off its cover and contents pages.
+
+    A draft for the "Add a book" form, never saved by itself: every field is
+    what the teacher sees pre-filled and checks before adding the book.
+    """
+
+    title: str | None
+    publisher: str | None
+    version: str | None
+    class_id: UUID | None
+    """The campus class the book is for, when the pages name one the caller can
+    file under."""
+    class_printed: str | None
+    """The class as printed ("Class V") -- shown when `class_id` is None."""
+    subject_id: UUID | None
+    """Only a subject on `class_id`'s curriculum the caller may file under."""
+    subject_printed: str | None
+    chapters: list[ChapterInput]
+    pages_read: int
+    notes: list[str] = Field(default_factory=list)
+    """Things the teacher should know, e.g. that only a PDF's first pages were read."""
+
+
+class ScanStatus(BaseSchema):
+    """Whether "Add a book" can read pages with AI right now, and with what."""
+
+    ready: bool
+    provider: str
+    """"kie.ai", "OpenRouter", ... -- from `BOOKS_SCAN_PROVIDER`."""
+    model: str
+    problem: str | None = None
+    """Why not, when not ready: a missing or rejected key, an unknown model, an
+    unreachable server."""
+
+
 class BookUpdate(BaseSchema):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     class_id: UUID | None = None

@@ -106,7 +106,7 @@ export function UserMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="grid size-9 place-items-center rounded-full bg-accent text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/80"
+          className="grid size-9 cursor-pointer place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-2 ring-card transition-transform duration-250 ease-out-quart hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-ring data-[state=open]:scale-95"
           aria-label="Account menu"
         >
           {initials(user.full_name)}

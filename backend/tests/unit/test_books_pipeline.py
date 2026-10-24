@@ -15,23 +15,32 @@ What is worth pinning down:
   * BATCH EMBEDDING: a run that leaves embedding to a batch makes no embedding
     call, and the real agent's embedding batch maps vectors back by chunk id,
     dropping any it cannot store.
+  * READING A BOOK'S COVER goes to the provider and model `.env` names, asks for
+    a non-streamed answer (kie.ai streams by default), and offers only the
+    campus's classes and subjects.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator, Sequence
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+import httpx2
 import pytest
+from openai import APIStatusError, AuthenticationError, NotFoundError
 
 from app.core.config import Settings
 from app.modules.books import agent as agent_module
 from app.modules.books.agent import (
+    AgentNotConfiguredError,
     BookContext,
     ChapterRef,
+    CompatibleFrontMatterReader,
     EmbedRequest,
+    FrontPage,
     OpenAIBookAgent,
     PageReading,
     Passage,
@@ -396,3 +405,289 @@ async def test_the_openai_agent_answers_only_with_citations_it_was_given() -> No
     assert "[2] Physics 9, Ch 3: Force, p. 42\nNewton's second law: F = ma." in prompt
     assert prompt.endswith("QUESTION\nWhat is Newton's second law?")
     assert agent.usage.calls == {"answer": 1}
+
+
+def cover_client(models: Sequence[str] = (), **apis: Any) -> Any:
+    """A fake OpenAI-compatible server: `responses=` / `chat=` are `create`
+    functions, `models` what GET /models lists. Each gets its own base URL, so the
+    reader's per-provider memory never carries over between tests."""
+
+    async def listing() -> AsyncIterator[Any]:
+        for model_id in models:
+            yield SimpleNamespace(id=model_id)
+
+    client = SimpleNamespace(
+        base_url=f"http://provider-{uuid4()}/v1/",
+        models=SimpleNamespace(list=listing),
+    )
+    if "responses" in apis:
+        client.responses = SimpleNamespace(create=apis["responses"])
+    if "chat" in apis:
+        client.chat = SimpleNamespace(completions=SimpleNamespace(create=apis["chat"]))
+    return client
+
+
+def chat_answer(content: str) -> Any:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        usage=SimpleNamespace(prompt_tokens=4000, completion_tokens=60),
+    )
+
+
+def not_found(api: str) -> NotFoundError:
+    request = httpx2.Request("POST", f"http://provider/v1/{api}")
+    return NotFoundError("Not Found", response=httpx2.Response(404, request=request), body=None)
+
+
+def test_the_cover_reader_uses_the_provider_and_model_named_in_settings() -> None:
+    def settings(**values: Any) -> Settings:
+        return Settings(_env_file=None, **values)  # not the dev .env
+
+    def reader(**values: Any) -> CompatibleFrontMatterReader:
+        made = agent_module.front_matter_reader(settings(**values))
+        assert isinstance(made, CompatibleFrontMatterReader)
+        return made
+
+    kie = reader(BOOKS_SCAN_PROVIDER="kie", BOOKS_SCAN_MODEL="gpt-6-sol", KIE_API_TOKEN="k")
+    assert (kie.model, kie.api) == ("gpt-6-sol", "auto")
+    assert str(kie.client.base_url).startswith("https://api.kie.ai/openai/v1")
+
+    openai = reader(BOOKS_SCAN_PROVIDER="openai", BOOKS_SCAN_MODEL="gpt-5.4", OPENAI_API_KEY="o")
+    assert str(openai.client.base_url).startswith("https://api.openai.com")
+
+    # Any OpenAI-compatible server, in the API it speaks; a local one needs no key.
+    local = reader(
+        BOOKS_SCAN_PROVIDER="custom",
+        BOOKS_SCAN_BASE_URL="http://localhost:11434/v1",
+        BOOKS_SCAN_MODEL="qwen2.5vl:7b",
+        BOOKS_SCAN_API="chat",
+    )
+    assert (local.model, local.api) == ("qwen2.5vl:7b", "chat")
+    assert str(local.client.base_url).startswith("http://localhost:11434/v1")
+
+    # BOOKS_SCAN_BASE_URL / BOOKS_SCAN_API_KEY override a named provider's own.
+    moved = reader(
+        BOOKS_SCAN_PROVIDER="kie",
+        BOOKS_SCAN_BASE_URL="https://api.kie.ai/codex/v1",
+        BOOKS_SCAN_API_KEY="other",
+        KIE_API_TOKEN="",
+    )
+    assert str(moved.client.base_url).startswith("https://api.kie.ai/codex/v1")
+
+    # Switching provider is the whole change: each reads its own key.
+    openrouter = reader(BOOKS_SCAN_PROVIDER="openrouter", OPENROUTER_API_KEY="r")
+    assert str(openrouter.client.base_url).startswith("https://openrouter.ai/api/v1")
+    assert openrouter.provider == "OpenRouter"
+    ollama = reader(BOOKS_SCAN_PROVIDER="ollama")  # a local server needs no key
+    assert str(ollama.client.base_url).startswith("http://localhost:11434/v1")
+
+    with pytest.raises(AgentNotConfiguredError, match="KIE_API_TOKEN"):
+        agent_module.front_matter_reader(settings(BOOKS_SCAN_PROVIDER="kie", KIE_API_TOKEN=""))
+    with pytest.raises(AgentNotConfiguredError, match="GEMINI_API_KEY is not set"):
+        agent_module.front_matter_reader(settings(BOOKS_SCAN_PROVIDER="gemini"))
+    with pytest.raises(AgentNotConfiguredError, match="BOOKS_SCAN_BASE_URL"):
+        agent_module.front_matter_reader(settings(BOOKS_SCAN_PROVIDER="custom"))
+
+
+async def test_the_cover_reader_offers_only_the_campus_names_and_asks_for_one_answer() -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def create(**body: Any) -> Any:
+        sent.append(body)
+        return SimpleNamespace(
+            output_text=json.dumps(
+                {
+                    "title": "Beginner Mathematics",
+                    "publisher": None,
+                    "version": None,
+                    "class_printed": "Grade 2",
+                    "class_choice": "Grade 2",
+                    "subject_printed": None,
+                    "subject_choice": "none",
+                    "chapters": [{"number": 1, "title": "Numbers"}],
+                }
+            ),
+            usage=SimpleNamespace(input_tokens=5000, output_tokens=150),
+        )
+
+    reader = CompatibleFrontMatterReader(cover_client(responses=create), "gpt-6-luna")
+    page = FrontPage(b"jpeg-bytes", "image/jpeg", "")
+    reading = await reader.read_front_matter([page], ["Grade 1", "Grade 2"], ["Maths"])
+
+    assert reading.class_choice == "Grade 2"
+    (body,) = sent
+    assert body["model"] == "gpt-6-luna"
+    assert body["stream"] is False
+    schema = body["text"]["format"]["schema"]["properties"]
+    assert schema["class_choice"]["enum"] == ["Grade 1", "Grade 2", "none"]
+    assert schema["subject_choice"]["enum"] == ["Maths", "none"]
+    image = body["input"][0]["content"][2]
+    assert image["image_url"].startswith("data:image/jpeg;base64,")
+    assert reader.usage.calls == {"front_matter": 1}
+
+
+async def test_a_chat_completions_provider_gets_the_same_request_and_loose_json_is_read() -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def create(**body: Any) -> Any:
+        sent.append(body)
+        # A loosely-following model: a code fence, and fields left out.
+        return chat_answer(
+            '```json\n{"title": "Beginner Mathematics", "class_choice": "Grade 2"}\n```'
+        )
+
+    reader = CompatibleFrontMatterReader(cover_client(chat=create), "qwen2.5vl:7b", "chat")
+    page = FrontPage(b"jpeg-bytes", "image/jpeg", "")
+    reading = await reader.read_front_matter([page], ["Grade 1", "Grade 2"], [])
+
+    assert (reading.title, reading.class_choice, reading.chapters) == (
+        "Beginner Mathematics",
+        "Grade 2",
+        [],
+    )
+    (body,) = sent
+    assert body["stream"] is False
+    system, user = body["messages"]
+    assert system["role"] == "system" and "textbook" in system["content"]
+    assert user["content"][2]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    format_ = body["response_format"]
+    assert format_["type"] == "json_schema" and format_["json_schema"]["strict"] is True
+    assert format_["json_schema"]["schema"]["properties"]["class_choice"]["enum"] == [
+        "Grade 1",
+        "Grade 2",
+        "none",
+    ]
+    assert reader.usage.input_tokens == 4000
+
+
+async def test_a_gateway_error_sent_as_http_200_is_raised_with_its_message() -> None:
+    # kie.ai's answer to a model it does not serve on this API.
+    async def create(**body: Any) -> Any:
+        return SimpleNamespace(
+            model_extra={"code": 422, "msg": "The model is not supported", "data": None},
+            choices=None,
+            usage=None,
+        )
+
+    reader = CompatibleFrontMatterReader(cover_client(chat=create), "gpt-6-luna", "chat")
+    with pytest.raises(RuntimeError, match="The model is not supported"):
+        await reader.read_front_matter([FrontPage(b"x", "image/jpeg", "")], [], [])
+
+
+async def test_switching_provider_alone_finds_its_api_once_and_remembers_it() -> None:
+    calls: list[str] = []
+
+    async def responses(**body: Any) -> Any:
+        calls.append("responses")
+        raise not_found("responses")  # a Chat-Completions-only provider
+
+    async def chat(**body: Any) -> Any:
+        calls.append("chat")
+        return chat_answer('{"title": "Beginner Mathematics"}')
+
+    client = cover_client(responses=responses, chat=chat)
+    page = FrontPage(b"x", "image/jpeg", "")
+    first = await CompatibleFrontMatterReader(client, "gpt-6-luna").read_front_matter(
+        [page], [], []
+    )
+    again = await CompatibleFrontMatterReader(client, "gpt-6-luna").read_front_matter(
+        [page], [], []
+    )
+
+    assert first.title == again.title == "Beginner Mathematics"
+    assert calls == ["responses", "chat", "chat"], "the probe happens once per provider"
+
+
+async def test_kie_style_not_supported_on_one_api_falls_back_to_the_other() -> None:
+    async def responses(**body: Any) -> Any:
+        return SimpleNamespace(model_extra={"code": 422, "msg": "The model is not supported"})
+
+    async def chat(**body: Any) -> Any:
+        return chat_answer('{"title": "Beginner Mathematics"}')
+
+    reader = CompatibleFrontMatterReader(cover_client(responses=responses, chat=chat), "m")
+    reading = await reader.read_front_matter([FrontPage(b"x", "image/jpeg", "")], [], [])
+    assert reading.title == "Beginner Mathematics"
+
+
+async def test_a_real_failure_is_not_retried_on_the_other_api() -> None:
+    chat_calls: list[str] = []
+
+    async def responses(**body: Any) -> Any:
+        request = httpx2.Request("POST", "http://provider/v1/responses")
+        raise AuthenticationError(
+            "bad key", response=httpx2.Response(401, request=request), body=None
+        )
+
+    async def chat(**body: Any) -> Any:
+        chat_calls.append("chat")
+        return chat_answer("{}")
+
+    reader = CompatibleFrontMatterReader(cover_client(responses=responses, chat=chat), "m")
+    with pytest.raises(AuthenticationError):
+        await reader.read_front_matter([FrontPage(b"x", "image/jpeg", "")], [], [])
+    assert chat_calls == []
+
+
+async def test_the_same_model_is_sent_as_each_provider_spells_it() -> None:
+    sent: list[str] = []
+
+    async def responses(**body: Any) -> Any:
+        sent.append(body["model"])
+        return SimpleNamespace(output_text='{"title": "T"}', usage=None)
+
+    page = FrontPage(b"x", "image/jpeg", "")
+    openrouter = cover_client(
+        models=["anthropic/claude-x", "openai/gpt-6-luna"], responses=responses
+    )
+    kie_codex = cover_client(models=["gpt-6-1-sol", "gpt-6-luna"], responses=responses)
+    unlisted = cover_client(models=["other"], responses=responses)
+
+    await CompatibleFrontMatterReader(openrouter, "gpt-6-luna").read_front_matter([page], [], [])
+    await CompatibleFrontMatterReader(kie_codex, "gpt-6.1-sol").read_front_matter([page], [], [])
+    await CompatibleFrontMatterReader(unlisted, "gpt-6-luna").read_front_matter([page], [], [])
+
+    assert sent == ["openai/gpt-6-luna", "gpt-6-1-sol", "gpt-6-luna"]
+
+
+async def test_the_check_says_whether_the_key_and_model_will_work() -> None:
+    def failing(error: type[APIStatusError], status: int) -> Any:
+        def listing() -> Any:
+            request = httpx2.Request("GET", "http://provider/v1/models")
+            raise error("no", response=httpx2.Response(status, request=request), body=None)
+
+        client = cover_client()
+        client.models = SimpleNamespace(list=listing)
+        return client
+
+    rejected = CompatibleFrontMatterReader(
+        failing(AuthenticationError, 401), "m", provider="kie.ai"
+    )
+    assert await rejected.check() == "kie.ai rejected the API key."
+
+    listed = cover_client(models=["openai/gpt-6-luna"])
+    assert await CompatibleFrontMatterReader(listed, "gpt-6-luna").check() is None
+
+    elsewhere = cover_client(models=["llama-4-scout"])
+    assert (
+        await CompatibleFrontMatterReader(elsewhere, "gpt-6-luna", provider="Groq").check()
+        == "Groq does not offer the model gpt-6-luna."
+    )
+
+    # A provider without a model list is given the benefit of the doubt.
+    unlisted = CompatibleFrontMatterReader(failing(NotFoundError, 404), "gpt-6-luna")
+    assert await unlisted.check() is None
+
+
+async def test_the_check_is_remembered_rather_than_asked_every_time() -> None:
+    asked: list[str] = []
+
+    async def listing() -> AsyncIterator[Any]:
+        asked.append("models")
+        yield SimpleNamespace(id="gpt-6-luna")
+
+    client = cover_client()
+    client.models = SimpleNamespace(list=listing)
+    for _ in range(3):
+        assert await CompatibleFrontMatterReader(client, "gpt-6-luna").check() is None
+    assert asked == ["models"]

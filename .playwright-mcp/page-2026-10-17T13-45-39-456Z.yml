@@ -1,0 +1,476 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "SchoolYar" [ref=e6] [cursor=pointer]:
+          - /url: /
+        - navigation [ref=e13]:
+          - link "Diary" [ref=e14] [cursor=pointer]:
+            - /url: /#diary
+          - link "Fees" [ref=e15] [cursor=pointer]:
+            - /url: /#fees
+          - link "Test papers" [ref=e16] [cursor=pointer]:
+            - /url: /#papers
+          - link "Attendance" [ref=e17] [cursor=pointer]:
+            - /url: /#attendance
+          - link "Plans" [ref=e18] [cursor=pointer]:
+            - /url: /pricing
+        - generic [ref=e19]:
+          - combobox "Language" [ref=e20]:
+            - option "English" [selected]
+            - option "اردو"
+          - link "Sign in" [ref=e21] [cursor=pointer]:
+            - /url: /login
+          - link "Get started" [ref=e22] [cursor=pointer]:
+            - /url: /signup
+    - main [ref=e23]:
+      - generic [ref=e25]:
+        - generic [ref=e27]: today's diary
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - paragraph [ref=e31]: School management for Pakistani schools
+            - heading "Snap the diary. Parents get it on WhatsApp." [level=1] [ref=e33]
+            - paragraph [ref=e34]: "SchoolYar runs your school office: fees and bank challans, attendance, exams and test papers. It also works with the paper diary and WhatsApp groups your teachers already use."
+            - generic [ref=e35]:
+              - link "Start free" [ref=e36] [cursor=pointer]:
+                - /url: /signup
+              - link "See pricing" [ref=e39] [cursor=pointer]:
+                - /url: /pricing
+            - paragraph [ref=e40]: Free for one school and 50 students. No card required.
+          - generic [ref=e41]:
+            - paragraph [ref=e42]: "Demo: a teacher sends a photo of the class diary to the school's WhatsApp number. SchoolYar reads it and replies with the diary for Grade 9-A. The teacher adds a line, replies OK, and the diary is posted to the 9-A parents' group."
+            - generic [aria-hidden] [ref=e43]:
+              - generic [ref=e45]:
+                - generic [ref=e46]:
+                  - generic [ref=e47]: Thursday15-10-26
+                  - generic [ref=e49]: Class 9-A
+                - generic [ref=e50]:
+                  - generic [ref=e51]: "Maths: Ex 4.3, Q1-6"
+                  - generic [ref=e52]: "English: poem Daffodils"
+                  - generic [ref=e53]: "Urdu: sabaq 5 ki mashq"
+                  - generic [ref=e54]: "Science: lab notebook"
+                - paragraph [ref=e55]: Ms. Hina
+              - generic [ref=e59]:
+                - generic [ref=e60]: 2:43
+                - generic [ref=e70]:
+                  - generic [ref=e73]: S
+                  - generic [ref=e74]:
+                    - generic [ref=e75]: Sunrise School
+                    - generic [ref=e76]: SchoolYar assistant
+                - generic [ref=e77]: Today
+                - generic [ref=e79]: Message
+              - generic [ref=e94]:
+                - generic [ref=e95]:
+                  - generic [ref=e96]: 9-A Parents
+                  - generic [ref=e97]: now
+                - paragraph [ref=e98]: "Sunrise School: 📚 Diary · Thursday 15 Oct"
+                - paragraph [ref=e99]: "Maths: Exercise 4.3, Q1–6 · English: Learn the…"
+            - generic [ref=e100]:
+              - list [ref=e101]:
+                - listitem [ref=e102]:
+                  - paragraph [ref=e104]: 1 Teacher sends a photo
+                - listitem [ref=e105]:
+                  - paragraph [ref=e107]: 2 SchoolYar reads it
+                - listitem [ref=e108]:
+                  - paragraph [ref=e110]: 3 Teacher checks it
+                - listitem [ref=e111]:
+                  - paragraph [ref=e113]: 4 Parents get it
+              - button "Pause the demo" [ref=e114]
+      - generic [ref=e119]:
+        - generic [ref=e121]: corrections
+        - generic [ref=e122]:
+          - heading "What the school office can stop doing" [level=2] [ref=e124]
+          - list [ref=e126]:
+            - listitem [ref=e127]:
+              - generic [ref=e128]: Retyping the diary for every class group
+              - generic [ref=e129]: send a photo
+            - listitem [ref=e130]:
+              - generic [ref=e131]: Writing challans by hand each month
+              - generic [ref=e132]: printed, three copies
+            - listitem [ref=e133]:
+              - generic [ref=e134]: Working out attendance on a calculator
+              - generic [ref=e135]: counted for you
+            - listitem [ref=e136]:
+              - generic [ref=e137]: Photocopying last year's test paper
+              - generic [ref=e138]: built from your books
+            - listitem [ref=e139]:
+              - generic [ref=e140]: Chasing arrears through an old register
+              - generic [ref=e141]: carried forward
+      - generic [ref=e143]:
+        - generic [ref=e145]: fees
+        - generic [ref=e146]:
+          - generic [ref=e147]:
+            - heading "Fee challans, printed the way your bank expects" [level=2] [ref=e148]
+            - paragraph [ref=e149]: Set up fee heads and class fee structures once. Every month SchoolYar issues each student's challan on the ruled bank-counter layout, with your account details and the copies your bank asks for.
+          - generic [ref=e150]:
+            - paragraph [ref=e151]: "Example: a fee challan printed in three parts (bank copy, school copy and student copy), with the bank's PAID stamp on the school copy."
+            - generic [ref=e153]:
+              - generic [ref=e166]:
+                - generic [ref=e167]:
+                  - generic [ref=e168]: Bank copy
+                  - generic [ref=e169]: No. 2610-0412
+                - paragraph [ref=e170]: Sunrise Grammar School
+                - paragraph [ref=e171]: Main Campus · Monthly fee challan
+                - generic [ref=e173]:
+                  - generic [ref=e174]: Student
+                  - generic [ref=e175]: Ayesha Khan
+                - generic [ref=e176]:
+                  - generic [ref=e177]: Class
+                  - generic [ref=e178]: 9-A · Roll 14
+                - generic [ref=e179]:
+                  - generic [ref=e180]: Month
+                  - generic [ref=e181]: October 2026
+                - generic [ref=e182]:
+                  - generic [ref=e183]: Due date
+                  - generic [ref=e184]: 10 Oct 2026
+                - generic [ref=e186]:
+                  - generic [ref=e187]: Tuition fee
+                  - generic [ref=e188]: 6,500
+                - generic [ref=e189]:
+                  - generic [ref=e190]: Exam fee
+                  - generic [ref=e191]: "800"
+                - generic [ref=e192]:
+                  - generic [ref=e193]: Stationery · 2 copies
+                  - generic [ref=e194]: "240"
+                - generic [ref=e195]:
+                  - generic [ref=e196]: Arrears (September)
+                  - generic [ref=e197]: 1,200
+                - generic [ref=e198]:
+                  - generic [ref=e199]: Sibling concession
+                  - generic [ref=e200]: −650
+                - generic [ref=e201]:
+                  - generic [ref=e202]: Payable by due date
+                  - generic [ref=e203]: Rs 8,090
+                - generic [ref=e204]:
+                  - generic [ref=e205]: After due date
+                  - generic [ref=e206]: Rs 8,390
+                - paragraph [ref=e208]: Account 0100 2345 6789
+                - paragraph [ref=e209]: Depositor's signature
+              - generic [ref=e210]:
+                - generic [ref=e211]:
+                  - generic [ref=e212]: School copy
+                  - generic [ref=e213]: No. 2610-0412
+                - paragraph [ref=e214]: Sunrise Grammar School
+                - paragraph [ref=e215]: Main Campus · Monthly fee challan
+                - generic [ref=e217]:
+                  - generic [ref=e218]: Student
+                  - generic [ref=e219]: Ayesha Khan
+                - generic [ref=e220]:
+                  - generic [ref=e221]: Class
+                  - generic [ref=e222]: 9-A · Roll 14
+                - generic [ref=e223]:
+                  - generic [ref=e224]: Month
+                  - generic [ref=e225]: October 2026
+                - generic [ref=e226]:
+                  - generic [ref=e227]: Due date
+                  - generic [ref=e228]: 10 Oct 2026
+                - generic [ref=e230]:
+                  - generic [ref=e231]: Tuition fee
+                  - generic [ref=e232]: 6,500
+                - generic [ref=e233]:
+                  - generic [ref=e234]: Exam fee
+                  - generic [ref=e235]: "800"
+                - generic [ref=e236]:
+                  - generic [ref=e237]: Stationery · 2 copies
+                  - generic [ref=e238]: "240"
+                - generic [ref=e239]:
+                  - generic [ref=e240]: Arrears (September)
+                  - generic [ref=e241]: 1,200
+                - generic [ref=e242]:
+                  - generic [ref=e243]: Sibling concession
+                  - generic [ref=e244]: −650
+                - generic [ref=e245]:
+                  - generic [ref=e246]: Payable by due date
+                  - generic [ref=e247]: Rs 8,090
+                - generic [ref=e248]:
+                  - generic [ref=e249]: After due date
+                  - generic [ref=e250]: Rs 8,390
+                - paragraph [ref=e252]: Account 0100 2345 6789
+                - paragraph [ref=e253]: Depositor's signature
+                - generic [ref=e254]:
+                  - generic [ref=e255]: Paid
+                  - generic [ref=e256]: 12 Oct 2026
+              - generic [ref=e257]:
+                - generic [ref=e258]:
+                  - generic [ref=e259]: Student copy
+                  - generic [ref=e260]: No. 2610-0412
+                - paragraph [ref=e261]: Sunrise Grammar School
+                - paragraph [ref=e262]: Main Campus · Monthly fee challan
+                - generic [ref=e264]:
+                  - generic [ref=e265]: Student
+                  - generic [ref=e266]: Ayesha Khan
+                - generic [ref=e267]:
+                  - generic [ref=e268]: Class
+                  - generic [ref=e269]: 9-A · Roll 14
+                - generic [ref=e270]:
+                  - generic [ref=e271]: Month
+                  - generic [ref=e272]: October 2026
+                - generic [ref=e273]:
+                  - generic [ref=e274]: Due date
+                  - generic [ref=e275]: 10 Oct 2026
+                - generic [ref=e277]:
+                  - generic [ref=e278]: Tuition fee
+                  - generic [ref=e279]: 6,500
+                - generic [ref=e280]:
+                  - generic [ref=e281]: Exam fee
+                  - generic [ref=e282]: "800"
+                - generic [ref=e283]:
+                  - generic [ref=e284]: Stationery · 2 copies
+                  - generic [ref=e285]: "240"
+                - generic [ref=e286]:
+                  - generic [ref=e287]: Arrears (September)
+                  - generic [ref=e288]: 1,200
+                - generic [ref=e289]:
+                  - generic [ref=e290]: Sibling concession
+                  - generic [ref=e291]: −650
+                - generic [ref=e292]:
+                  - generic [ref=e293]: Payable by due date
+                  - generic [ref=e294]: Rs 8,090
+                - generic [ref=e295]:
+                  - generic [ref=e296]: After due date
+                  - generic [ref=e297]: Rs 8,390
+                - paragraph [ref=e299]: Account 0100 2345 6789
+                - paragraph [ref=e300]: Depositor's signature
+          - generic [ref=e302]:
+            - generic [ref=e303]:
+              - term [ref=e304]: Concessions that stay applied
+              - definition [ref=e305]: Concession schemes, per-student discounts and agreed rates apply every month without anyone re-entering them.
+            - generic [ref=e306]:
+              - term [ref=e307]: Late fees on their own
+              - definition [ref=e308]: Set the rule once. The late fee is added after the due date.
+            - generic [ref=e309]:
+              - term [ref=e310]: Arrears carried forward
+              - definition [ref=e311]: Every student has a running ledger, so last month's balance appears on this month's challan.
+            - generic [ref=e312]:
+              - term [ref=e313]: Stationery on the same challan
+              - definition [ref=e314]: Charge copies, books and uniform by quantity, next to the tuition fee.
+            - generic [ref=e315]:
+              - term [ref=e316]: A whole term on one page
+              - definition [ref=e317]: Print several months of a student's challans on a single sheet.
+            - generic [ref=e318]:
+              - term [ref=e319]: Fee notice on WhatsApp
+              - definition [ref=e320]: On your send day, every linked class group gets the month's fee and due date.
+      - generic [ref=e322]:
+        - generic [ref=e324]: test papers
+        - generic [ref=e325]:
+          - generic [ref=e326]:
+            - heading "Test papers from the textbooks you actually teach" [level=2] [ref=e327]
+            - paragraph [ref=e328]: Teachers upload each chapter as a PDF or as phone photos, in any order. SchoolYar reads every page, puts the pages in printed order, sets aside any page that belongs to another chapter, and makes the whole book searchable.
+          - generic [ref=e329]:
+            - paragraph [ref=e330]: "Example: six page photos of Chapter 4 uploaded in random order. SchoolYar sorts them into pages 37 to 41 and sets aside page 112, which belongs to Chapter 7, for a teacher to review."
+            - generic [aria-hidden] [ref=e331]:
+              - generic [ref=e332]:
+                - paragraph [ref=e333]: Needs review
+                - paragraph [ref=e334]: p. 112 is from chapter 7
+              - generic [ref=e335]: "40"
+              - generic [ref=e345]: "38"
+              - generic [ref=e355]:
+                - paragraph [ref=e356]: Chapter 7 · Percentages
+                - generic [ref=e363]: "112"
+              - generic [ref=e364]: "41"
+              - generic [ref=e374]:
+                - paragraph [ref=e383]: Exercise 4.3
+                - generic [ref=e384]: "39"
+              - generic [ref=e385]:
+                - paragraph [ref=e386]: Chapter 4 · Linear equations
+                - generic [ref=e393]: "37"
+              - generic [ref=e394]: Chapter 4 · pages 37–41 · ready
+          - generic [ref=e397]:
+            - paragraph [ref=e398]: Then a teacher picks the chapters and the mix of questions, and gets a draft paper to edit, swap questions in, and print.
+            - generic [ref=e399]:
+              - generic [ref=e400]: Chapters 4 and 5
+              - generic [ref=e401]: 10 MCQs
+              - generic [ref=e402]: 5 short questions
+              - generic [ref=e403]: In Urdu or English
+              - generic [ref=e406]: Draft paper · 15 questions
+      - generic [ref=e408]:
+        - generic [ref=e410]: register
+        - generic [ref=e412]:
+          - generic [ref=e413]:
+            - generic [ref=e414]:
+              - heading "Mark the register. The percentages add up on their own." [level=2] [ref=e415]
+              - paragraph [ref=e416]: Each section gets a register for every date and period. Teachers mark it; the office sees the totals.
+            - generic [ref=e418]:
+              - generic [ref=e419]:
+                - term [ref=e420]: Five marks, not two
+                - definition [ref=e421]: Present, absent, late, excused and half day, because a report card treats each one differently.
+              - generic [ref=e422]:
+                - term [ref=e423]: Percentages you can defend
+                - definition [ref=e424]: They count only the days a register was actually taken, so a holiday never drags a child's figure down.
+              - generic [ref=e425]:
+                - term [ref=e426]: History that survives promotion
+                - definition [ref=e427]: Promote a class in April and March's attendance stays with the class the student was in then.
+          - generic [ref=e428]:
+            - paragraph [ref=e429]: "Example: the October register for Class 9-A, with present, absent and late marks for six students and each student's attendance percentage."
+            - generic [aria-hidden] [ref=e430]:
+              - generic [ref=e431]:
+                - paragraph [ref=e432]: Class 9-A · Register
+                - paragraph [ref=e433]: October · Period 1
+              - generic [ref=e434]:
+                - generic [ref=e435]: M 5
+                - generic [ref=e436]: T 6
+                - generic [ref=e437]: W 7
+                - generic [ref=e438]: T 8
+                - generic [ref=e439]: F 9
+                - generic [ref=e440]: M 12
+                - generic [ref=e441]: T 13
+                - generic [ref=e442]: W 14
+                - generic [ref=e443]: "%"
+                - generic [ref=e444]:
+                  - generic [ref=e445]: Ayesha Khan
+                  - generic [ref=e446]: P
+                  - generic [ref=e448]: P
+                  - generic [ref=e450]: P
+                  - generic [ref=e452]: P
+                  - generic [ref=e454]: P
+                  - generic [ref=e456]: P
+                  - generic [ref=e458]: P
+                  - generic [ref=e460]: P
+                - generic [ref=e463]:
+                  - generic [ref=e464]: Bilal Ahmed
+                  - generic [ref=e465]: P
+                  - generic [ref=e467]: P
+                  - generic [ref=e469]: A
+                  - generic [ref=e471]: P
+                  - generic [ref=e473]: P
+                  - generic [ref=e475]: P
+                  - generic [ref=e477]: L
+                  - generic [ref=e479]: P
+                - generic [ref=e482]:
+                  - generic [ref=e483]: Fatima Zahra
+                  - generic [ref=e484]: P
+                  - generic [ref=e486]: P
+                  - generic [ref=e488]: P
+                  - generic [ref=e490]: P
+                  - generic [ref=e492]: A
+                  - generic [ref=e494]: P
+                  - generic [ref=e496]: P
+                  - generic [ref=e498]: P
+                - generic [ref=e501]:
+                  - generic [ref=e502]: Hamza Raza
+                  - generic [ref=e503]: P
+                  - generic [ref=e505]: L
+                  - generic [ref=e507]: P
+                  - generic [ref=e509]: P
+                  - generic [ref=e511]: P
+                  - generic [ref=e513]: P
+                  - generic [ref=e515]: P
+                  - generic [ref=e517]: P
+                - generic [ref=e520]:
+                  - generic [ref=e521]: Maryam Siddiqui
+                  - generic [ref=e522]: P
+                  - generic [ref=e524]: P
+                  - generic [ref=e526]: P
+                  - generic [ref=e528]: P
+                  - generic [ref=e530]: P
+                  - generic [ref=e532]: P
+                  - generic [ref=e534]: P
+                  - generic [ref=e536]: A
+                - generic [ref=e539]:
+                  - generic [ref=e540]: Usman Tariq
+                  - generic [ref=e541]: A
+                  - generic [ref=e543]: P
+                  - generic [ref=e545]: P
+                  - generic [ref=e547]: P
+                  - generic [ref=e549]: P
+                  - generic [ref=e551]: A
+                  - generic [ref=e553]: P
+                  - generic [ref=e555]: P
+              - generic [ref=e558]:
+                - generic [ref=e559]: P present
+                - generic [ref=e560]: A absent
+                - generic [ref=e561]: L late, counts as attended
+      - generic [ref=e563]:
+        - generic [ref=e565]: campuses
+        - generic [ref=e566]:
+          - generic [ref=e567]:
+            - heading "One account for every campus" [level=2] [ref=e568]
+            - paragraph [ref=e569]: Add schools as your group grows. Owners switch between campuses; staff see the campus they work at.
+          - generic [ref=e571]:
+            - generic [ref=e578]:
+              - heading "Each campus keeps its own" [level=3] [ref=e579]
+              - paragraph [ref=e580]: Staff, students, fee settings and challan design stay with the campus they belong to. Owners see them all.
+            - generic [ref=e586]:
+              - heading "Separation you can point to" [level=3] [ref=e587]
+              - paragraph [ref=e588]: Each organization's data is isolated by the database itself, not by a filter someone remembered to write.
+            - generic [ref=e594]:
+              - heading "Roles that fit your school" [level=3] [ref=e595]
+              - paragraph [ref=e596]: Start from Principal, Teacher and Accountant, then build the roles you actually use. Revoking access takes effect immediately.
+            - generic [ref=e602]:
+              - heading "Billing never locks your records" [level=3] [ref=e603]
+              - paragraph [ref=e604]: If a subscription payment fails, the panel turns read-only. Your students' records stay readable.
+      - generic [ref=e606]:
+        - generic [ref=e608]: urdu
+        - generic [ref=e610]:
+          - generic [ref=e611]:
+            - heading "Every screen works in Urdu too" [level=2] [ref=e612]
+            - paragraph [ref=e613]: Switch the language and the whole panel turns right to left, menus and tables included. Urdu test papers print in Nastaliq, the script children read at school.
+          - generic [ref=e614]:
+            - group "Language of the example" [ref=e615]:
+              - button "English" [pressed] [ref=e616]
+              - button "اردو" [ref=e617]
+            - generic [aria-hidden] [ref=e618]:
+              - generic [ref=e619]:
+                - generic [ref=e625]: SchoolYar
+                - generic [ref=e626]: Search
+              - generic [ref=e630]:
+                - navigation [ref=e631]:
+                  - generic [ref=e632]: Students
+                  - generic [ref=e639]: Attendance
+                  - generic [ref=e644]: Fees
+                  - generic [ref=e649]: Test papers
+                  - generic [ref=e654]: WhatsApp
+                - generic [ref=e658]:
+                  - paragraph [ref=e659]: Fees
+                  - generic [ref=e660]:
+                    - generic [ref=e661]: Ayesha Khan
+                    - generic [ref=e662]: Paid
+                  - generic [ref=e663]:
+                    - generic [ref=e664]: Bilal Ahmed
+                    - generic [ref=e665]: Due
+                  - generic [ref=e666]:
+                    - generic [ref=e667]: Fatima Zahra
+                    - generic [ref=e668]: Paid
+                  - generic [ref=e669]: Save
+      - generic [ref=e672]:
+        - generic [ref=e674]: also
+        - generic [ref=e675]:
+          - heading "Also included" [level=2] [ref=e677]
+          - list [ref=e679]:
+            - listitem [ref=e680]:
+              - generic [ref=e684]: An online admission form for each campus
+            - listitem [ref=e685]:
+              - generic [ref=e689]: Exams, marks and result cards
+            - listitem [ref=e690]:
+              - generic [ref=e695]: Student ID cards in your own design
+            - listitem [ref=e696]:
+              - generic [ref=e700]: One search across students, staff and challans
+            - listitem [ref=e701]:
+              - generic [ref=e705]: Staff invitations by email
+            - listitem [ref=e706]:
+              - generic [ref=e711]: An audit log of who changed what
+      - generic [ref=e713]:
+        - heading "Ready when you are" [level=2] [ref=e714]
+        - paragraph [ref=e717]: Create your organization, add your first school, and invite your staff. It takes a few minutes.
+        - generic [ref=e718]:
+          - link "Start free" [ref=e719] [cursor=pointer]:
+            - /url: /signup
+          - link "See pricing" [ref=e722] [cursor=pointer]:
+            - /url: /pricing
+        - paragraph [ref=e723]: Free for one school and 50 students. No card required.
+    - contentinfo [ref=e726]:
+      - generic [ref=e727]:
+        - generic [ref=e734]:
+          - paragraph [ref=e735]: SchoolYar
+          - paragraph [ref=e736]: © 2026 · School management for Pakistani schools
+        - navigation [ref=e737]:
+          - link "Plans" [ref=e738] [cursor=pointer]:
+            - /url: /pricing
+          - link "Sign in" [ref=e739] [cursor=pointer]:
+            - /url: /login
+          - link "Operator console" [ref=e740] [cursor=pointer]:
+            - /url: /platform/login
+  - region "Notifications (F8)":
+    - list

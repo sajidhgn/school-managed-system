@@ -1,4 +1,4 @@
-# EduCloud — Backend
+# SchoolYar — Backend
 
 Multi-tenant school management platform.
 FastAPI · Pydantic v2 · SQLAlchemy 2.x (async) · Alembic · PostgreSQL · Redis.

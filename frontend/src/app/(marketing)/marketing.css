@@ -1,0 +1,1623 @@
+/*
+ * The public site.
+ *
+ * Black, white and gray, with one blue. Black bands (the hero, the header, the
+ * "yaar" band, the footer) alternate with white and fog-gray ones, and blue is
+ * kept for the one thing to do next.
+ *
+ * This file holds the tokens, the shared pieces and the illustrated demos; the
+ * shell and the page sections (header, menus, hero, cards, footer) are in
+ * site.css, which loads after it.
+ *
+ * Component styles sit in `@layer components`, beneath Tailwind's utilities, so a
+ * utility on an element always wins. Only the Urdu line-height fixes and the
+ * reduced-motion overrides are unlayered, because they must win over utilities.
+ *
+ * The demos' animations start when an <InView> ancestor gains `data-in` (see
+ * components/marketing/in-view.tsx) and are plain CSS keyed off it. Scroll
+ * reveals elsewhere are Motion (components/marketing/motion/).
+ */
+
+@property --mk-pct {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer components {
+  /* ── Tokens ─────────────────────────────────────────────────────────────── */
+
+  /* The type stacks, from the raw faces fonts.ts loads. Latin face first on
+     English pages; on Urdu pages the Urdu face leads, because each Latin face's
+     metric fallback (a local Arial) has Arabic letters of its own and would
+     otherwise draw the Urdu. The Urdu face carries Latin too, so "OK", "PDF"
+     and figures in Urdu text match it. Demos marked lang="en" keep the Latin
+     order in either language. */
+  .mk,
+  .mk [lang="en"] {
+    --mk-font-display: var(--mk-face-display), var(--mk-face-urdu);
+    --mk-font-body: var(--mk-face-body), var(--mk-face-urdu);
+    --mk-font-hand: var(--mk-face-hand), var(--mk-face-urdu);
+    --mk-font-mono: var(--mk-face-mono);
+    --mk-font-urdu: var(--mk-face-urdu);
+  }
+
+  .mk:lang(ur) {
+    --mk-font-display: var(--mk-face-urdu), var(--mk-face-display);
+    --mk-font-body: var(--mk-face-urdu), var(--mk-face-body);
+  }
+
+  .mk {
+    --mk-paper: #ffffff;
+    --mk-fog: #f3f4f6;
+    --mk-card: #ffffff;
+    --mk-text: #0a0c10;
+    --mk-muted: #5c626e;
+    --mk-line: #e3e5ea;
+    --mk-ink: #2447f5;
+    --mk-ink-soft: #e9edff;
+    --mk-ink-fg: #ffffff;
+    --mk-cta-bg: #2447f5;
+    --mk-cta-fg: #ffffff;
+
+    /* What a black band switches to. */
+    --mk-night: #0a0c10;
+    --mk-night-card: #14171e;
+    --mk-night-text: #f4f5f7;
+    --mk-night-muted: #a1a7b3;
+    --mk-night-line: rgb(255 255 255 / 0.1);
+    --mk-night-ink: #8ea2ff;
+
+    /* The phone in the hero: blue and gray, like the rest of the page. */
+    --mk-chat-bg: #eef0f4;
+    --mk-chat-in: #ffffff;
+    --mk-chat-out: #dfe6ff;
+    --mk-chat-text: #0a0c10;
+    --mk-chat-meta: #6b7280;
+    --mk-chat-head: #ffffff;
+    --mk-chat-go: #2447f5;
+
+    background-color: var(--mk-paper);
+    color: var(--mk-text);
+    font-family: var(--mk-font-body), var(--mk-font-urdu), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .dark .mk {
+    --mk-paper: #0b0d12;
+    --mk-fog: #111419;
+    --mk-card: #161a22;
+    --mk-text: #f2f3f5;
+    --mk-muted: #9aa1ad;
+    --mk-line: rgb(255 255 255 / 0.09);
+    --mk-ink: #8ea2ff;
+    --mk-ink-soft: rgb(142 162 255 / 0.13);
+    --mk-ink-fg: #0b0d12;
+    --mk-cta-bg: #3554ff;
+
+    --mk-night: #050609;
+    --mk-night-card: #11141b;
+
+    --mk-chat-bg: #0f1218;
+    --mk-chat-in: #1b2029;
+    --mk-chat-out: #1d2c66;
+    --mk-chat-text: #eef0f4;
+    --mk-chat-meta: #8b93a1;
+    --mk-chat-head: #1b2029;
+    --mk-chat-go: #4d6bff;
+  }
+
+  /* Bands re-point the tokens, so everything inside adapts without a variant. */
+  .mk-night {
+    --mk-paper: var(--mk-night);
+    --mk-card: var(--mk-night-card);
+    --mk-text: var(--mk-night-text);
+    --mk-muted: var(--mk-night-muted);
+    --mk-line: var(--mk-night-line);
+    --mk-ink: var(--mk-night-ink);
+    --mk-ink-soft: rgb(142 162 255 / 0.14);
+    --mk-ink-fg: #0a0c10;
+    background-color: var(--mk-paper);
+    color: var(--mk-text);
+  }
+
+  .mk-fog {
+    --mk-paper: var(--mk-fog);
+    background-color: var(--mk-paper);
+  }
+
+  .mk-blue {
+    --mk-paper: #2447f5;
+    --mk-text: #ffffff;
+    --mk-muted: rgb(255 255 255 / 0.8);
+    --mk-line: rgb(255 255 255 / 0.22);
+    --mk-ink: #ffffff;
+    --mk-ink-fg: #2447f5;
+    --mk-ink-soft: rgb(255 255 255 / 0.14);
+    --mk-cta-bg: #ffffff;
+    --mk-cta-fg: #2447f5;
+    background-color: var(--mk-paper);
+    color: var(--mk-text);
+  }
+
+  .dark .mk .mk-blue {
+    --mk-paper: #2a43d6;
+    --mk-ink-fg: #2a43d6;
+    --mk-cta-fg: #2a43d6;
+  }
+
+  html:has(.mk) {
+    scroll-behavior: smooth;
+  }
+
+  .mk section[id] {
+    scroll-margin-top: 4.5rem;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────────────────── */
+
+  .mk-container {
+    width: 100%;
+    max-width: 76rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  .mk-section {
+    padding-block: 5rem;
+    overflow-x: clip;
+  }
+
+  @media (min-width: 640px) {
+    .mk-container {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .mk-section {
+      padding-block: 7rem;
+    }
+  }
+
+  /* ── Buttons and links ──────────────────────────────────────────────────── */
+
+  /* HeroUI's buttons at the site's measure: the large size a little taller and
+     bolder, and the primary one lifted on a blue shadow. `.mk` outranks the
+     single class HeroUI styles them with. */
+  .mk .button--lg {
+    height: 3rem;
+    padding-inline: 1.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .mk .button--primary {
+    box-shadow: 0 12px 28px -12px rgb(36 71 245 / 0.7);
+  }
+
+  .mk .button--primary:hover {
+    box-shadow: 0 18px 34px -12px rgb(36 71 245 / 0.8);
+  }
+
+  /* HeroUI places a "right" drawer at the inline end, which is the left in Urdu,
+     but slides it with a physical `translate: 100%`. Mirrored, it enters from
+     the edge it sits on. */
+  [dir="rtl"] .drawer__content--right:is([data-entering="true"], [data-exiting="true"]) .drawer__dialog {
+    translate: -100% 0;
+  }
+
+  .mk-textlink {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    color: var(--mk-ink);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--mk-ink) 35%, transparent);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.3em;
+    transition: text-decoration-color 200ms ease;
+  }
+
+  .mk-textlink:hover {
+    text-decoration-color: var(--mk-ink);
+  }
+
+  /* `translate`, not `transform`: the arrow's `rtl:-scale-x-100` is Tailwind's
+     `scale` property, and a transform here would flip it back on hover. */
+  .mk-textlink svg {
+    transition: translate 200ms ease;
+  }
+
+  .mk-textlink:hover svg {
+    translate: 3px 0;
+  }
+
+  [dir="rtl"] .mk-textlink:hover svg {
+    translate: -3px 0;
+  }
+
+  /* The floating "Talk on WhatsApp" button: the site's one blue, at the end
+     corner (right, or left in Urdu), shrinking to a round icon on phones. */
+  .mk-whatsapp {
+    position: fixed;
+    inset-block-end: 1rem;
+    inset-inline-end: 1rem;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    height: 3.25rem;
+    padding-inline: 1.1rem 1.25rem;
+    border-radius: 999px;
+    background: #2447f5;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 600;
+    box-shadow: 0 14px 34px -12px rgb(36 71 245 / 0.65);
+    transition:
+      transform 200ms ease,
+      box-shadow 200ms ease;
+  }
+
+  .mk-whatsapp:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 40px -12px rgb(36 71 245 / 0.75);
+  }
+
+  .mk-whatsapp:focus-visible {
+    outline: 3px solid color-mix(in oklab, #2447f5 45%, transparent);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 639px) {
+    .mk-whatsapp {
+      width: 3.25rem;
+      padding: 0;
+      justify-content: center;
+    }
+
+    .mk-whatsapp__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /* ── Load-in and scroll reveal ──────────────────────────────────────────── */
+
+  .mk-rise {
+    animation: mk-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms + 80ms);
+  }
+
+  @keyframes mk-rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+
+  .mk-reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 700ms ease,
+      transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    transition-delay: calc(var(--i, 0) * 80ms);
+  }
+
+  [data-in] .mk-reveal,
+  .mk-reveal[data-in] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Motion's reveals render hidden until hydration; without scripting there is
+     none, so they are shown as they are. `!important` beats the inline style. */
+  @media (scripting: none) {
+    .mk-reveal,
+    .mk [data-reveal] {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+  }
+
+  @keyframes mk-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* ── Hero stage: the diary page and the teacher's phone ─────────────────── */
+
+  .mk-stage {
+    position: relative;
+    width: 100%;
+    max-width: 34rem;
+    height: 37rem;
+    margin-inline: auto;
+  }
+
+  /* A phone on its own (the WhatsApp attendance chat): the stage is the phone. */
+  .mk-stage--phone {
+    max-width: 16.75rem;
+    height: 36.5rem;
+  }
+
+  @media (max-width: 639px) {
+    .mk-stage--phone {
+      max-width: 15.75rem;
+      height: 34.5rem;
+    }
+  }
+
+  .mk-diary {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 3.5rem;
+    width: min(20rem, 62%);
+    aspect-ratio: 34 / 44;
+    transform: rotate(-5deg);
+  }
+
+  .mk-phone {
+    position: absolute;
+    inset-inline-end: 0;
+    top: 1.25rem;
+    z-index: 2;
+    width: 16.75rem;
+    height: 34.75rem;
+  }
+
+  .mk-notify {
+    position: absolute;
+    inset-inline-start: 2%;
+    top: 0;
+    z-index: 3;
+    width: min(19rem, 86%);
+  }
+
+  @media (max-width: 639px) {
+    .mk-stage {
+      height: 35rem;
+    }
+
+    .mk-diary {
+      width: 13rem;
+      top: 0.5rem;
+      transform: rotate(-7deg);
+    }
+
+    .mk-phone {
+      width: 15.75rem;
+      height: 32.5rem;
+      top: 2.5rem;
+    }
+  }
+
+  /* The page is a physical object: white paper, blue ruling, blue ballpoint. */
+  .mk-diary__page {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 3px;
+    padding: 1.1rem 1rem 1rem 19%;
+    color: #1d36a8;
+    font-family: var(--mk-font-hand), cursive;
+    background-color: #fdfdfb;
+    background-image:
+      linear-gradient(
+        to right,
+        transparent 15%,
+        rgb(36 71 245 / 0.35) 15%,
+        rgb(36 71 245 / 0.35) calc(15% + 1.5px),
+        transparent calc(15% + 1.5px)
+      ),
+      linear-gradient(#fdfdfb, #fdfdfb),
+      repeating-linear-gradient(to bottom, transparent 0 27px, #d6dbe6 27px 28px);
+    background-size:
+      auto,
+      100% 3.6rem,
+      auto;
+    background-repeat: no-repeat, no-repeat, repeat;
+    background-position:
+      0 0,
+      0 0,
+      0 3.6rem;
+    box-shadow:
+      0 1px 1px rgb(0 0 0 / 0.08),
+      0 30px 60px -24px rgb(0 0 0 / 0.65);
+  }
+
+  .mk-diary__page::before {
+    content: "";
+    position: absolute;
+    top: -0.35rem;
+    inset-inline-start: 38%;
+    width: 4.5rem;
+    height: 1.3rem;
+    transform: rotate(3deg);
+    background: rgb(255 255 255 / 0.55);
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.04);
+  }
+
+  .mk-diary__head {
+    height: 2.5rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+
+  .mk-diary__lines {
+    margin-top: 0.35rem;
+    font-size: 1.05rem;
+    line-height: 28px;
+  }
+
+  @media (max-width: 639px) {
+    .mk-diary__lines {
+      font-size: 0.85rem;
+    }
+  }
+
+  .mk-diary__line {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    padding-inline: 0.15rem;
+    background-image: linear-gradient(rgb(36 71 245 / 0.16), rgb(36 71 245 / 0.16));
+    background-repeat: no-repeat;
+    background-position: 0 70%;
+    background-size: 0% 58%;
+    transition: background-size 320ms ease;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .mk-diary.is-reading .mk-diary__line,
+  .mk-diary.is-read .mk-diary__line {
+    background-size: 100% 58%;
+  }
+
+  .mk-diary.is-reading .mk-diary__line {
+    transition-duration: 380ms;
+    transition-delay: calc(var(--i) * 300ms + 250ms);
+  }
+
+  .mk-diary__sign {
+    margin-top: 0.4rem;
+    padding-inline-start: 30%;
+    font-size: 1.15rem;
+    transform: rotate(-6deg);
+    opacity: 0.85;
+  }
+
+  .mk-diary__scan {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 3px;
+    opacity: 0;
+    background: linear-gradient(90deg, transparent, #2447f5 20%, #2447f5 80%, transparent);
+    box-shadow: 0 0 18px 6px rgb(36 71 245 / 0.35);
+  }
+
+  .mk-diary.is-reading .mk-diary__scan {
+    animation: mk-scan 1.8s cubic-bezier(0.45, 0, 0.55, 1) both;
+  }
+
+  @keyframes mk-scan {
+    0% {
+      top: 4%;
+      opacity: 0;
+    }
+    12%,
+    88% {
+      opacity: 1;
+    }
+    100% {
+      top: 94%;
+      opacity: 0;
+    }
+  }
+
+  .mk-diary__finder {
+    position: absolute;
+    inset: -0.7rem;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .mk-diary__finder > span {
+    position: absolute;
+    width: 1.4rem;
+    height: 1.4rem;
+    border: 0 solid #fff;
+    filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.5));
+  }
+
+  .mk-diary__finder > span:nth-child(1) {
+    top: 0;
+    left: 0;
+    border-top-width: 3px;
+    border-left-width: 3px;
+  }
+
+  .mk-diary__finder > span:nth-child(2) {
+    top: 0;
+    right: 0;
+    border-top-width: 3px;
+    border-right-width: 3px;
+  }
+
+  .mk-diary__finder > span:nth-child(3) {
+    bottom: 0;
+    left: 0;
+    border-bottom-width: 3px;
+    border-left-width: 3px;
+  }
+
+  .mk-diary__finder > span:nth-child(4) {
+    bottom: 0;
+    right: 0;
+    border-bottom-width: 3px;
+    border-right-width: 3px;
+  }
+
+  .mk-diary.is-snap .mk-diary__finder {
+    animation: mk-finder 1.1s ease both;
+  }
+
+  @keyframes mk-finder {
+    0% {
+      opacity: 0;
+      transform: scale(1.12);
+    }
+    35%,
+    80% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .mk-diary__flash {
+    position: absolute;
+    inset: 0;
+    border-radius: 3px;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .mk-diary.is-snap .mk-diary__flash {
+    animation: mk-flash 520ms ease-out 560ms both;
+  }
+
+  @keyframes mk-flash {
+    18% {
+      opacity: 0.95;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* The phone. */
+  .mk-phone__frame {
+    height: 100%;
+    padding: 0.55rem;
+    border-radius: 2.6rem;
+    background: #050609;
+    box-shadow:
+      inset 0 0 0 1.5px #2a2f3d,
+      0 0 0 1px rgb(255 255 255 / 0.06),
+      0 40px 80px -30px rgb(0 0 0 / 0.8);
+  }
+
+  .mk-phone__screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 2.1rem;
+    background-color: var(--mk-chat-bg);
+    background-image: radial-gradient(rgb(90 100 120 / 0.1) 1px, transparent 1.2px);
+    background-size: 14px 14px;
+    color: var(--mk-chat-text);
+    font-size: 12.5px;
+    line-height: 1.38;
+  }
+
+  .mk-phone__status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.55rem 1.4rem 0.2rem;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--mk-chat-head);
+  }
+
+  .mk-phone__head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.8rem 0.6rem;
+    background: var(--mk-chat-head);
+    border-bottom: 1px solid rgb(0 0 0 / 0.06);
+  }
+
+  .mk-phone__avatar {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: #0a0c10;
+    color: #fff;
+    font-family: var(--mk-font-display), serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .mk-phone__chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.6rem 0.55rem;
+    animation: mk-fade-in 400ms ease both;
+  }
+
+  .mk-phone__input {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.55rem 0.9rem;
+  }
+
+  .mk-phone__field {
+    flex: 1;
+    height: 2.1rem;
+    display: flex;
+    align-items: center;
+    padding-inline: 0.85rem;
+    border-radius: 999px;
+    background: var(--mk-chat-in);
+    color: var(--mk-chat-meta);
+  }
+
+  .mk-phone__mic {
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 999px;
+    background: var(--mk-chat-go);
+    color: #fff;
+  }
+
+  .mk-day {
+    align-self: center;
+    margin-bottom: 0.2rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 0.4rem;
+    background: var(--mk-chat-in);
+    color: var(--mk-chat-meta);
+    font-size: 10.5px;
+  }
+
+  .mk-msg {
+    display: grid;
+    grid-template-rows: 1fr;
+    animation: mk-msg-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .mk-msg > div {
+    min-height: 0;
+  }
+
+  @keyframes mk-msg-in {
+    from {
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+
+  .mk-bubble {
+    width: fit-content;
+    max-width: 86%;
+    padding: 0.35rem 0.5rem 0.25rem;
+    border-radius: 0.7rem;
+    border-end-start-radius: 0.2rem;
+    background: var(--mk-chat-in);
+    box-shadow: 0 1px 0.5px rgb(11 20 26 / 0.1);
+    white-space: pre-line;
+  }
+
+  .mk-bubble--out {
+    margin-inline-start: auto;
+    border-end-start-radius: 0.7rem;
+    border-end-end-radius: 0.2rem;
+    background: var(--mk-chat-out);
+  }
+
+  .mk-bubble__meta {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.2rem;
+    margin-top: 0.1rem;
+    color: var(--mk-chat-meta);
+    font-size: 9.5px;
+  }
+
+  .mk-bubble__ticks {
+    color: var(--mk-chat-go);
+  }
+
+  .mk-typing {
+    display: flex;
+    gap: 0.22rem;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .mk-typing > span {
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 999px;
+    background: var(--mk-chat-meta);
+    animation: mk-typing 1s ease-in-out infinite;
+  }
+
+  .mk-typing > span:nth-child(2) {
+    animation-delay: 150ms;
+  }
+
+  .mk-typing > span:nth-child(3) {
+    animation-delay: 300ms;
+  }
+
+  @keyframes mk-typing {
+    0%,
+    60%,
+    100% {
+      transform: none;
+      opacity: 0.45;
+    }
+    30% {
+      transform: translateY(-3px);
+      opacity: 1;
+    }
+  }
+
+  .mk-thumb {
+    position: relative;
+    width: 9.5rem;
+    height: 6.6rem;
+    margin-bottom: 0.15rem;
+    overflow: hidden;
+    border-radius: 0.35rem;
+    background-color: #fdfdfb;
+    background-image:
+      linear-gradient(
+        to right,
+        transparent 15%,
+        rgb(36 71 245 / 0.35) 15%,
+        rgb(36 71 245 / 0.35) calc(15% + 1px),
+        transparent calc(15% + 1px)
+      ),
+      repeating-linear-gradient(to bottom, transparent 0 11px, #d6dbe6 11px 12px);
+  }
+
+  .mk-thumb > i {
+    position: absolute;
+    inset-inline-start: 20%;
+    height: 2.5px;
+    border-radius: 2px;
+    background: #1d36a8;
+    opacity: 0.7;
+  }
+
+  .mk-notify__card {
+    display: flex;
+    gap: 0.65rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: 1.1rem;
+    background: rgb(255 255 255 / 0.92);
+    color: #0a0c10;
+    backdrop-filter: blur(14px) saturate(1.4);
+    box-shadow: 0 24px 44px -20px rgb(0 0 0 / 0.6);
+    opacity: 0;
+    transform: translateY(-14px) scale(0.96);
+    transition:
+      opacity 300ms ease,
+      transform 300ms ease;
+  }
+
+  .mk-notify.is-on .mk-notify__card {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 420ms ease,
+      transform 620ms cubic-bezier(0.2, 1.5, 0.4, 1);
+  }
+
+  .mk-steps__bar {
+    position: relative;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: var(--mk-line);
+  }
+
+  .mk-steps__bar > span {
+    position: absolute;
+    inset: 0;
+    transform-origin: left;
+    transform: scaleX(0);
+    background: var(--mk-ink);
+  }
+
+  [dir="rtl"] .mk-steps__bar > span {
+    transform-origin: right;
+  }
+
+  .mk-steps__item.is-done .mk-steps__bar > span {
+    transform: scaleX(1);
+  }
+
+  .mk-steps__item.is-active .mk-steps__bar > span {
+    animation: mk-fill var(--dur) linear both;
+  }
+
+  .mk-steps.is-paused .mk-steps__bar > span {
+    animation-play-state: paused;
+  }
+
+  @keyframes mk-fill {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  /* ── Fee challan ────────────────────────────────────────────────────────── */
+
+  .mk-challan {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    padding-block: 1.5rem 2.5rem;
+  }
+
+  .mk-challan__set {
+    position: relative;
+    display: grid;
+    width: 100%;
+    max-width: 17.5rem;
+  }
+
+  .mk-copy {
+    position: relative;
+    grid-area: 1 / 1;
+    background: #fff;
+    color: #0a0c10;
+    border: 1px solid #d7dae2;
+    border-radius: 2px;
+    padding: 0.85rem 0.9rem 0.9rem;
+    font-size: 11px;
+    line-height: 1.45;
+    box-shadow: 0 22px 44px -26px rgb(0 0 0 / 0.6);
+    transition: transform 800ms cubic-bezier(0.3, 0.8, 0.2, 1);
+  }
+
+  .mk-copy--bank {
+    transform: rotate(-4deg) translateX(-0.6rem);
+  }
+
+  .mk-copy--school {
+    z-index: 2;
+  }
+
+  .mk-copy--student {
+    transform: rotate(4deg) translateX(0.6rem);
+  }
+
+  [data-in] .mk-copy--bank {
+    transform: rotate(-6deg) translate(-1rem, 0.4rem);
+  }
+
+  [data-in] .mk-copy--student {
+    transform: rotate(5deg) translate(1rem, 0.6rem);
+  }
+
+  .mk-copy__label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: -0.85rem -0.9rem 0.6rem;
+    padding: 0.3rem 0.9rem;
+    background: #0a0c10;
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .mk-copy__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .mk-copy__rule {
+    margin-block: 0.45rem;
+    border-top: 1px solid #e3e5ea;
+  }
+
+  .mk-copy__total {
+    border-top: 1.5px solid #0a0c10;
+    border-bottom: 1.5px solid #0a0c10;
+    padding-block: 0.3rem;
+    margin-top: 0.45rem;
+    font-weight: 600;
+  }
+
+  .mk-copy .num {
+    font-family: var(--mk-font-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mk-scissors {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .mk-challan__set {
+      display: flex;
+      max-width: none;
+      width: auto;
+      gap: 0;
+      transition: gap 700ms cubic-bezier(0.3, 0.8, 0.2, 1) 900ms;
+    }
+
+    [data-in] .mk-challan__set {
+      gap: 1.4rem;
+    }
+
+    .mk-copy {
+      width: 15.5rem;
+      transform: none;
+      border-radius: 0;
+      transition: transform 700ms cubic-bezier(0.3, 0.8, 0.2, 1) 900ms;
+    }
+
+    .mk-copy--bank,
+    .mk-copy--student {
+      transform: none;
+    }
+
+    .mk-copy + .mk-copy {
+      border-inline-start: 1.5px dashed #9aa0ad;
+    }
+
+    [data-in] .mk-copy--bank {
+      transform: rotate(-1.6deg) translateY(0.3rem);
+    }
+
+    [data-in] .mk-copy--student {
+      transform: rotate(1.4deg) translateY(0.5rem);
+    }
+
+    .mk-scissors {
+      display: block;
+      position: absolute;
+      top: -0.9rem;
+      z-index: 3;
+      color: var(--mk-muted);
+      transform: translateX(-50%) rotate(90deg);
+      opacity: 0;
+    }
+
+    [dir="rtl"] .mk-scissors {
+      transform: translateX(50%) rotate(90deg);
+    }
+
+    [data-in] .mk-scissors {
+      animation: mk-cut 900ms cubic-bezier(0.5, 0, 0.5, 1) both;
+    }
+  }
+
+  @keyframes mk-cut {
+    0% {
+      top: -0.9rem;
+      opacity: 0;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      top: calc(100% - 0.4rem);
+      opacity: 0;
+    }
+  }
+
+  /* The bank's PAID stamp, in blue ink. The noise mask gives it uneven ink. */
+  .mk-stamp {
+    position: absolute;
+    inset-inline-end: 0.9rem;
+    bottom: 1.7rem;
+    display: grid;
+    justify-items: center;
+    padding: 0.3rem 0.7rem 0.25rem;
+    border: 3px double #2447f5;
+    border-radius: 0.4rem;
+    color: #2447f5;
+    text-transform: uppercase;
+    line-height: 1;
+    opacity: 0;
+    transform: rotate(-14deg) scale(2.3);
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='70'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.7'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mask-size: cover;
+  }
+
+  .mk-stamp b {
+    font-family: var(--mk-font-display), serif;
+    font-size: 1.75rem;
+    letter-spacing: 0.14em;
+  }
+
+  .mk-stamp small {
+    margin-top: 0.2rem;
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+  }
+
+  [data-in] .mk-stamp {
+    opacity: 0.9;
+    transform: rotate(-14deg) scale(1);
+    transition:
+      opacity 160ms ease 1.75s,
+      transform 340ms cubic-bezier(0.3, 1.6, 0.5, 1) 1.75s;
+  }
+
+  [data-in] .mk-copy--school {
+    animation: mk-thud 260ms ease 2s;
+  }
+
+  @keyframes mk-thud {
+    40% {
+      translate: 0 2px;
+    }
+  }
+
+  /* ── Textbook pages sorting themselves ──────────────────────────────────── */
+
+  .mk-pages {
+    position: relative;
+    container-type: inline-size;
+    width: 100%;
+    aspect-ratio: 100 / 46;
+  }
+
+  .mk-pages__tray {
+    position: absolute;
+    left: 81cqw;
+    top: 4cqw;
+    width: 18cqw;
+    height: 40cqw;
+    border: 1.5px dashed var(--mk-muted);
+    border-radius: 1.4cqw;
+    opacity: 0;
+    transition: opacity 500ms ease 1.2s;
+  }
+
+  [data-in] .mk-pages__tray {
+    opacity: 1;
+  }
+
+  .mk-pages__tray-label {
+    position: absolute;
+    top: 1.2cqw;
+    inset-inline: 0;
+    text-align: center;
+    font-size: max(9px, 1.5cqw);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mk-text);
+  }
+
+  .mk-pages__why {
+    position: absolute;
+    bottom: 1.4cqw;
+    inset-inline: 0.8cqw;
+    text-align: center;
+    font-family: var(--mk-font-hand), cursive;
+    font-size: max(10px, 1.7cqw);
+    line-height: 1.15;
+    color: var(--mk-ink);
+  }
+
+  .mk-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 14cqw;
+    height: 19.5cqw;
+    padding: 1.3cqw 1.2cqw;
+    border-radius: 0.6cqw;
+    background: #fff;
+    color: #1a1d26;
+    box-shadow:
+      0 0 0 1px rgb(0 0 0 / 0.08),
+      0 1.6cqw 3cqw -1.6cqw rgb(0 0 0 / 0.5);
+    transform: translate(calc(var(--x) * 1cqw), calc(var(--y) * 1cqw)) rotate(calc(var(--r) * 1deg));
+    transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1);
+    transition-delay: calc(var(--i) * 90ms + 200ms);
+  }
+
+  [data-in] .mk-page {
+    transform: translate(calc(var(--ox) * 1cqw), calc(var(--oy) * 1cqw)) rotate(calc(var(--or) * 1deg));
+  }
+
+  .mk-page__title {
+    font-size: max(7px, 1.25cqw);
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 0.8cqw;
+  }
+
+  .mk-page__text {
+    display: block;
+    height: 0.55cqw;
+    margin-bottom: 0.75cqw;
+    border-radius: 1px;
+    background: #d9dce4;
+  }
+
+  .mk-page__no {
+    position: absolute;
+    bottom: 1cqw;
+    inset-inline: 0;
+    text-align: center;
+    font-family: var(--mk-font-mono), monospace;
+    font-size: max(8px, 1.3cqw);
+    color: #5c626e;
+  }
+
+  .mk-pages__ready {
+    position: absolute;
+    left: 3cqw;
+    top: 36cqw;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 99px;
+    background: var(--mk-ink);
+    color: var(--mk-ink-fg);
+    font-size: 0.8rem;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(6px);
+    transition:
+      opacity 400ms ease 1.6s,
+      transform 400ms ease 1.6s;
+  }
+
+  [data-in] .mk-pages__ready {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (max-width: 639px) {
+    .mk-pages__ready {
+      top: 37cqw;
+      font-size: 0.7rem;
+    }
+  }
+
+  /* ── Attendance register ────────────────────────────────────────────────── */
+
+  .mk-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    font-family: var(--mk-font-hand), cursive;
+    font-weight: 700;
+    font-size: 1rem;
+    opacity: 0;
+    transform: scale(1.7) rotate(-8deg);
+    transition:
+      opacity 220ms ease,
+      transform 300ms cubic-bezier(0.3, 1.5, 0.5, 1);
+    transition-delay: calc(var(--c) * 110ms + var(--r) * 35ms + 200ms);
+  }
+
+  [data-in] .mk-mark {
+    opacity: 1;
+    transform: none;
+  }
+
+  .mk-mark--p {
+    color: var(--mk-ink);
+  }
+
+  .mk-mark--a {
+    color: var(--mk-paper);
+    background: var(--mk-text);
+    border-radius: 999px;
+  }
+
+  .mk-mark--l {
+    color: var(--mk-muted);
+  }
+
+  .mk-pct {
+    --mk-pct: 0;
+    counter-reset: pct var(--mk-pct);
+    font-family: var(--mk-font-mono), monospace;
+    font-variant-numeric: tabular-nums;
+    transition: --mk-pct 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 1.15s;
+  }
+
+  .mk-pct::after {
+    content: counter(pct) "%";
+  }
+
+  [data-in] .mk-pct {
+    --mk-pct: var(--target);
+  }
+
+  /* ── Campus cards ───────────────────────────────────────────────────────── */
+
+  .mk-campus {
+    display: grid;
+    gap: 1rem;
+    justify-items: center;
+    padding-block: 0.5rem 1.5rem;
+  }
+
+  .mk-campus__card {
+    width: 100%;
+    max-width: 20rem;
+    padding: 1.15rem;
+    border: 1px solid var(--mk-line);
+    border-top: 3px solid var(--hue);
+    border-radius: 1rem;
+    background: var(--mk-card);
+    box-shadow: 0 24px 44px -30px rgb(0 0 0 / 0.5);
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 600ms ease,
+      transform 850ms cubic-bezier(0.3, 0.8, 0.2, 1);
+    transition-delay: calc(var(--i) * 120ms + 100ms);
+  }
+
+  [data-in] .mk-campus__card {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (min-width: 1024px) {
+    .mk-campus {
+      display: flex;
+      justify-content: center;
+      gap: 1.25rem;
+    }
+
+    .mk-campus__card {
+      width: 18.5rem;
+      max-width: none;
+      opacity: 1;
+    }
+
+    .mk-campus__card:nth-child(1) {
+      transform: translateX(calc(100% + 1.25rem)) rotate(-4deg);
+    }
+
+    .mk-campus__card:nth-child(2) {
+      z-index: 2;
+      transform: none;
+    }
+
+    .mk-campus__card:nth-child(3) {
+      transform: translateX(calc(-100% - 1.25rem)) rotate(4deg);
+    }
+
+    [data-in] .mk-campus__card:nth-child(n) {
+      transform: none;
+    }
+  }
+
+  /* ── Feature pages ──────────────────────────────────────────────────────── */
+
+  /* Steps: numbered discs on a line that fills in blue, one after another. */
+  .mk-flow {
+    display: grid;
+    gap: 2.5rem;
+  }
+
+  .mk-flow__step {
+    position: relative;
+    padding-inline-start: 4.75rem;
+  }
+
+  .mk-flow__no {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border: 1.5px solid var(--mk-line);
+    border-radius: 999px;
+    background: var(--mk-paper);
+    font-family: var(--mk-font-display), serif;
+    font-size: 1.35rem;
+    font-weight: 700;
+    transition:
+      background-color 400ms ease,
+      color 400ms ease,
+      border-color 400ms ease;
+    transition-delay: calc(var(--i) * 280ms + 150ms);
+  }
+
+  [data-in] .mk-flow__no {
+    background: var(--mk-ink);
+    border-color: var(--mk-ink);
+    color: var(--mk-ink-fg);
+  }
+
+  .mk-flow__step::before,
+  .mk-flow__step::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 1.6rem;
+    top: 3.25rem;
+    bottom: -2.5rem;
+    width: 1.5px;
+    background: var(--mk-line);
+  }
+
+  .mk-flow__step::after {
+    background: var(--mk-ink);
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 400ms ease;
+    transition-delay: calc(var(--i) * 280ms + 350ms);
+  }
+
+  [data-in] .mk-flow__step::after {
+    transform: scaleY(1);
+  }
+
+  .mk-flow__step:last-child::before,
+  .mk-flow__step:last-child::after {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .mk-flow {
+      grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+      gap: 2rem;
+    }
+
+    .mk-flow__step {
+      padding-inline-start: 0;
+      padding-top: 5rem;
+    }
+
+    .mk-flow__step::before,
+    .mk-flow__step::after {
+      top: 1.6rem;
+      bottom: auto;
+      inset-inline-start: 3.25rem;
+      inset-inline-end: -2rem;
+      width: auto;
+      height: 1.5px;
+    }
+
+    .mk-flow__step::after {
+      transform: scaleX(0);
+      transform-origin: left;
+    }
+
+    [dir="rtl"] .mk-flow__step::after {
+      transform-origin: right;
+    }
+
+    [data-in] .mk-flow__step::after {
+      transform: scaleX(1);
+    }
+  }
+
+  /* A detail card. It lifts with the Spotlight around it (motion/spotlight.tsx). */
+  .mk-detail {
+    height: 100%;
+    padding: 1.6rem;
+    border: 1px solid var(--mk-line);
+    border-radius: 1.1rem;
+    background: var(--mk-card);
+    transition:
+      border-color 200ms ease,
+      box-shadow 200ms ease;
+  }
+
+  .mk-spot:hover .mk-detail {
+    border-color: color-mix(in oklab, var(--mk-ink) 35%, var(--mk-line));
+    box-shadow: 0 24px 40px -32px rgb(0 0 0 / 0.5);
+  }
+
+  .mk-detail__tick {
+    display: block;
+    width: 1.75rem;
+    height: 3px;
+    margin-bottom: 1.1rem;
+    border-radius: 2px;
+    background: var(--mk-ink);
+  }
+
+  /* ── The "yaar" band ────────────────────────────────────────────────────── */
+
+  /* Revealed from the right edge leftward: the direction Urdu is written in.
+     The negative insets leave room for strokes that reach outside the line
+     box; inset(0) would shave them off. */
+  .mk-yaar__word {
+    font-family: var(--mk-font-urdu), sans-serif;
+    font-weight: 800;
+    font-size: clamp(7rem, 19vw, 15rem);
+    line-height: 1.3;
+    text-align: center;
+    color: var(--mk-text);
+    clip-path: inset(-60% -20% -60% 105%);
+    transition: clip-path 1.8s cubic-bezier(0.6, 0, 0.3, 1) 200ms;
+  }
+
+  [data-in] .mk-yaar__word {
+    clip-path: inset(-60% -20% -60% -20%);
+  }
+
+  .mk-yaar__word span {
+    color: var(--mk-ink);
+  }
+
+  .mk-yaar__word:lang(en) {
+    font-family: var(--mk-font-display), serif;
+    font-size: clamp(6rem, 17vw, 14rem);
+    line-height: 1;
+    letter-spacing: -0.06em;
+    clip-path: inset(-20% 105% -20% -10%);
+  }
+
+  [data-in] .mk-yaar__word:lang(en) {
+    clip-path: inset(-20% -10% -20% -10%);
+  }
+
+  @media (scripting: none) {
+    .mk-yaar__word {
+      clip-path: none;
+    }
+  }
+
+  /* ── Urdu layout demo ───────────────────────────────────────────────────── */
+
+  .mk-rtl-card {
+    view-transition-name: mk-rtl-card;
+  }
+
+  .mk-rtl-side {
+    view-transition-name: mk-rtl-side;
+  }
+
+  .mk-rtl-main {
+    view-transition-name: mk-rtl-main;
+  }
+
+  .mk-rtl-btn {
+    view-transition-name: mk-rtl-btn;
+  }
+}
+
+::view-transition-group(mk-rtl-side),
+::view-transition-group(mk-rtl-main),
+::view-transition-group(mk-rtl-btn) {
+  animation-duration: 650ms;
+  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* The language picker is the app's own component, styled with the panel's
+   utilities; unlayered so it can be dressed for the black bars here. */
+.mk .mk-night select {
+  background-color: transparent;
+  border-color: var(--mk-line);
+  color: var(--mk-muted);
+}
+
+.mk .mk-night select option {
+  color: #0a0c10;
+}
+
+/* ── Urdu: a little more line height than Latin, and no tracking ──────────────
+   Unlayered so it beats Tailwind's leading and tracking utilities. Demos are
+   marked lang="en" (they are English illustrations) and keep their own
+   spacing, and the decorative words (`.mk-ur-deco`) set their own line height.
+   Letter spacing is always zero: spacing out a joined script breaks the
+   joins between its letters. */
+
+.mk :lang(ur) {
+  letter-spacing: 0;
+}
+
+.mk :lang(ur):not(.mk-ur-deco, .mk-ur-deco *) {
+  line-height: 1.85;
+}
+
+.mk :is(h1, h2, h3):lang(ur):not(.mk-ur-deco) {
+  line-height: 1.45;
+}
+
+/* Arabic-script letters sit taller than Latin ones, so Urdu titles step down a
+   little. */
+.mk .mk-title--hero:lang(ur) {
+  font-size: clamp(2.3rem, 4.2vw, 3.75rem);
+}
+
+.mk .mk-title--section:lang(ur) {
+  font-size: clamp(1.9rem, 3.5vw, 2.9rem);
+}
+
+.mk .mk-title--cta:lang(ur) {
+  font-size: clamp(2.3rem, 5.4vw, 4.2rem);
+}
+
+/* ── Reduced motion: show every end state, move nothing ─────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.mk) {
+    scroll-behavior: auto;
+  }
+
+  .mk *,
+  .mk *::before,
+  .mk *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .mk .mk-typing > span,
+  .mk .mk-ticker__row,
+  .mk .mk-hero__glow,
+  .mk .mk-hub__orbit,
+  .mk .mk-hub__halo,
+  .mk .mk-dash__pulse::after,
+  .mk .mk-flowcard__arrow,
+  .mk .mk-shine::after {
+    animation: none !important;
+  }
+}

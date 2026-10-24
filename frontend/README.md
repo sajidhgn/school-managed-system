@@ -1,4 +1,4 @@
-# EduCloud — Frontend
+# SchoolYar — Frontend
 
 Next.js 15 (App Router) interface for the FastAPI backend in [`../backend`](../backend).
 Implements `educloud-core-spec.md` phases 6–8: marketing site, tenant admin panel,

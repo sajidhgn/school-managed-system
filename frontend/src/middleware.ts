@@ -37,6 +37,11 @@ const PLATFORM_REFRESH_COOKIE = "educloud_platform_refresh";
 /** Marketing + auth surfaces: reachable with no session at all. */
 const PUBLIC_PREFIXES = [
   "/pricing",
+  "/features",
+  // Crawlers and link previews arrive with no session; a redirect to /login here
+  // would quietly drop the site from search results.
+  "/sitemap.xml",
+  "/robots.txt",
   "/login",
   "/signup",
   "/verify-email",
@@ -46,6 +51,12 @@ const PUBLIC_PREFIXES = [
   "/admissions",
   "/legal",
 ];
+
+/**
+ * Generated link-preview images. Next serves them under a hashed name
+ * (`/opengraph-image-pwu6ef`), so they are matched by pattern, not prefix.
+ */
+const PUBLIC_PATTERNS = [/^\/opengraph-image(?:-[\w-]+)?$/];
 
 /** Signed-in users should not sit on these; bounce them into the app. */
 const AUTH_ONLY_PAGES = ["/login", "/signup"];
@@ -66,6 +77,7 @@ function passThrough(request: NextRequest): NextResponse {
 
 function isPublic(pathname: string): boolean {
   if (pathname === "/") return true;
+  if (PUBLIC_PATTERNS.some((pattern) => pattern.test(pathname))) return true;
   return PUBLIC_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
