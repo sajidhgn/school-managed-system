@@ -27,7 +27,8 @@
 @layer components {
   /* ── Tokens ─────────────────────────────────────────────────────────────── */
 
-  /* The type stacks, from the raw faces fonts.ts loads. Latin face first on
+  /* The type stacks, from the raw faces fonts.ts loads (the Urdu one, shared
+     with the admin panel, from app/fonts.ts). Latin face first on
      English pages; on Urdu pages the Urdu face leads, because each Latin face's
      metric fallback (a local Arial) has Arabic letters of its own and would
      otherwise draw the Urdu. The Urdu face carries Latin too, so "OK", "PDF"
@@ -35,16 +36,16 @@
      order in either language. */
   .mk,
   .mk [lang="en"] {
-    --mk-font-display: var(--mk-face-display), var(--mk-face-urdu);
-    --mk-font-body: var(--mk-face-body), var(--mk-face-urdu);
-    --mk-font-hand: var(--mk-face-hand), var(--mk-face-urdu);
+    --mk-font-display: var(--mk-face-display), var(--face-urdu);
+    --mk-font-body: var(--mk-face-body), var(--face-urdu);
+    --mk-font-hand: var(--mk-face-hand), var(--face-urdu);
     --mk-font-mono: var(--mk-face-mono);
-    --mk-font-urdu: var(--mk-face-urdu);
+    --mk-font-urdu: var(--face-urdu);
   }
 
   .mk:lang(ur) {
-    --mk-font-display: var(--mk-face-urdu), var(--mk-face-display);
-    --mk-font-body: var(--mk-face-urdu), var(--mk-face-body);
+    --mk-font-display: var(--face-urdu), var(--mk-face-display);
+    --mk-font-body: var(--face-urdu), var(--mk-face-body);
   }
 
   .mk {

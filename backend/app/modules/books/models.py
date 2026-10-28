@@ -8,20 +8,36 @@ WHY THIS FILE EXISTS
     (question papers, search, a tutor) can retrieve it by meaning.
 
 RESPONSIBILITY
-    Five tables, outermost first:
+    Six tables, outermost first:
 
-        books               Title, Class, Publisher, Version (+ optional subject)
+        school_books        a campus's SHELF: which library books it uses, each
+                            filed under one of its classes (+ optional subject)
+        books               the shared LIBRARY: Title, Publisher, Version, Grade
         book_chapters       the book's CHAPTER LIST -- number + title -- and each
                             chapter's processing state and agent report
         book_chapter_files  the original uploads, in upload order
         book_pages          one row per physical page, in the order the agent chose
         book_chunks         retrieval units with a `vector(1536)` embedding
 
+ONE LIBRARY, MANY SHELVES
+    Every school on the platform reads from one library: a book uploaded once is
+    added by any other school to its own class, never uploaded and indexed again
+    (`catalog.py` decides when two books are the same one). So the five content
+    tables are READABLE by every organization (`library_read` policy), while
+    WRITES stay with the uploading organization (`tenant_isolation`). Which books a
+    campus uses, and under which class and subject, is its own business and lives
+    in `school_books`, an ordinary tenant table.
+
+    The uploader's campus (`books.organization_id/school_id`) OWNS the content:
+    only its people change chapters and uploads. Every other school's entry is a
+    link to it; there are no copies to drift apart.
+
 INTERACTIONS
     * `TenantMixin` -> RLS on `organization_id`; `RequiredSchoolMixin` -> campus.
-      Every child row copies both from its book on write, so a page can never be
-      scoped differently from the book it belongs to.
-    * `class_id` -> `classes.id`; `subject_id` -> `subjects.id` (SET NULL).
+      On the content tables that is the OWNER, and every child row copies both
+      from its book on write, so a page can never be owned apart from its book.
+    * `school_books.class_id` -> `classes.id` (CASCADE: a deleted class drops the
+      shelf entry, not the book); `subject_id` -> `subjects.id` (SET NULL).
     * File bytes live in `common/storage.py`; rows hold only the storage key.
     * `jobs.py` (the worker) is the only writer of `book_pages` and `book_chunks`.
 
@@ -32,8 +48,9 @@ WHY THE CHAPTER LIST IS DECLARED BY THE TEACHER
     index, another book's page) is reported instead of silently indexed.
 
 WHY NO SOFT DELETE
-    Books are teaching material, not records anything is computed from. Deleting a
-    book removes its files too, and the audit trail keeps who did it.
+    Books are teaching material, not records anything is computed from. Removing
+    a book removes the shelf entry; the content goes too once the uploader removes
+    it and no other school uses it, and the audit trail keeps who did it.
 """
 
 from __future__ import annotations
@@ -124,10 +141,45 @@ class PagePlacement(StrEnum):
 
 
 class Book(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin):
-    """One textbook one class is taught from."""
+    """One textbook in the shared library, owned by the campus that uploaded it."""
 
     __tablename__ = "books"
 
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    publisher: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[str] = mapped_column(String(60), nullable=False)
+    """Edition or revision as printed: "2nd Edition", "2024", "Revised 2023"."""
+    grade: Mapped[str] = mapped_column(String(80), nullable=False)
+    """The class it is for, as the uploader names it ("Class 5") -- what other
+    schools see in the library. Follows the uploader's class."""
+    grade_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    """`catalog.grade_key(grade)`: "Grade 5" and "Class V" are both "5", so a school
+    browsing the library for its own Class 5 finds them."""
+    subject: Mapped[str | None] = mapped_column(String(120))
+    """The uploader's subject name, for searching the library by subject."""
+    catalog_key: Mapped[str | None] = mapped_column(String(600), unique=True)
+    """`catalog.catalog_key` -- one book per key across the platform. NULL only on
+    books that already duplicated an older one when the library became shared."""
+
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+    )
+    """The uploader. `book:write` holders may edit only books they created."""
+
+
+class SchoolBook(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin):
+    """A library book on one campus's shelf, filed under one of its classes."""
+
+    __tablename__ = "school_books"
+
+    book_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     class_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("classes.id", ondelete="CASCADE"),
@@ -139,27 +191,15 @@ class Book(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, Timestam
         ForeignKey("subjects.id", ondelete="SET NULL"),
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    publisher: Mapped[str] = mapped_column(String(200), nullable=False)
-    version: Mapped[str] = mapped_column(String(60), nullable=False)
-    """Edition or revision as printed: "2nd Edition", "2024", "Revised 2023"."""
-
-    created_by_user_id: Mapped[UUID | None] = mapped_column(
+    added_by_user_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
-        index=True,
     )
-    """The uploader. `book:write` holders may edit only books they created."""
+    """Who put it on the shelf -- the uploader, for the campus that owns the book.
+    `book:write` holders may refile or remove only entries they added."""
 
     __table_args__ = (
-        UniqueConstraint(
-            "school_id",
-            "class_id",
-            "title",
-            "publisher",
-            "version",
-            name="uq_books_school_id_class_id_title_publisher_version",
-        ),
+        UniqueConstraint("school_id", "book_id", name="uq_school_books_school_id_book_id"),
     )
 
 

@@ -57,10 +57,10 @@ COPY --from=builder --chown=appuser:appuser /app/app /app/app
 COPY --from=builder --chown=appuser:appuser /app/alembic /app/alembic
 COPY --from=builder --chown=appuser:appuser /app/alembic.ini /app/alembic.ini
 
-# Uploaded textbook files and rendered page images (BOOKS_STORAGE_PATH). Created
-# here, owned by the app user, so a named volume mounted on it inherits a directory
-# the unprivileged process can write.
-RUN mkdir -p /data/books && chown appuser:appuser /data/books
+# Uploaded textbook files and rendered page images (BOOKS_STORAGE_PATH), and profile
+# photos (AVATARS_STORAGE_PATH). Created here, owned by the app user, so a named
+# volume mounted on each inherits a directory the unprivileged process can write.
+RUN mkdir -p /data/books /data/avatars && chown appuser:appuser /data/books /data/avatars
 
 USER appuser
 

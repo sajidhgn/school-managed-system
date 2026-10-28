@@ -381,7 +381,7 @@ export function OrganizationDetailView({
               export their data — only writes are refused. Nothing is deleted.
             </span>
             <textarea
-              className="block min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+              className="block min-h-20 w-full rounded-control border border-border bg-background px-3 py-2 text-sm text-foreground"
               placeholder="Reason (kept in the audit log)"
               maxLength={500}
               value={reason}

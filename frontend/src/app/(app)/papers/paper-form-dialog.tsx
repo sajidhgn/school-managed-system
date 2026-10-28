@@ -76,7 +76,10 @@ export function PaperFormDialog({
   onOpenChange: (open: boolean) => void;
   onCreated?: (paper: PaperDetail) => void;
 }) {
-  const books = useBooks(null);
+  // A picker, not a browsing list: one page of the API's largest size. The list
+  // page itself pages and searches in the database.
+  const books = useBooks({ size: 100 });
+  const bookList = books.data?.items;
   const create = useCreatePaper();
 
   const [bookId, setBookId] = React.useState("");
@@ -122,7 +125,7 @@ export function PaperFormDialog({
     setAttempted(false);
   }, [open, presetRows]);
 
-  const bookRow = books.data?.find((b) => b.id === bookId) ?? null;
+  const bookRow = bookList?.find((b) => b.id === bookId) ?? null;
   const chosenChapters = (detail?.chapters ?? [])
     .filter((c) => chapterIds.has(c.id))
     .sort((a, b) => a.number - b.number);
@@ -244,7 +247,7 @@ export function PaperFormDialog({
               <option value="" disabled>
                 {books.isLoading ? "Loading books…" : "Choose a book"}
               </option>
-              {groupByClass(books.data ?? []).map(([className, list]) => (
+              {groupByClass(bookList ?? []).map(([className, list]) => (
                 <optgroup key={className} label={className}>
                   {list.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -254,7 +257,7 @@ export function PaperFormDialog({
                 </optgroup>
               ))}
             </NativeSelect>
-            {books.data && !books.data.length ? (
+            {bookList && !bookList.length ? (
               <p className="text-xs text-muted-foreground">
                 The library has no books yet. Add one under Books and let the agent read its
                 chapters first.

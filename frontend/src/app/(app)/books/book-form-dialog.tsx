@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, PenLine, Plus, RotateCcw, Sparkles, X } from "lucide-react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Library, PenLine, Plus, RotateCcw, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +17,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { useCreateBook, useScanBook, useScanStatus, useUpdateBook } from "@/hooks/use-books";
+import {
+  duplicateBook,
+  useAddFromLibrary,
+  useCreateBook,
+  useScanBook,
+  useScanStatus,
+  useUpdateBook,
+} from "@/hooks/use-books";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useCurriculum } from "@/hooks/use-subjects";
 import type { BookDetail, BookRead, BookScan } from "@/lib/api/types";
@@ -45,20 +54,30 @@ const MODES: { value: Mode; label: string; icon: typeof Sparkles }[] = [
  * teacher checks it and adds the book as usual. Whether the AI can read at all
  * (its provider's key, model and server) is checked when the dialog opens; if
  * not, the dialog starts on Manual and says why.
+ *
+ * Books are shared by every school, so one already in the library is refused
+ * (`DUPLICATE_BOOK`); the dialog then offers to add that copy to the chosen class
+ * instead. Editing a library book changes only where this campus files it -- the
+ * title, publisher and version are its uploader's.
  */
 export function BookFormDialog({
   open,
   onOpenChange,
   book,
   onCreated,
+  onBrowseLibrary,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   book: BookRead | null;
   onCreated?: (book: BookDetail) => void;
+  /** Shown on "Add a book": look in the shared library before uploading. */
+  onBrowseLibrary?: () => void;
 }) {
+  const router = useRouter();
   const classes = useClassSummary();
   const create = useCreateBook();
+  const addFromLibrary = useAddFromLibrary();
   const update = useUpdateBook(book?.id ?? "");
   const scan = useScanBook();
   const scanStatus = useScanStatus(open && !book);
@@ -85,6 +104,15 @@ export function BookFormDialog({
   const focusKey = React.useRef<number | null>(null);
 
   const curriculum = useCurriculum(classId || null);
+  // Only the uploader changes what the book IS; another campus refiles it.
+  const detailsLocked = Boolean(book?.from_library);
+
+  // A refusal names the book already in the library -- until the details change.
+  const resetCreate = create.reset;
+  React.useEffect(() => {
+    resetCreate();
+  }, [resetCreate, title, publisher, version, classId]);
+  const duplicate = duplicateBook(create.error);
 
   React.useEffect(() => {
     if (!open) return;
@@ -146,7 +174,7 @@ export function BookFormDialog({
   const numbers = chapters.map((c) => c.number);
   const duplicateNumber = numbers.length !== new Set(numbers).size;
 
-  const pending = create.isPending || update.isPending;
+  const pending = create.isPending || update.isPending || addFromLibrary.isPending;
   // "Read with AI" shows the upload step until a reading has filled in the form.
   const choosingPages = !book && mode === "ai" && !scanned;
 
@@ -156,21 +184,39 @@ export function BookFormDialog({
         <DialogHeader>
           <DialogTitle>{book ? "Edit book" : "Add a book"}</DialogTitle>
           <DialogDescription>
-            {book
-              ? "Change the book's details. Its chapters and uploads are not affected."
-              : choosingPages
-                ? "Upload the book's cover and contents pages. The AI fills in its details and chapter list for you to check."
-                : mode === "ai"
-                  ? "Check what the AI read against the book and correct anything it got wrong. You upload each chapter's pages on the next screen."
-                  : "Enter the book's details and its chapter list as printed in the contents page. You upload each chapter's pages on the next screen."}
+            {detailsLocked
+              ? "This book is from the shared library. Choose the class and subject your school files it under; only the school that uploaded it can change its title, publisher or version."
+              : book
+                ? "Change the book's details. Its chapters and uploads are not affected."
+                : choosingPages
+                  ? "Upload the book's cover and contents pages. The AI fills in its details and chapter list for you to check."
+                  : mode === "ai"
+                    ? "Check what the AI read against the book and correct anything it got wrong. You upload each chapter's pages on the next screen."
+                    : "Enter the book's details and its chapter list as printed in the contents page. You upload each chapter's pages on the next screen."}
           </DialogDescription>
         </DialogHeader>
+
+        {!book && onBrowseLibrary && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Library className="size-4 shrink-0" aria-hidden />
+            <span>
+              Another school may have uploaded it already.{" "}
+              <button
+                type="button"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                onClick={onBrowseLibrary}
+              >
+                Search the library
+              </button>
+            </span>
+          </p>
+        )}
 
         {!book && (
           <div
             role="radiogroup"
             aria-label="How to add the book"
-            className="inline-flex w-full rounded-md border border-input bg-card p-0.5 shadow-sm"
+            className="inline-flex w-full rounded-[calc(var(--control-radius)+3px)] border border-input bg-card p-0.5 shadow-sm"
           >
             {MODES.map(({ value, label, icon: Icon }) => {
               const active = mode === value;
@@ -183,7 +229,7 @@ export function BookFormDialog({
                   disabled={scan.isPending}
                   onClick={() => setMode(value)}
                   className={cn(
-                    "inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+                    "inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-control px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
                     active
                       ? "bg-primary font-medium text-primary-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -273,12 +319,58 @@ export function BookFormDialog({
               />
             )}
 
+            {duplicate && (
+              <div className="flex flex-col gap-2 rounded-lg bg-primary/5 px-3 py-3 text-sm sm:flex-row sm:items-center">
+                <Library className="hidden size-4 shrink-0 text-primary sm:block" />
+                <p className="min-w-0 flex-1">{create.error?.message}</p>
+                {duplicate.onShelf ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      onOpenChange(false);
+                      router.push(`/books/${duplicate.bookId}` as Route);
+                    }}
+                  >
+                    Open it
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={addFromLibrary.isPending}
+                    onClick={() =>
+                      addFromLibrary.mutate(
+                        {
+                          id: duplicate.bookId,
+                          body: {
+                            class_id: classId,
+                            subject_id: subjectId || null,
+                          },
+                        },
+                        {
+                          onSuccess: (added) => {
+                            onOpenChange(false);
+                            onCreated?.(added);
+                          },
+                        },
+                      )
+                    }
+                  >
+                    Add it to this class
+                  </Button>
+                )}
+              </div>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor="book-title">Title</Label>
                 <Input
                   id="book-title"
                   required
+                  disabled={detailsLocked}
                   maxLength={200}
                   value={title}
                   placeholder="New Countdown 5"
@@ -329,6 +421,7 @@ export function BookFormDialog({
                 <Input
                   id="book-publisher"
                   required
+                  disabled={detailsLocked}
                   maxLength={200}
                   value={publisher}
                   placeholder="Oxford University Press"
@@ -340,6 +433,7 @@ export function BookFormDialog({
                 <Input
                   id="book-version"
                   required
+                  disabled={detailsLocked}
                   maxLength={60}
                   value={version}
                   placeholder="3rd Edition, 2024"

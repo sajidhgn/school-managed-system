@@ -73,10 +73,13 @@ export function SidebarNav({
    * =========================================================================
    * THE CAMPUS MODULES BELONG TO A BRANCH, NOT TO THE APP
    * =========================================================================
-   *   Members, Roles, Invitations, Students, Classes and Audit all act on ONE
-   *   campus. Showing them permanently would mean six links whose meaning depends
-   *   on a selection made elsewhere and displayed nowhere — you would click
-   *   "Members" and get whichever branch the app last happened to be pointed at.
+   *   Roles, Students, Classes, Attendance and Audit all act on ONE campus.
+   *   Showing them permanently would mean links whose meaning depends on a
+   *   selection made elsewhere and displayed nowhere — you would click "Students"
+   *   and get whichever branch the app last happened to be pointed at.
+   *
+   *   Members is the exception: it spans every branch and filters by one, so it
+   *   sits in the top group and is there from the moment the principal signs in.
    *
    *   So they are grouped under the branch's NAME and appear only once a branch is
    *   open. Opening a different branch moves the whole group to it, which is what
@@ -85,8 +88,8 @@ export function SidebarNav({
    *
    *   NOT derived from `user.school_id`: only a school-SCOPED member carries a
    *   school on their session. The principal is org-level and never does, however
-   *   many campuses they run — testing that hid all six from the one person who
-   *   administers all of them.
+   *   many campuses they run — testing that hid the whole group from the one
+   *   person who administers all of them.
    */
   activeSchoolName?: string | null;
   onNavigate?: () => void;
@@ -105,6 +108,15 @@ export function SidebarNav({
           icon: Building2,
           anyOf: SCHOOL_ADMIN_PERMISSIONS,
         },
+        {
+          // Not under the open branch: Members lists staff across every branch and
+          // takes the branch as a filter, so the principal can add staff straight
+          // after signing in instead of first choosing a campus.
+          href: "/members",
+          label: t.nav.members,
+          icon: Users,
+          anyOf: [PERMISSIONS.memberRead],
+        },
       ],
     },
     {
@@ -112,13 +124,6 @@ export function SidebarNav({
       // else, which is why they are one group rather than scattered through the nav.
       heading: activeSchoolName ?? undefined,
       items: [
-        {
-          href: "/members",
-          label: t.nav.members,
-          icon: Users,
-          anyOf: [PERMISSIONS.memberRead],
-          requiresSchool: true,
-        },
         {
           href: "/roles",
           label: t.nav.roles,

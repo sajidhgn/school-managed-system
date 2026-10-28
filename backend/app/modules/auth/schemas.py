@@ -159,6 +159,12 @@ class MeResponse(BaseSchema):
     """When an expired trial will be permanently deleted, for the upgrade banner."""
 
 
+class AvatarResponse(BaseSchema):
+    """`POST /auth/me/avatar` -- where the new photo is served, relative to `/api/v1`."""
+
+    avatar_url: str
+
+
 # ---------------------------------------------------------------------------
 # Password reset
 # ---------------------------------------------------------------------------

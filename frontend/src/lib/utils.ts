@@ -1,5 +1,10 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+/* `rounded-control` is the theme's own radius (globals.css). Without it on the
+   scale, `cn("rounded-control", "rounded-md")` keeps both and the stylesheet
+   order picks the winner instead of the caller. */
+const twMerge = extendTailwindMerge({ extend: { theme: { borderRadius: ["control"] } } });
 
 /** Merge Tailwind classes, letting later conflicting utilities win. */
 export function cn(...inputs: ClassValue[]) {

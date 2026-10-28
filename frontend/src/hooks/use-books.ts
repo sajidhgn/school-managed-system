@@ -3,9 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/components/ui/use-toast";
-import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
-import { booksApi } from "@/lib/api/resources/books";
+import { ApiError, errorMessage } from "@/lib/api/errors";
+import {
+  booksApi,
+  type BookListParams,
+  type LibraryParams,
+} from "@/lib/api/resources/books";
 import type {
   BookCreate,
   BookDetail,
@@ -14,6 +18,7 @@ import type {
   ChapterRead,
   ChapterStatus,
   ChapterUpdate,
+  ShelfInput,
 } from "@/lib/api/types";
 
 /** Statuses the agent is still working through -- the page polls while any remain. */
@@ -32,11 +37,59 @@ function waitsOnBatch(chapter: {
   return chapter.status === "reading" || Boolean(chapter.indexing);
 }
 
-export function useBooks(classId: string | null) {
+export function useBooks(params: BookListParams) {
   return useQuery({
-    queryKey: queryKeys.books.list(classId),
-    queryFn: () => booksApi.list(classId),
+    queryKey: queryKeys.books.list(params),
+    queryFn: () => booksApi.list(params),
     placeholderData: (previous) => previous,
+  });
+}
+
+/** The library every school shares, while `enabled` (the dialog is open). */
+export function useLibrary(params: LibraryParams, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.books.library(params),
+    queryFn: () => booksApi.library(params),
+    enabled,
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useLibrarySubjects(grade: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.books.librarySubjects(grade),
+    queryFn: () => booksApi.librarySubjects(grade),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/** The book a refused "Add book" already is: in the library, or on the campus. */
+export function duplicateBook(
+  error: unknown,
+): { bookId: string; onShelf: boolean } | null {
+  if (!(error instanceof ApiError) || error.code !== "DUPLICATE_BOOK")
+    return null;
+  const bookId = error.problem.meta?.book_id;
+  return typeof bookId === "string"
+    ? { bookId, onShelf: error.problem.meta?.on_shelf === true }
+    : null;
+}
+
+export function useAddFromLibrary() {
+  const invalidate = useInvalidateBooks();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ShelfInput }) =>
+      booksApi.addFromLibrary(id, body),
+    onSuccess: (book) => {
+      invalidate();
+      toast.success(
+        "Book added from the library",
+        `${book.title} — ${book.class_name}`,
+      );
+    },
+    onError: (error) =>
+      toast.error("Couldn't add the book", errorMessage(error)),
   });
 }
 
@@ -112,8 +165,11 @@ export function useCreateBook() {
       invalidate();
       toast.success("Book added", `${book.title} — ${book.class_name}`);
     },
-    onError: (error) =>
-      toast.error("Couldn't add the book", errorMessage(error)),
+    // A book already in the library is answered in the dialog, with a way to add it.
+    onError: (error) => {
+      if (!duplicateBook(error))
+        toast.error("Couldn't add the book", errorMessage(error));
+    },
   });
 }
 
@@ -157,10 +213,10 @@ export function useDeleteBook() {
     mutationFn: (id: string) => booksApi.remove(id),
     onSuccess: () => {
       invalidate();
-      toast.success("Book deleted");
+      toast.success("Book removed");
     },
     onError: (error) =>
-      toast.error("Couldn't delete the book", errorMessage(error)),
+      toast.error("Couldn't remove the book", errorMessage(error)),
   });
 }
 

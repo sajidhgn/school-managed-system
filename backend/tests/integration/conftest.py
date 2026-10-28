@@ -91,6 +91,8 @@ _APP_TABLES = (
     "student_enrollments",
     # Before `subjects` (RESTRICT) and `classes` (CASCADE).
     "class_subjects",
+    # A campus's shelf references `books` and `classes` (CASCADE both).
+    "school_books",
     "book_chunks",
     "book_pages",
     "book_chapter_files",

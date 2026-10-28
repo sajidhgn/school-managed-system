@@ -64,7 +64,7 @@ export function OrganizationBanner({
         </div>
         <Link
           href="/billing"
-          className="shrink-0 self-start rounded-full bg-destructive px-3.5 py-1.5 text-xs font-medium text-destructive-foreground transition-[background-color,transform] duration-150 ease-out hover:bg-destructive/90 active:scale-[0.97] sm:self-center"
+          className="shrink-0 self-start rounded-control bg-destructive px-3.5 py-1.5 text-xs font-medium text-destructive-foreground transition-[background-color,transform] duration-150 ease-out hover:bg-destructive/90 active:scale-[0.97] sm:self-center"
         >
           {t.billing.upgradePlan}
         </Link>
@@ -116,7 +116,7 @@ export function OrganizationBanner({
       </div>
       <Link
         href="/billing"
-        className="shrink-0 self-center rounded-full border border-current/30 px-3.5 py-1.5 text-xs font-medium transition-[background-color,transform] duration-150 ease-out hover:bg-current/10 active:scale-[0.97]"
+        className="shrink-0 self-center rounded-control border border-current/30 px-3.5 py-1.5 text-xs font-medium transition-[background-color,transform] duration-150 ease-out hover:bg-current/10 active:scale-[0.97]"
       >
         {cta}
       </Link>

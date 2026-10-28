@@ -269,7 +269,7 @@ export function CardDesignDialog({
             placeholder={
               "Be on time for school and classes\nWear the proper school uniform every day"
             }
-            className="rounded-md border border-input bg-card px-2 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="rounded-control border border-input bg-card px-2 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
@@ -283,7 +283,7 @@ export function CardDesignDialog({
             value={config.contact_line}
             onChange={(event) => set("contact_line", event.target.value.slice(0, 120))}
             placeholder="If found, please call 0300 1234567"
-            className="h-8 rounded-md border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-8 rounded-control border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
@@ -297,7 +297,7 @@ export function CardDesignDialog({
             onChange={(event) => set("found_notice", event.target.value.slice(0, 300))}
             rows={2}
             placeholder="This card identifies a student of Cambridge International and remains school property. If found, please return it to the school office or call 0300 1234567."
-            className="rounded-md border border-input bg-card px-2 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="rounded-control border border-input bg-card px-2 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 

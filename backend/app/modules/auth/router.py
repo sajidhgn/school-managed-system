@@ -25,8 +25,10 @@ WHY THESE ROUTES TAKE `Response` AND SET COOKIES DIRECTLY
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi import APIRouter, Depends, File, Header, Request, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -41,13 +43,16 @@ from app.api.deps import (
 )
 from app.common.audit import AuditAction, record_audit
 from app.common.email.sender import EmailSender, build_email_sender
+from app.common.storage import LocalFileStorage, get_avatar_storage
 from app.core.config import Settings
 from app.core.context import set_organization_id, set_school_id
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, NotFoundError, ValidationError
 from app.core.rate_limit import enforce_rate_limit
 from app.db.session import bind_tenant
+from app.modules.auth.avatar import AVATAR_MEDIA_TYPE, avatar_key, store_avatar, stored_key
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
+    AvatarResponse,
     ContextSwitchRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -82,6 +87,14 @@ def get_email_dispatcher(settings: SettingsDep) -> EmailSender:
 
 
 EmailDispatcher = Annotated[EmailSender, Depends(get_email_dispatcher)]
+
+
+def avatar_storage(settings: SettingsDep) -> LocalFileStorage:
+    """Where profile photos are kept. Overridden in tests with a temporary directory."""
+    return get_avatar_storage(settings)
+
+
+AvatarStorage = Annotated[LocalFileStorage, Depends(avatar_storage)]
 
 
 def _service(
@@ -570,6 +583,86 @@ async def me(ctx: CurrentAuth, session: DbSession, settings: SettingsDep) -> MeR
         read_only=read_only,
         trial_expired=scheduled_deletion_at is not None,
         scheduled_deletion_at=scheduled_deletion_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Profile photo
+# ---------------------------------------------------------------------------
+#   `CurrentAuth`, not `require(...)`: every member, whatever their role, manages
+#   their OWN photo, and no route here takes another user's id to write. See
+#   `modules/auth/avatar.py` for the file handling.
+
+
+async def _own_user(session: DbSession, ctx: CurrentAuth) -> User:
+    user = await session.get(User, ctx.user_id)
+    if user is None:
+        raise AuthenticationError("Account no longer exists.", code="USER_NOT_FOUND")
+    return user
+
+
+@router.post("/me/avatar", response_model=AvatarResponse, summary="Set your profile photo")
+async def upload_avatar(
+    ctx: CurrentAuth,
+    session: DbSession,
+    settings: SettingsDep,
+    storage: AvatarStorage,
+    file: Annotated[UploadFile, File(description="A JPEG, PNG or WebP photo.")],
+) -> AvatarResponse:
+    """Set or replace the caller's photo. Stored as a square WebP, metadata removed."""
+    limit = settings.AVATAR_MAX_UPLOAD_MB * 1024 * 1024
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise ValidationError(
+            f"The photo must be {settings.AVATAR_MAX_UPLOAD_MB} MB or smaller.",
+            code="FILE_TOO_LARGE",
+        )
+    user = await _own_user(session, ctx)
+    previous = await store_avatar(user, data, storage)
+    # Commit BEFORE removing the old file, so a failed commit leaves the row naming
+    # a file that still exists. Nothing reads through `session` after this.
+    await session.commit()
+    if previous is not None:
+        await storage.delete(previous)
+    assert user.avatar_url is not None
+    return AvatarResponse(avatar_url=user.avatar_url)
+
+
+@router.delete(
+    "/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Remove your profile photo",
+)
+async def remove_avatar(ctx: CurrentAuth, session: DbSession, storage: AvatarStorage) -> Response:
+    user = await _own_user(session, ctx)
+    had_photo = stored_key(user) is not None
+    user.avatar_url = None
+    await session.commit()  # before the delete, as in `upload_avatar`
+    if had_photo:
+        # The whole directory, not only the current file: it also sweeps one a
+        # crash left behind between writing a new photo and committing it.
+        await storage.delete_prefix(str(user.id))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/avatars/{user_id}/{filename}", summary="A profile photo")
+async def avatar_image(
+    user_id: UUID, filename: str, ctx: CurrentAuth, storage: AvatarStorage
+) -> FileResponse:
+    """Any signed-in member may see a colleague's photo: the URL comes from a
+    response they were already allowed to read, and its random name cannot be
+    guessed from the user id alone."""
+    del ctx  # authentication is the whole check
+    key = avatar_key(user_id, filename)
+    path = storage.path(key) if key is not None else None
+    if path is None or not path.is_file():
+        raise NotFoundError("Photo not found.")
+    # The name changes with every upload, so a cached copy can never be stale.
+    return FileResponse(
+        path,
+        media_type=AVATAR_MEDIA_TYPE,
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
     )
 
 

@@ -167,12 +167,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Send a one-time login code by SMS
-         * @description Text a code to the number, if it belongs to a registered guardian.
+         * Send a one-time login code on WhatsApp
+         * @description Send a code to the number, if it belongs to a registered guardian.
          *
          *     THE RESPONSE IS IDENTICAL EITHER WAY. See the enumeration note in
          *     `auth_service.py`: an honest "no such guardian" would turn this endpoint into a
          *     way to ask whether a specific person has a child at a school on this platform.
+         *     The send itself runs after the response, so its latency cannot answer it either
+         *     (see `delivery.py`).
          */
         post: operations["request_code_api_v1_guardian_auth_request_code_post"];
         delete?: never;
@@ -835,6 +837,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set your profile photo
+         * @description Set or replace the caller's photo. Stored as a square WebP, metadata removed.
+         */
+        post: operations["upload_avatar_api_v1_auth_me_avatar_post"];
+        /** Remove your profile photo */
+        delete: operations["remove_avatar_api_v1_auth_me_avatar_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/avatars/{user_id}/{filename}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A profile photo
+         * @description Any signed-in member may see a colleague's photo: the URL comes from a
+         *     response they were already allowed to read, and its random name cannot be
+         *     guessed from the user id alone.
+         */
+        get: operations["avatar_image_api_v1_auth_avatars__user_id___filename__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/org": {
         parameters: {
             query?: never;
@@ -897,6 +942,61 @@ export interface paths {
          *     question the UI could have answered itself.
          */
         get: operations["get_usage_api_v1_org_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/org/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Org Members
+         * @description Staff across every branch the caller can see, optionally narrowed to one.
+         *
+         *     Filters combine: `school_id` (one branch), `q` (name or email contains), and
+         *     `role` (a role CODE such as `teacher`, so it spans every branch's copy of it).
+         *
+         *     The principal opens Members straight after signing in, without first choosing a
+         *     campus: their membership is org-level, so the whole organization is theirs to
+         *     list, and `school_id` is a filter they apply rather than a precondition. RLS
+         *     still bounds the query to the caller's organization.
+         *
+         *     A school-scoped caller sees their own branch whatever they ask for -- asking for
+         *     another one is the same 403 the school-scoped route gives.
+         */
+        get: operations["list_org_members_api_v1_org_members_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/org/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Org Invitations
+         * @description One page of invitations across every branch the caller can see, newest first.
+         *
+         *     `school_id` and `status` narrow it in the database. A school-scoped caller sees
+         *     their own branch whatever they ask for; asking for another is a 403, as on the
+         *     school-scoped routes. Acting on a row still goes through its own branch's routes.
+         */
+        get: operations["list_org_invitations_api_v1_org_invitations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1894,6 +1994,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/guardians/students/{student_id}/portal-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Let a parent sign in to the portal and see this student
+         * @description Register the phone if needed and link it to the student with portal access.
+         *
+         *     Both codes, because it can do both things: register a parent and link one. It
+         *     needs no more than doing the two steps separately would. Returns the student's
+         *     updated contact card. Turning access off again is the link PATCH with
+         *     `can_view_results: false`.
+         */
+        post: operations["grant_portal_access_api_v1_guardians_students__student_id__portal_access_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/guardians": {
         parameters: {
             query?: never;
@@ -2579,14 +2704,84 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Books on the campus */
+        /**
+         * Books on the campus
+         * @description One page of the campus's books, newest first.
+         *
+         *     `class_id`, `subject_id` and `q` (title or publisher) narrow the list in the
+         *     database, and the page is an offset into the filtered result.
+         */
         get: operations["list_books_api_v1_books_get"];
         put?: never;
         /**
          * Add a book: Title, Class, Publisher, Version, and optionally its chapter list
-         * @description 409 `DUPLICATE_BOOK` if the class already has that title/publisher/version.
+         * @description 409 `DUPLICATE_BOOK` if the library already has that title, publisher and
+         *     version for that grade -- uploaded by any school; `meta.book_id` is that book,
+         *     to add from the library instead.
          */
         post: operations["create_book_api_v1_books_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shared library: every book uploaded by any school on the platform
+         * @description By title, one page at a time. `q` matches the title or publisher; `grade` is
+         *     a class name as any school writes it -- "Class 5", "Grade V" and "Fifth" find
+         *     the same books; `subject` is a subject name from `/books/library/subjects`.
+         *     `on_shelf` marks the books the caller's campus already has.
+         */
+        get: operations["library_api_v1_books_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/library/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The subject names the library's books are filed under */
+        get: operations["library_subjects_api_v1_books_library_subjects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/books/library/{book_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a library book to one of your classes
+         * @description The book is used as it is -- its chapters, pages and search index are the
+         *     library's, kept up to date by the school that uploaded it. 409
+         *     `ALREADY_ON_SHELF` if the campus has it already.
+         */
+        post: operations["add_from_library_api_v1_books_library__book_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2688,11 +2883,16 @@ export interface paths {
         get: operations["get_book_api_v1_books__book_id__get"];
         put?: never;
         post?: never;
-        /** Delete a book, its files and its index */
+        /**
+         * Remove a book from the campus; delete it if nobody else uses it
+         * @description The book leaves the campus's books. Its files, pages and index are deleted
+         *     too when the campus uploaded it and no other school uses it; otherwise it stays
+         *     in the library for them.
+         */
         delete: operations["delete_book_api_v1_books__book_id__delete"];
         options?: never;
         head?: never;
-        /** Edit a book's details */
+        /** Edit a book's details (uploader only) or where your campus files it */
         patch: operations["update_book_api_v1_books__book_id__patch"];
         trace?: never;
     };
@@ -2879,7 +3079,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Test papers on the campus */
+        /**
+         * Test papers on the campus
+         * @description One page of the campus's papers, newest first.
+         *
+         *     `class_id`, `subject_id`, `status` and `q` (title) narrow the list in the
+         *     database, and the page is an offset into the filtered result.
+         */
         get: operations["list_papers_api_v1_papers_get"];
         put?: never;
         /**
@@ -4800,6 +5006,14 @@ export interface components {
             created_at: string;
         };
         /**
+         * AvatarResponse
+         * @description `POST /auth/me/avatar` -- where the new photo is served, relative to `/api/v1`.
+         */
+        AvatarResponse: {
+            /** Avatar Url */
+            avatar_url: string;
+        };
+        /**
          * BillingCycle
          * @enum {string}
          */
@@ -4868,6 +5082,14 @@ export interface components {
              */
             files: string[];
         };
+        /** Body_upload_avatar_api_v1_auth_me_avatar_post */
+        Body_upload_avatar_api_v1_auth_me_avatar_post: {
+            /**
+             * File
+             * @description A JPEG, PNG or WebP photo.
+             */
+            file: string;
+        };
         /** Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post */
         Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post: {
             /**
@@ -4912,6 +5134,8 @@ export interface components {
             publisher: string;
             /** Version */
             version: string;
+            /** Grade */
+            grade: string;
             /**
              * Class Id
              * Format: uuid
@@ -4936,10 +5160,20 @@ export interface components {
             created_at: string;
             /** Can Edit */
             can_edit: boolean;
+            /** Can Remove */
+            can_remove: boolean;
+            /** From Library */
+            from_library: boolean;
+            /** School Count */
+            school_count: number;
             /** Chapters */
             chapters: components["schemas"]["ChapterRead"][];
         };
-        /** BookRead */
+        /**
+         * BookRead
+         * @description A book as the caller's campus has it: the library's book, filed under one of
+         *     the campus's classes.
+         */
         BookRead: {
             /**
              * Id
@@ -4952,6 +5186,8 @@ export interface components {
             publisher: string;
             /** Version */
             version: string;
+            /** Grade */
+            grade: string;
             /**
              * Class Id
              * Format: uuid
@@ -4976,6 +5212,12 @@ export interface components {
             created_at: string;
             /** Can Edit */
             can_edit: boolean;
+            /** Can Remove */
+            can_remove: boolean;
+            /** From Library */
+            from_library: boolean;
+            /** School Count */
+            school_count: number;
         };
         /**
          * BookScan
@@ -7125,6 +7367,28 @@ export interface components {
             /** Phone */
             phone: string;
         };
+        /**
+         * GuardianPortalGrant
+         * @description Turn on parent-portal access for one child, from the student's page.
+         *
+         *     The phone and name are normally the ones already on the student's record, which
+         *     the member of staff is confirming by sending them.
+         */
+        GuardianPortalGrant: {
+            /**
+             * Phone
+             * @example 0300-1234567
+             */
+            phone: string;
+            /**
+             * Full Name
+             * @example Muhammad Aslam
+             */
+            full_name: string;
+            relationship_type: components["schemas"]["GuardianRelationship"];
+            /** Relationship Label */
+            relationship_label?: string | null;
+        };
         /** GuardianPortalToggle */
         GuardianPortalToggle: {
             /** Enabled */
@@ -7444,6 +7708,11 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * InvitationStatus
+         * @enum {string}
+         */
+        InvitationStatus: "pending" | "accepted" | "expired" | "revoked";
         /** InvoiceRead */
         InvoiceRead: {
             /**
@@ -7710,6 +7979,35 @@ export interface components {
             sources: components["schemas"]["LibraryHit"][];
             /** Cited */
             cited: number[];
+        };
+        /**
+         * LibraryBook
+         * @description A book in the shared library, as any school browsing it sees it.
+         */
+        LibraryBook: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Publisher */
+            publisher: string;
+            /** Version */
+            version: string;
+            /** Grade */
+            grade: string;
+            /** Subject */
+            subject: string | null;
+            /** Chapter Count */
+            chapter_count: number;
+            /** Ready Chapter Count */
+            ready_chapter_count: number;
+            /** School Count */
+            school_count: number;
+            /** On Shelf */
+            on_shelf: boolean;
         };
         /**
          * LibraryHit
@@ -8449,6 +8747,12 @@ export interface components {
             items: components["schemas"]["AttendanceSessionRead"][];
             meta: components["schemas"]["PageMeta"];
         };
+        /** Page[BookRead] */
+        Page_BookRead_: {
+            /** Items */
+            items: components["schemas"]["BookRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
         /** Page[ClassRead] */
         Page_ClassRead_: {
             /** Items */
@@ -8497,10 +8801,34 @@ export interface components {
             items: components["schemas"]["GuardianRead"][];
             meta: components["schemas"]["PageMeta"];
         };
+        /** Page[InvitationRead] */
+        Page_InvitationRead_: {
+            /** Items */
+            items: components["schemas"]["InvitationRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[LibraryBook] */
+        Page_LibraryBook_: {
+            /** Items */
+            items: components["schemas"]["LibraryBook"][];
+            meta: components["schemas"]["PageMeta"];
+        };
         /** Page[MemberRead] */
         Page_MemberRead_: {
             /** Items */
             items: components["schemas"]["MemberRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[PaperRead] */
+        Page_PaperRead_: {
+            /** Items */
+            items: components["schemas"]["PaperRead"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /** Page[QuestionRead] */
+        Page_QuestionRead_: {
+            /** Items */
+            items: components["schemas"]["QuestionRead"][];
             meta: components["schemas"]["PageMeta"];
         };
         /** Page[StationeryItemRead] */
@@ -10095,6 +10423,19 @@ export interface components {
             capacity?: number | null;
             /** Class Teacher Id */
             class_teacher_id?: string | null;
+        };
+        /**
+         * ShelfInput
+         * @description Where a campus files a library book: one of its classes, optionally a subject.
+         */
+        ShelfInput: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Subject Id */
+            subject_id?: string | null;
         };
         /**
          * SortDirection
@@ -13658,6 +13999,155 @@ export interface operations {
             };
         };
     };
+    upload_avatar_api_v1_auth_me_avatar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_avatar_api_v1_auth_me_avatar_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_avatar_api_v1_auth_me_avatar_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    avatar_image_api_v1_auth_avatars__user_id___filename__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                filename: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_organization_api_v1_org_get: {
         parameters: {
             query?: never;
@@ -13826,6 +14316,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_org_members_api_v1_org_members_get: {
+        parameters: {
+            query?: {
+                school_id?: string | null;
+                /** @description Role code */
+                role?: string | null;
+                page?: number;
+                size?: number;
+                /** @description Search term */
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MemberRead_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_org_invitations_api_v1_org_invitations_get: {
+        parameters: {
+            query?: {
+                school_id?: string | null;
+                status?: components["schemas"]["InvitationStatus"] | null;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_InvitationRead_"];
                 };
             };
             /** @description Bad Request */
@@ -17049,6 +17648,60 @@ export interface operations {
             };
         };
     };
+    grant_portal_access_api_v1_guardians_students__student_id__portal_access_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianPortalGrant"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentGuardianRead"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_guardians_api_v1_guardians_get: {
         parameters: {
             query?: {
@@ -19779,6 +20432,10 @@ export interface operations {
             query?: {
                 class_id?: string | null;
                 subject_id?: string | null;
+                page?: number;
+                size?: number;
+                /** @description Search term */
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -19792,7 +20449,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BookRead"][];
+                    "application/json": components["schemas"]["Page_BookRead_"];
                 };
             };
             /** @description Bad Request */
@@ -19835,6 +20492,165 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BookCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    library_api_v1_books_library_get: {
+        parameters: {
+            query?: {
+                grade?: string | null;
+                subject?: string | null;
+                page?: number;
+                size?: number;
+                /** @description Search term */
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_LibraryBook_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    library_subjects_api_v1_books_library_subjects_get: {
+        parameters: {
+            query?: {
+                grade?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_from_library_api_v1_books_library__book_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShelfInput"];
             };
         };
         responses: {
@@ -20816,8 +21632,10 @@ export interface operations {
                 class_id?: string | null;
                 subject_id?: string | null;
                 status?: components["schemas"]["PaperStatus"] | null;
-                limit?: number;
-                offset?: number;
+                page?: number;
+                size?: number;
+                /** @description Search term */
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -20831,7 +21649,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaperRead"][];
+                    "application/json": components["schemas"]["Page_PaperRead_"];
                 };
             };
             /** @description Bad Request */
@@ -20927,8 +21745,8 @@ export interface operations {
                 difficulty?: components["schemas"]["Difficulty"] | null;
                 language?: components["schemas"]["PaperLanguage"] | null;
                 q?: string | null;
-                limit?: number;
-                offset?: number;
+                page?: number;
+                size?: number;
             };
             header?: never;
             path?: never;
@@ -20942,7 +21760,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuestionRead"][];
+                    "application/json": components["schemas"]["Page_QuestionRead_"];
                 };
             };
             /** @description Bad Request */

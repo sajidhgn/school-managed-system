@@ -1,10 +1,30 @@
 """Textbook library business rules -- who may change which book, and upload rules.
 
+ONE LIBRARY, EVERY SCHOOL'S SHELF
+    A book is uploaded once for the whole platform. The school that uploads it
+    OWNS it -- only its people change the chapters, files and details -- and every
+    school, the owner included, uses it through its own SHELF ENTRY (`SchoolBook`):
+    the class and subject it is filed under on that campus. Reading a book, its
+    pages or its passages needs an entry on the caller's campus; without one the
+    book is a 404, exactly as before the library was shared.
+
+    `library` lists the whole library to choose from; `add_from_library` files a
+    book there under one of the caller's classes. A new book whose title,
+    publisher, version and grade are already in the library is refused
+    (`DUPLICATE_BOOK`, with the existing book's id to add instead) -- see
+    `catalog.py` for what counts as the same.
+
+    Removing a book takes it off the caller's shelf. The content goes too only
+    when the OWNER removes it and no other campus, anywhere, still uses it.
+
 AUTHORISATION SHAPE
-    book:read     see every book on the campus, its pages, and search it
-    book:write    create books; change the books YOU created (chapters, uploads,
-                  processing)
-    book:manage   change or delete any book
+    book:read     see the campus's books, their pages, and search them; browse
+                  the library
+    book:write    create books and add library books; change the books YOU
+                  uploaded (chapters, uploads, processing) and the shelf entries
+                  you added (class, subject, removal)
+    book:manage   change or remove any of the campus's books -- the content only
+                  of books the campus uploaded
 
     `router.py` resolves the permissions into flags; this service applies the
     ownership half, so it stays callable without HTTP.
@@ -15,6 +35,8 @@ WHAT A BOUND TEACHER SEES (`Caller.teacher_id`, see `academics/teaching_scope.py
     subject-less books of classes they are assigned to. Any other book -- its
     chapters, pages, files, search -- is a 404, and a book can only be filed under
     a class (and subject) the teacher could then see. None for an unbound caller.
+    The filing is the campus's own (the shelf entry), so a library book is bounded
+    by where THIS campus filed it, not by where its uploader did.
 
 ASK THE LIBRARY (`search_library`, `ask`)
     Retrieval is hybrid: pgvector ranks chunks by MEANING, full-text search by
@@ -57,6 +79,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.schemas import Page, PageParams
 from app.common.storage import LocalFileStorage
 from app.core.config import Settings
 from app.core.exceptions import (
@@ -66,6 +89,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
+from app.modules.academics.models import SchoolClass, Subject
 from app.modules.books.agent import (
     Answerer,
     FrontMatterChapter,
@@ -73,6 +97,7 @@ from app.modules.books.agent import (
     FrontPage,
     Passage,
 )
+from app.modules.books.catalog import catalog_key, grade_key
 from app.modules.books.ingest import (
     UnsupportedFileError,
     count_pages,
@@ -87,6 +112,7 @@ from app.modules.books.models import (
     BookPage,
     ChapterStatus,
     FileKind,
+    SchoolBook,
 )
 from app.modules.books.repository import (
     BookLookupRepository,
@@ -96,6 +122,7 @@ from app.modules.books.repository import (
     ChunkRepository,
     LibraryScope,
     PageRepository,
+    ShelfRepository,
 )
 from app.modules.books.schemas import (
     AskRequest,
@@ -111,8 +138,10 @@ from app.modules.books.schemas import (
     ChapterReport,
     ChapterUpdate,
     LibraryAnswer,
+    LibraryBook,
     LibraryHit,
     PageRead,
+    ShelfInput,
 )
 
 logger = get_logger(__name__)
@@ -164,6 +193,7 @@ class BookService:
         self.storage = storage
         self.settings = settings
         self.books = BookRepository(session)
+        self.shelf = ShelfRepository(session)
         self.chapters = ChapterRepository(session)
         self.files = ChapterFileRepository(session)
         self.pages = PageRepository(session)
@@ -173,47 +203,116 @@ class BookService:
     # -- books --------------------------------------------------------------
 
     async def list_books(
-        self, caller: Caller, *, class_id: UUID | None, subject_id: UUID | None
-    ) -> list[BookRead]:
-        rows = await self.books.list_with_counts(
-            class_id=class_id, subject_id=subject_id, teacher_id=caller.teacher_id
+        self,
+        caller: Caller,
+        *,
+        params: PageParams,
+        class_id: UUID | None,
+        subject_id: UUID | None,
+        search: str | None = None,
+    ) -> Page[BookRead]:
+        rows, total = await self.shelf.list_with_counts(
+            params=params,
+            class_id=class_id,
+            subject_id=subject_id,
+            teacher_id=caller.teacher_id,
+            search=search,
         )
-        books = [b for b, _, _ in rows]
-        classes = await self.lookup.class_names(b.class_id for b in books)
-        subjects = await self.lookup.subject_names(b.subject_id for b in books)
-        users = await self.lookup.user_names(b.created_by_user_id for b in books)
-        return [
-            self._book_read(b, total, ready, caller, classes, subjects, users)
-            for b, total, ready in rows
+        names = await self._names([(e, b) for e, b, _, _ in rows])
+        items = [
+            self._book_read(entry, book, chapters, ready, caller, names)
+            for entry, book, chapters, ready in rows
         ]
+        return Page.create(items, total, params)
 
     async def detail(self, book_id: UUID, caller: Caller) -> BookDetail:
-        book = await self._book_or_404(book_id, teacher_id=caller.teacher_id)
+        entry, book = await self._shelved_or_404(book_id, teacher_id=caller.teacher_id)
         chapters = list(await self.chapters.for_book(book.id))
         files = await self.files.for_chapters(c.id for c in chapters)
-        classes = await self.lookup.class_names([book.class_id])
-        subjects = await self.lookup.subject_names([book.subject_id])
-        users = await self.lookup.user_names([book.created_by_user_id])
+        names = await self._names([(entry, book)])
         ready = sum(c.status is ChapterStatus.READY for c in chapters)
-        base = self._book_read(book, len(chapters), ready, caller, classes, subjects, users)
+        base = self._book_read(entry, book, len(chapters), ready, caller, names)
+        owned = _owns(entry, book)
         return BookDetail(
             **base.model_dump(),
-            chapters=[self._chapter_read(c, files.get(c.id, [])) for c in chapters],
+            chapters=[self._chapter_read(c, files.get(c.id, []), owned=owned) for c in chapters],
         )
+
+    async def library(
+        self,
+        *,
+        params: PageParams,
+        search: str | None,
+        grade: str | None,
+        subject: str | None,
+    ) -> Page[LibraryBook]:
+        """One page of the whole platform's library. `grade` is a class name as
+        any school writes it ("Class 5", "Grade V"), matched by `catalog.grade_key`."""
+        rows, total = await self.books.library_page(
+            params=params,
+            search=search,
+            grade_key=grade_key(grade) if grade else None,
+            subject=subject,
+        )
+        ids = [book.id for book, _, _ in rows]
+        shelved = await self.shelf.shelved(ids)
+        schools = await self.shelf.schools_using(ids)
+        items = [
+            LibraryBook(
+                id=book.id,
+                title=book.title,
+                publisher=book.publisher,
+                version=book.version,
+                grade=book.grade,
+                subject=book.subject,
+                chapter_count=chapters,
+                ready_chapter_count=ready,
+                school_count=schools.get(book.id, 0),
+                on_shelf=book.id in shelved,
+            )
+            for book, chapters, ready in rows
+        ]
+        return Page.create(items, total, params)
+
+    async def library_subjects(self, grade: str | None) -> list[str]:
+        return await self.books.library_subjects(grade_key(grade) if grade else None)
+
+    async def add_from_library(
+        self, book_id: UUID, payload: ShelfInput, caller: Caller
+    ) -> BookDetail:
+        """File a library book under one of the caller's classes."""
+        self._assert_may_create(caller)
+        book = await self.books.get(book_id)
+        if book is None:
+            raise NotFoundError("Book not found.")
+        school_class = await self._class_or_422(payload.class_id)
+        await self._subject_or_422(payload.subject_id)
+        await self._assert_in_scope(caller, school_class.id, payload.subject_id)
+        if await self.shelf.on_campus(school_class.school_id, book.id) is not None:
+            raise ConflictError(
+                "This book is already in your school's books.", code="ALREADY_ON_SHELF"
+            )
+        entry = SchoolBook(
+            book_id=book.id,
+            class_id=school_class.id,
+            subject_id=payload.subject_id,
+            added_by_user_id=caller.user_id,
+            organization_id=school_class.organization_id,
+            school_id=school_class.school_id,
+        )
+        self.session.add(entry)
+        await self.session.flush()
+        await self._audit(entry, caller, AuditAction.BOOK_SHELVED, after=_entry_snapshot(entry))
+        logger.info("book_added_from_library", book_id=str(book.id))
+        return await self.detail(book.id, caller)
 
     async def create(self, payload: BookCreate, caller: Caller) -> BookDetail:
         self._assert_may_create(caller)
-        school_class = await self.lookup.school_class(payload.class_id)
-        if school_class is None:
-            raise ValidationError(
-                "That class does not exist on this campus.", code="CLASS_NOT_FOUND"
-            )
-        if payload.subject_id is not None and await self.lookup.subject(payload.subject_id) is None:
-            raise ValidationError("That subject does not exist.", code="SUBJECT_NOT_FOUND")
+        school_class = await self._class_or_422(payload.class_id)
+        subject = await self._subject_or_422(payload.subject_id)
         await self._assert_in_scope(caller, school_class.id, payload.subject_id)
-        await self._assert_unique(
-            payload.class_id, payload.title, payload.publisher, payload.version, exclude=None
-        )
+        key = catalog_key(payload.title, payload.publisher, payload.version, school_class.name)
+        await self._assert_not_in_library(key, exclude=None)
         numbers = [c.number for c in payload.chapters]
         if len(numbers) != len(set(numbers)):
             raise ValidationError(
@@ -221,21 +320,35 @@ class BookService:
             )
 
         book = Book(
-            class_id=school_class.id,
-            subject_id=payload.subject_id,
             title=payload.title,
             publisher=payload.publisher,
             version=payload.version,
+            grade=school_class.name,
+            grade_key=grade_key(school_class.name),
+            subject=subject.name if subject else None,
+            catalog_key=key,
             created_by_user_id=caller.user_id,
             organization_id=school_class.organization_id,
             school_id=school_class.school_id,
         )
         self.session.add(book)
         await self.session.flush()
+        self.session.add(
+            SchoolBook(
+                book_id=book.id,
+                class_id=school_class.id,
+                subject_id=payload.subject_id,
+                added_by_user_id=caller.user_id,
+                organization_id=school_class.organization_id,
+                school_id=school_class.school_id,
+            )
+        )
         for chapter in payload.chapters:
             self.session.add(self._new_chapter(book, chapter))
         await self.session.flush()
-        await self._audit(book, caller, AuditAction.BOOK_CREATED, after=_book_snapshot(book))
+        await self._audit(
+            book, caller, AuditAction.BOOK_CREATED, after=_book_snapshot(book, school_class.id)
+        )
         logger.info("book_created", book_id=str(book.id), chapters=len(payload.chapters))
         return await self.detail(book.id, caller)
 
@@ -333,43 +446,92 @@ class BookService:
         )
 
     async def update(self, book_id: UUID, payload: BookUpdate, caller: Caller) -> BookDetail:
-        book = await self._editable_book(book_id, caller)
-        before = _book_snapshot(book)
-        if payload.class_id is not None and payload.class_id != book.class_id:
+        """The owner changes the book's details and its own filing; any other campus
+        changes only where it files the book."""
+        entry, book = await self._shelved_or_404(book_id, teacher_id=caller.teacher_id)
+        owned = _owns(entry, book)
+        if owned:
+            self._assert_may_edit(book, caller)
+        else:
+            details = (payload.title, payload.publisher, payload.version)
+            if any(
+                new is not None and new != old
+                for new, old in zip(details, _details(book), strict=True)
+            ):
+                raise AuthorizationError(
+                    "Only the school that uploaded this book can change its title, "
+                    "publisher or version.",
+                    code="BOOK_NOT_OWNED",
+                )
+            self._assert_may_refile(entry, caller)
+
+        before = {**_book_snapshot(book, entry.class_id), **_entry_snapshot(entry)}
+        if payload.class_id is not None and payload.class_id != entry.class_id:
             school_class = await self.lookup.school_class(payload.class_id)
-            if school_class is None or school_class.school_id != book.school_id:
+            if school_class is None or school_class.school_id != entry.school_id:
                 raise ValidationError(
                     "That class does not exist on this campus.", code="CLASS_NOT_FOUND"
                 )
-            book.class_id = school_class.id
+            entry.class_id = school_class.id
         if payload.clear_subject:
-            book.subject_id = None
+            entry.subject_id = None
         elif payload.subject_id is not None:
-            if await self.lookup.subject(payload.subject_id) is None:
-                raise ValidationError("That subject does not exist.", code="SUBJECT_NOT_FOUND")
-            book.subject_id = payload.subject_id
-        book.title = payload.title or book.title
-        book.publisher = payload.publisher or book.publisher
-        book.version = payload.version or book.version
+            await self._subject_or_422(payload.subject_id)
+            entry.subject_id = payload.subject_id
         # Re-filing must not move a book out of the teacher's own sight.
-        await self._assert_in_scope(caller, book.class_id, book.subject_id)
-        await self._assert_unique(
-            book.class_id, book.title, book.publisher, book.version, exclude=book.id
-        )
+        await self._assert_in_scope(caller, entry.class_id, entry.subject_id)
+
+        if owned:
+            old_key = catalog_key(*_details(book), book.grade)
+            classes = await self.lookup.class_names([entry.class_id])
+            subjects = await self.lookup.subject_names([entry.subject_id])
+            book.title = payload.title or book.title
+            book.publisher = payload.publisher or book.publisher
+            book.version = payload.version or book.version
+            book.grade = classes.get(entry.class_id, book.grade)
+            book.grade_key = grade_key(book.grade)
+            book.subject = subjects.get(entry.subject_id) if entry.subject_id else None
+            new_key = catalog_key(*_details(book), book.grade)
+            # A book that already duplicated another when the library became shared
+            # has no key; it keeps none until its details actually change.
+            if new_key != old_key:
+                await self._assert_not_in_library(new_key, exclude=book.id)
+                book.catalog_key = new_key
         await self.session.flush()
         await self._audit(
-            book, caller, AuditAction.BOOK_UPDATED, before=before, after=_book_snapshot(book)
+            book if owned else entry,
+            caller,
+            AuditAction.BOOK_UPDATED,
+            before=before,
+            after={**_book_snapshot(book, entry.class_id), **_entry_snapshot(entry)},
         )
         return await self.detail(book.id, caller)
 
     async def delete(self, book_id: UUID, caller: Caller) -> None:
-        book = await self._editable_book(book_id, caller)
-        snapshot = _book_snapshot(book)
-        prefix = book_prefix(book)
-        await self._audit(book, caller, AuditAction.BOOK_DELETED, before=snapshot)
-        await self.session.delete(book)
+        """Take the book off the caller's campus. Its content goes too when the
+        campus uploaded it and no campus anywhere still uses it."""
+        entry, book = await self._shelved_or_404(book_id, teacher_id=caller.teacher_id)
+        owned = _owns(entry, book)
+        if owned:
+            self._assert_may_edit(book, caller)
+        else:
+            self._assert_may_refile(entry, caller)
+        await self.session.delete(entry)
         await self.session.flush()
-        await self.storage.delete_prefix(prefix)
+
+        if owned:
+            # Locked before counting: adding a book to a shelf takes a key-share
+            # lock on it, so no campus can add it between the count and the delete.
+            await self.books.lock(book.id)
+            if not await self.shelf.schools_using([book.id]):
+                snapshot = _book_snapshot(book, entry.class_id)
+                prefix = book_prefix(book)
+                await self._audit(book, caller, AuditAction.BOOK_DELETED, before=snapshot)
+                await self.session.delete(book)
+                await self.session.flush()
+                await self.storage.delete_prefix(prefix)
+                return
+        await self._audit(entry, caller, AuditAction.BOOK_UNSHELVED, before=_entry_snapshot(entry))
 
     # -- chapters -----------------------------------------------------------
 
@@ -787,12 +949,38 @@ class BookService:
         return self._chapter_read(chapter, files.get(chapter.id, []))
 
     async def _book_or_404(self, book_id: UUID, *, teacher_id: UUID | None = None) -> Book:
-        book = await self.books.get(book_id)
-        if book is None or (
-            teacher_id is not None and not await self.books.visible(book_id, teacher_id)
+        return (await self._shelved_or_404(book_id, teacher_id=teacher_id))[1]
+
+    async def _shelved_or_404(
+        self, book_id: UUID, *, teacher_id: UUID | None = None
+    ) -> tuple[SchoolBook, Book]:
+        """The caller's shelf entry for a book, and the book. A library book the
+        campus has not added is not found -- for reading it, `library` is the way."""
+        entry = await self.shelf.entry(book_id)
+        if entry is None or (
+            teacher_id is not None and not await self.shelf.visible(entry.id, teacher_id)
         ):
             raise NotFoundError("Book not found.")
-        return book
+        book = await self.books.get(book_id)
+        if book is None:
+            raise NotFoundError("Book not found.")
+        return entry, book
+
+    async def _class_or_422(self, class_id: UUID) -> SchoolClass:
+        school_class = await self.lookup.school_class(class_id)
+        if school_class is None:
+            raise ValidationError(
+                "That class does not exist on this campus.", code="CLASS_NOT_FOUND"
+            )
+        return school_class
+
+    async def _subject_or_422(self, subject_id: UUID | None) -> Subject | None:
+        if subject_id is None:
+            return None
+        subject = await self.lookup.subject(subject_id)
+        if subject is None:
+            raise ValidationError("That subject does not exist.", code="SUBJECT_NOT_FOUND")
+        return subject
 
     async def _assert_in_scope(
         self, caller: Caller, class_id: UUID, subject_id: UUID | None
@@ -814,11 +1002,13 @@ class BookService:
             raise ValidationError("That subject does not exist.", code="SUBJECT_NOT_FOUND")
 
     async def _editable_book(self, book_id: UUID, caller: Caller) -> Book:
-        book = await self._book_or_404(book_id, teacher_id=caller.teacher_id)
-        if not self._may_edit(book, caller):
+        entry, book = await self._shelved_or_404(book_id, teacher_id=caller.teacher_id)
+        if not _owns(entry, book):
             raise AuthorizationError(
-                "You can only change books you uploaded.", code="BOOK_NOT_OWNED"
+                "Only the school that uploaded this book can change its chapters and pages.",
+                code="BOOK_NOT_OWNED",
             )
+        self._assert_may_edit(book, caller)
         return book
 
     async def _chapter_or_404(
@@ -834,16 +1024,24 @@ class BookService:
             raise NotFoundError("Chapter not found.")
         return chapter
 
-    async def _assert_unique(
-        self, class_id: UUID, title: str, publisher: str, version: str, *, exclude: UUID | None
-    ) -> None:
-        if await self.books.find_duplicate(
-            class_id=class_id, title=title, publisher=publisher, version=version, exclude=exclude
-        ):
-            raise ConflictError(
-                "This class already has that book from that publisher in that version.",
-                code="DUPLICATE_BOOK",
-            )
+    async def _assert_not_in_library(self, key: str, *, exclude: UUID | None) -> None:
+        """One copy of a book on the platform. The refusal names the copy there is,
+        so the caller can add it instead (or open it, if the campus has it)."""
+        existing = await self.books.find_duplicate(key, exclude=exclude)
+        if existing is None:
+            return
+        on_shelf = bool(await self.shelf.shelved([existing.id]))
+        raise ConflictError(
+            f"{existing.title} ({existing.publisher}, {existing.version}, {existing.grade}) "
+            + (
+                "is already in your school's books."
+                if on_shelf
+                else "is already in the library, uploaded by another school. "
+                "Add it to your class from the library instead of uploading it again."
+            ),
+            code="DUPLICATE_BOOK",
+            details={"book_id": str(existing.id), "on_shelf": on_shelf},
+        )
 
     @staticmethod
     def _assert_not_processing(chapter: BookChapter) -> None:
@@ -868,9 +1066,29 @@ class BookService:
 
     @staticmethod
     def _may_edit(book: Book, caller: Caller) -> bool:
+        """Content rights, for a book the caller's campus owns."""
         if caller.may_manage:
             return True
         return caller.may_write and book.created_by_user_id == caller.user_id
+
+    @staticmethod
+    def _may_refile(entry: SchoolBook, caller: Caller) -> bool:
+        """Shelf rights: change the class a library book is filed under, or remove it."""
+        if caller.may_manage:
+            return True
+        return caller.may_write and entry.added_by_user_id == caller.user_id
+
+    def _assert_may_edit(self, book: Book, caller: Caller) -> None:
+        if not self._may_edit(book, caller):
+            raise AuthorizationError(
+                "You can only change books you uploaded.", code="BOOK_NOT_OWNED"
+            )
+
+    def _assert_may_refile(self, entry: SchoolBook, caller: Caller) -> None:
+        if not self._may_refile(entry, caller):
+            raise AuthorizationError(
+                "You can only change library books you added.", code="BOOK_NOT_OWNED"
+            )
 
     @staticmethod
     def _new_chapter(book: Book, chapter: ChapterInput) -> BookChapter:
@@ -887,34 +1105,59 @@ class BookService:
             school_id=book.school_id,
         )
 
+    async def _names(self, rows: Sequence[tuple[SchoolBook, Book]]) -> _Names:
+        return _Names(
+            classes=await self.lookup.class_names(e.class_id for e, _ in rows),
+            subjects=await self.lookup.subject_names(e.subject_id for e, _ in rows),
+            # Another school's uploader is not this campus's business.
+            users=await self.lookup.user_names(
+                b.created_by_user_id for e, b in rows if _owns(e, b)
+            ),
+            schools=await self.shelf.schools_using(b.id for _, b in rows),
+        )
+
     def _book_read(
         self,
+        entry: SchoolBook,
         book: Book,
         total: int,
         ready: int,
         caller: Caller,
-        classes: dict[UUID, str],
-        subjects: dict[UUID, str],
-        users: dict[UUID, str],
+        names: _Names,
     ) -> BookRead:
+        owned = _owns(entry, book)
         return BookRead(
             id=book.id,
             title=book.title,
             publisher=book.publisher,
             version=book.version,
-            class_id=book.class_id,
-            class_name=classes.get(book.class_id, "?"),
-            subject_id=book.subject_id,
-            subject_name=subjects.get(book.subject_id) if book.subject_id else None,
+            grade=book.grade,
+            class_id=entry.class_id,
+            class_name=names.classes.get(entry.class_id, "?"),
+            subject_id=entry.subject_id,
+            subject_name=names.subjects.get(entry.subject_id) if entry.subject_id else None,
             chapter_count=total,
             ready_chapter_count=ready,
-            created_by_name=users.get(book.created_by_user_id) if book.created_by_user_id else None,
-            created_at=book.created_at,
-            can_edit=self._may_edit(book, caller),
+            created_by_name=(
+                names.users.get(book.created_by_user_id)
+                if owned and book.created_by_user_id
+                else None
+            ),
+            created_at=entry.created_at,
+            can_edit=owned and self._may_edit(book, caller),
+            can_remove=self._may_edit(book, caller) if owned else self._may_refile(entry, caller),
+            from_library=not owned,
+            school_count=names.schools.get(book.id, 0),
         )
 
     @staticmethod
-    def _chapter_read(chapter: BookChapter, files: list[BookChapterFile]) -> ChapterRead:
+    def _chapter_read(
+        chapter: BookChapter, files: list[BookChapterFile], *, owned: bool = True
+    ) -> ChapterRead:
+        report = ChapterReport.model_validate(chapter.report) if chapter.report else None
+        if report is not None and not owned:
+            # The name of the uploader's teacher who accepted it stays with them.
+            report.accepted_by_name = None
         return ChapterRead(
             id=chapter.id,
             number=chapter.number,
@@ -922,7 +1165,7 @@ class BookService:
             status=chapter.status,
             page_count=chapter.page_count,
             files=[ChapterFileRead.model_validate(f, from_attributes=True) for f in files],
-            report=ChapterReport.model_validate(chapter.report) if chapter.report else None,
+            report=report,
             indexing=chapter.embed_batch is not None
             and chapter.status in (ChapterStatus.READY, ChapterStatus.NEEDS_REVIEW),
             error=chapter.error,
@@ -932,21 +1175,23 @@ class BookService:
 
     async def _audit(
         self,
-        book: Book,
+        target: Book | SchoolBook,
         caller: Caller,
         action: str,
         *,
         before: dict[str, Any] | None = None,
         after: dict[str, Any] | None = None,
     ) -> None:
+        """Recorded in the organization of `target`: the book's for a change to the
+        content (its owner's), the shelf entry's for a change to a campus's shelf."""
         await record_audit(
             self.session,
-            organization_id=book.organization_id,
-            school_id=book.school_id,
+            organization_id=target.organization_id,
+            school_id=target.school_id,
             actor_user_id=caller.user_id,
             action=action,
             entity_type="book",
-            entity_id=book.id,
+            entity_id=target.id if isinstance(target, Book) else target.book_id,
             before=before,
             after=after,
         )
@@ -986,13 +1231,38 @@ def _scanned_chapters(chapters: Sequence[FrontMatterChapter]) -> list[ChapterInp
     ]
 
 
-def _book_snapshot(book: Book) -> dict[str, Any]:
+@dataclass(frozen=True, slots=True)
+class _Names:
+    classes: dict[UUID, str]
+    subjects: dict[UUID, str]
+    users: dict[UUID, str]
+    schools: dict[UUID, int]
+
+
+def _owns(entry: SchoolBook, book: Book) -> bool:
+    """Whether the entry's campus uploaded the book -- and so may change it."""
+    return book.school_id == entry.school_id
+
+
+def _details(book: Book) -> tuple[str, str, str]:
+    return book.title, book.publisher, book.version
+
+
+def _book_snapshot(book: Book, class_id: UUID) -> dict[str, Any]:
     return {
         "title": book.title,
         "publisher": book.publisher,
         "version": book.version,
-        "class_id": str(book.class_id),
-        "subject_id": str(book.subject_id) if book.subject_id else None,
+        "grade": book.grade,
+        "class_id": str(class_id),
+    }
+
+
+def _entry_snapshot(entry: SchoolBook) -> dict[str, Any]:
+    return {
+        "book_id": str(entry.book_id),
+        "class_id": str(entry.class_id),
+        "subject_id": str(entry.subject_id) if entry.subject_id else None,
     }
 
 

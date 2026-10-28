@@ -141,7 +141,7 @@ export function LogoInput({
                 onChange("");
                 setError(null);
               }}
-              className="rounded-sm p-1 text-muted-foreground hover:text-foreground"
+              className="rounded-control p-1 text-muted-foreground hover:text-foreground"
             >
               <X className="size-4" aria-hidden />
               <span className="sr-only">Remove logo</span>

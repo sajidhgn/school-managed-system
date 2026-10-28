@@ -28,6 +28,7 @@ export type ResendVerificationRequest = S["ResendVerificationRequest"];
 export type ForgotPasswordRequest = S["ForgotPasswordRequest"];
 export type ResetPasswordRequest = S["ResetPasswordRequest"];
 export type MessageResponse = S["MessageResponse"];
+export type AvatarResponse = S["AvatarResponse"];
 
 // --- Organization & schools ------------------------------------------------
 export type OrganizationRead = S["OrganizationRead"];
@@ -125,6 +126,18 @@ export type StudentStatus = S["StudentStatus"];
 export type StudentAdmissionRequest = S["StudentAdmissionRequest"];
 export type AdmissionResponse = S["AdmissionResponse"];
 export type Gender = S["Gender"];
+
+// Guardians: the registry the parent portal signs in against. Staff read and grant
+// through `/guardians`; the parent's own session reads `/portal`.
+export type GuardianRelationship = S["GuardianRelationship"];
+export type StudentGuardianRead = S["StudentGuardianRead"];
+export type GuardianPortalGrant = S["GuardianPortalGrant"];
+export type GuardianLinkUpdate = S["GuardianLinkUpdate"];
+export type OtpRequestResponse = S["OtpRequestResponse"];
+export type GuardianLoginResponse = S["GuardianLoginResponse"];
+export type GuardianContextSummary = S["GuardianContextSummary"];
+export type GuardianProfile = S["GuardianProfile"];
+export type GuardianChildRead = S["GuardianChildRead"];
 export type ClassRead = S["ClassRead"];
 export type ClassCreate = S["ClassCreate"];
 export type ClassUpdate = S["ClassUpdate"];
@@ -191,6 +204,9 @@ export type ChapterFileRead = S["ChapterFileRead"];
 export type ReportIssue = S["ReportIssue"];
 export type BookPageRead = S["PageRead"];
 export type BookSearchHit = S["BookSearchHit"];
+/** A book in the library every school on the platform shares. */
+export type LibraryBook = S["LibraryBook"];
+export type ShelfInput = S["ShelfInput"];
 
 // --- Test papers (generated from the textbook library) ---------------------
 export type PaperRead = S["PaperRead"];
@@ -525,6 +541,17 @@ export const STUDENT_STATUS_LABELS: Record<string, string> = {
 export const GENDER_LABELS: Record<string, string> = {
   male: "Male",
   female: "Female",
+  other: "Other",
+};
+
+export const GUARDIAN_RELATIONSHIP_LABELS: Record<GuardianRelationship, string> = {
+  father: "Father",
+  mother: "Mother",
+  grandparent: "Grandparent",
+  sibling: "Sibling",
+  uncle: "Uncle",
+  aunt: "Aunt",
+  legal_guardian: "Legal guardian",
   other: "Other",
 };
 

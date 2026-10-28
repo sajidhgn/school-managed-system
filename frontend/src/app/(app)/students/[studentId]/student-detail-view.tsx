@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ChevronDown, Pencil, Trash2 } from "lucide-react";
 
+import { ParentPortalCard } from "./parent-portal-card";
 import { StudentFeesPanel } from "./student-fees-panel";
 import { StudentFormDialog } from "../student-form-dialog";
 import { STUDENTS_LIST_QUERY_KEY } from "../students-view";
@@ -110,6 +111,9 @@ export function StudentDetailView({
   canCollect,
   canVoid,
   canReadAttendance,
+  canReadGuardians,
+  canGrantPortal,
+  canTogglePortal,
 }: {
   studentId: string;
   canManage: boolean;
@@ -119,6 +123,9 @@ export function StudentDetailView({
   canCollect: boolean;
   canVoid: boolean;
   canReadAttendance: boolean;
+  canReadGuardians: boolean;
+  canGrantPortal: boolean;
+  canTogglePortal: boolean;
 }) {
   const router = useRouter();
   const query = useStudent(studentId);
@@ -247,6 +254,14 @@ export function StudentDetailView({
               </dl>
             </CardContent>
           </Card>
+
+          {canReadGuardians ? (
+            <ParentPortalCard
+              student={student}
+              canGrant={canGrantPortal}
+              canToggle={canTogglePortal}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>

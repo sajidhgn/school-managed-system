@@ -19,6 +19,8 @@ x-backend-environment: &backend-environment
   # Textbook library: the OpenAI book agent, and where uploads and page images live.
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   BOOKS_STORAGE_PATH: /data/books
+  # Members' profile photos (Settings -> Your account).
+  AVATARS_STORAGE_PATH: /data/avatars
   # WhatsApp through the self-hosted WAHA gateway below: class groups, and the diary
   # agent (teachers send a photo of the diary, the agent posts it to the class group).
   WHATSAPP_BACKEND: ${WHATSAPP_BACKEND:-waha}
@@ -84,6 +86,7 @@ services:
     volumes:
       # The API stores uploads and serves page images; the worker writes them.
       - books:/data/books
+      - avatars:/data/avatars
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -158,4 +161,5 @@ services:
 volumes:
   pgdata:
   books:
+  avatars:
   waha_sessions:

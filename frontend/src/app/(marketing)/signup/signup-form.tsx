@@ -114,7 +114,7 @@ export function SignupForm({
           <label htmlFor="plan_code" className="text-sm font-medium">Plan</label>
           <select
             id="plan_code"
-            className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+            className="h-9 rounded-control border border-border bg-background px-3 text-sm"
             {...form.register("plan_code")}
           >
             {plans.map((plan) => (
@@ -126,7 +126,7 @@ export function SignupForm({
           <label htmlFor="billing_cycle" className="text-sm font-medium">Billing cycle</label>
           <select
             id="billing_cycle"
-            className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+            className="h-9 rounded-control border border-border bg-background px-3 text-sm"
             {...form.register("billing_cycle")}
           >
             <option value="monthly">Monthly</option>

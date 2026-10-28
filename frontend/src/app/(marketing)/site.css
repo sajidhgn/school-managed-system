@@ -224,7 +224,7 @@
     gap: 0.3rem;
     height: 2.25rem;
     padding-inline: 0.85rem;
-    border-radius: 999px;
+    border-radius: var(--control-radius);
     font-size: 0.92rem;
     color: var(--mk-muted);
     cursor: pointer;
@@ -245,7 +245,7 @@
   .mk-nav__pill {
     position: absolute;
     inset: 0;
-    border-radius: 999px;
+    border-radius: var(--control-radius);
     background: rgb(255 255 255 / 0.08);
   }
 
@@ -1276,7 +1276,8 @@
     padding: 0.35rem;
     overflow-x: auto;
     border: 1px solid var(--mk-line);
-    border-radius: 999px;
+    /* The tabs' radius plus the padding and border around them: concentric. */
+    border-radius: calc(var(--control-radius) + 0.35rem + 1px);
     background: var(--mk-card);
     box-shadow: 0 14px 34px -24px rgb(0 0 0 / 0.4);
     scrollbar-width: none;
@@ -1294,7 +1295,7 @@
     gap: 0.5rem;
     height: 2.6rem;
     padding-inline: 1.1rem;
-    border-radius: 999px;
+    border-radius: var(--control-radius);
     font-size: 0.92rem;
     font-weight: 600;
     color: var(--mk-muted);
@@ -1317,7 +1318,7 @@
   .mk-tab__pill {
     position: absolute;
     inset: 0;
-    border-radius: 999px;
+    border-radius: var(--control-radius);
     background: #2447f5;
     box-shadow: 0 10px 24px -10px rgb(36 71 245 / 0.8);
   }
@@ -1580,7 +1581,7 @@
     gap: 0.25rem;
     padding: 0.3rem;
     border: 1px solid rgb(255 255 255 / 0.14);
-    border-radius: 999px;
+    border-radius: calc(var(--control-radius) + 0.3rem + 1px);
     background: rgb(20 23 30 / 0.85);
     backdrop-filter: blur(10px);
   }
@@ -1592,7 +1593,7 @@
     gap: 0.5rem;
     height: 2.4rem;
     padding-inline: 1.1rem;
-    border-radius: 999px;
+    border-radius: var(--control-radius);
     font-size: 0.9rem;
     font-weight: 600;
     color: #a1a7b3;
@@ -1611,7 +1612,7 @@
   .mk-switch__pill {
     position: absolute;
     inset: 0;
-    border-radius: 999px;
+    border-radius: var(--control-radius);
     background: #2447f5;
   }
 

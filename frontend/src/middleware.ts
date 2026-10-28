@@ -33,6 +33,8 @@ const ACCESS_COOKIE = "educloud_access";
 const REFRESH_COOKIE = "educloud_refresh";
 const PLATFORM_ACCESS_COOKIE = "educloud_platform_access";
 const PLATFORM_REFRESH_COOKIE = "educloud_platform_refresh";
+const GUARDIAN_ACCESS_COOKIE = "educloud_guardian_access";
+const GUARDIAN_REFRESH_COOKIE = "educloud_guardian_refresh";
 
 /** Marketing + auth surfaces: reachable with no session at all. */
 const PUBLIC_PREFIXES = [
@@ -105,6 +107,24 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
     return passThrough(request);
+  }
+
+  // --- Parent portal -----------------------------------------------------
+  // Its own cookie pair, like the console. The sign-in page bounces only a parent
+  // holding a REFRESH cookie: straight after a verify that needs a school picked,
+  // the browser holds just the five-minute access cookie, and must stay on the page.
+  if (pathname === "/parent" || pathname.startsWith("/parent/")) {
+    if (pathname === "/parent/login") {
+      return request.cookies.has(GUARDIAN_REFRESH_COOKIE)
+        ? NextResponse.redirect(new URL("/parent", request.url))
+        : passThrough(request);
+    }
+
+    const hasGuardianSession =
+      request.cookies.has(GUARDIAN_ACCESS_COOKIE) || request.cookies.has(GUARDIAN_REFRESH_COOKIE);
+    return hasGuardianSession
+      ? passThrough(request)
+      : NextResponse.redirect(new URL("/parent/login", request.url));
   }
 
   // --- Tenant app + marketing --------------------------------------------

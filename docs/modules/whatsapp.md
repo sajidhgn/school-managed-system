@@ -56,6 +56,23 @@ then addressed by their WhatsApp id, resolved from the invite link. Run
 the outbox continuously. It carries the same terms-of-service risk as pywhatkit.
 See [diary-agent.md](diary-agent.md#whatsapp-the-waha-gateway).
 
+## Parent-portal sign-in codes
+
+With `WHATSAPP_BACKEND=waha`, the six-digit code a parent asks for at `/parent/login`
+is sent to them directly (not through the outbox), from the WAHA session of a
+campus where they have a child they may view. The number is checked first
+(`GET /api/contacts/check-exists`): a number with no WhatsApp gets no WhatsApp
+message, and a campus whose session is not working is skipped for the next one.
+When WhatsApp cannot deliver, the code falls back to `SMS_BACKEND` (the console in
+development; `null` in production until an SMS provider exists). The send runs
+after the HTTP response, so response timing does not reveal whether a number is
+registered. Code: `backend/app/modules/guardians/delivery.py`.
+
+A parent can sign in only once staff turn access on from the student's page
+(**Parent portal** card): `POST /guardians/students/{id}/portal-access`, which
+registers the phone if needed and links it to the child. The free-text guardian
+phone on the student form never becomes a login by itself.
+
 ## The fee notice
 
 - The notice is queued only when the class has **issued** challans for the

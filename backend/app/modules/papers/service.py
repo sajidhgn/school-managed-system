@@ -31,6 +31,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.schemas import Page, PageParams
 from app.core.config import Settings
 from app.core.exceptions import (
     AuthorizationError,
@@ -39,8 +40,8 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
-from app.modules.books.models import Book, BookChapter, ChapterStatus
-from app.modules.books.repository import BookLookupRepository, BookRepository
+from app.modules.books.models import Book, BookChapter, ChapterStatus, SchoolBook
+from app.modules.books.repository import BookLookupRepository, BookRepository, ShelfRepository
 from app.modules.papers.generator import (
     DEFAULT_MARKS,
     TRUE_FALSE_OPTIONS,
@@ -109,6 +110,7 @@ class PaperService:
         self.questions = QuestionRepository(session)
         self.sources = SourceRepository(session)
         self.books = BookRepository(session)
+        self.shelf = ShelfRepository(session)
         self.lookup = BookLookupRepository(session)
 
     # -- papers -------------------------------------------------------------
@@ -120,24 +122,25 @@ class PaperService:
         class_id: UUID | None,
         subject_id: UUID | None,
         status: PaperStatus | None,
-        limit: int,
-        offset: int,
-    ) -> list[PaperRead]:
-        rows = await self.papers.list_with_totals(
+        params: PageParams,
+        search: str | None = None,
+    ) -> Page[PaperRead]:
+        rows, total = await self.papers.list_with_totals(
+            params=params,
             class_id=class_id,
             subject_id=subject_id,
             status=status,
             teacher_id=caller.teacher_id,
-            limit=limit,
-            offset=offset,
+            search=search,
         )
         names = await self._names([p for p, _, _ in rows])
-        return [self._read(p, caller, count, marks, names) for p, count, marks in rows]
+        items = [self._read(p, caller, count, marks, names) for p, count, marks in rows]
+        return Page.create(items, total, params)
 
     async def create(self, payload: PaperCreate, caller: Caller) -> PaperDetail:
         if not (caller.may_write or caller.may_manage):
             raise AuthorizationError("You cannot create test papers.", code="PAPER_FORBIDDEN")
-        book = await self._book_or_404(payload.book_id, caller)
+        entry, book = await self._book_or_404(payload.book_id, caller)
         chapters = {c.id: c for c in await self.sources.chapters(book.id)}
         for chapter_id in payload.chapter_ids:
             chapter = chapters.get(chapter_id)
@@ -153,10 +156,11 @@ class PaperService:
                 )
         ordered = sorted(payload.chapter_ids, key=lambda i: chapters[i].number)
         paper = Paper(
-            organization_id=book.organization_id,
-            school_id=book.school_id,
-            class_id=book.class_id,
-            subject_id=book.subject_id,
+            # The campus's own filing: a library book may be another school's upload.
+            organization_id=entry.organization_id,
+            school_id=entry.school_id,
+            class_id=entry.class_id,
+            subject_id=entry.subject_id,
             book_id=book.id,
             title=payload.title,
             language=payload.language,
@@ -419,10 +423,9 @@ class PaperService:
         difficulty: Difficulty | None,
         language: PaperLanguage | None,
         text: str | None,
-        limit: int,
-        offset: int,
-    ) -> list[QuestionRead]:
-        rows = await self.questions.bank(
+        params: PageParams,
+    ) -> Page[QuestionRead]:
+        rows, total = await self.questions.bank(
             class_id=class_id,
             subject_id=subject_id,
             book_id=book_id,
@@ -432,24 +435,29 @@ class PaperService:
             language=language,
             text=text,
             teacher_id=caller.teacher_id,
-            limit=limit,
-            offset=offset,
+            params=params,
         )
         chapters: dict[UUID, BookChapter] = {}
         for book in {q.book_id for q in rows if q.book_id}:
             chapters.update({c.id: c for c in await self.sources.chapters(book)})
-        return [_question_read(q, chapters) for q in rows]
+        return Page.create([_question_read(q, chapters) for q in rows], total, params)
 
     # -- internals ----------------------------------------------------------
 
-    async def _book_or_404(self, book_id: UUID, caller: Caller) -> Book:
-        book = await self.books.get(book_id)
-        if book is None or (
-            caller.teacher_id is not None
-            and not await self.books.visible(book_id, caller.teacher_id)
+    async def _book_or_404(self, book_id: UUID, caller: Caller) -> tuple[SchoolBook, Book]:
+        """A book on the caller's campus, with the campus's entry for it."""
+        entry = await self.shelf.entry(book_id)
+        book = await self.books.get(book_id) if entry is not None else None
+        if (
+            entry is None
+            or book is None
+            or (
+                caller.teacher_id is not None
+                and not await self.shelf.visible(entry.id, caller.teacher_id)
+            )
         ):
             raise NotFoundError("Book not found.")
-        return book
+        return entry, book
 
     async def _paper_or_404(self, paper_id: UUID, caller: Caller) -> Paper:
         paper = await self.papers.get(paper_id)

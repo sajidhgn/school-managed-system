@@ -6,10 +6,10 @@ from itertools import groupby
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import AuthContext, CurrentAuth, DbSession, Pagination, require
+from app.api.deps import AuthContext, CurrentAuth, DbSession, Pagination, SearchQuery, require
 from app.common.schemas import Page
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.modules.rbac.models import Membership
@@ -34,6 +34,8 @@ from app.modules.rbac.service import RbacService
 roles_router = APIRouter()
 members_router = APIRouter()
 permissions_router = APIRouter()
+# Mounted at `/org`: the Members module's own list, which does not need a campus open.
+org_members_router = APIRouter()
 
 
 def _assert_school_scope(ctx: AuthContext, school_id: UUID) -> None:
@@ -244,17 +246,66 @@ async def list_members(
     _assert_school_scope(ctx, school_id)
     service = RbacService(session)
     members, total = await service.list_members(school_id=school_id, params=params)
-    assignments = await service.class_assignments(
-        school_id=school_id, user_ids=[m.user_id for m in members]
+    return Page.create(await _with_assignments(service, members), total, params)
+
+
+@org_members_router.get("/members", response_model=Page[MemberRead])
+async def list_org_members(
+    session: DbSession,
+    params: Pagination,
+    ctx: Annotated[AuthContext, Depends(require("member:read"))],
+    search: SearchQuery,
+    school_id: Annotated[UUID | None, Query()] = None,
+    role: Annotated[str | None, Query(max_length=50, description="Role code")] = None,
+) -> Page[MemberRead]:
+    """Staff across every branch the caller can see, optionally narrowed to one.
+
+    Filters combine: `school_id` (one branch), `q` (name or email contains), and
+    `role` (a role CODE such as `teacher`, so it spans every branch's copy of it).
+
+    The principal opens Members straight after signing in, without first choosing a
+    campus: their membership is org-level, so the whole organization is theirs to
+    list, and `school_id` is a filter they apply rather than a precondition. RLS
+    still bounds the query to the caller's organization.
+
+    A school-scoped caller sees their own branch whatever they ask for -- asking for
+    another one is the same 403 the school-scoped route gives.
+    """
+    if school_id is not None:
+        _assert_school_scope(ctx, school_id)
+    service = RbacService(session)
+    members, total = await service.list_members(
+        school_id=ctx.school_id or school_id, params=params, search=search, role_code=role
     )
+    return Page.create(await _with_assignments(service, members), total, params)
+
+
+async def _with_assignments(service: RbacService, members: list[Membership]) -> list[MemberRead]:
+    """`MemberRead` rows with the classes each member teaches in THEIR OWN branch.
+
+    One lookup per branch on the page rather than per member: an org-wide page mixes
+    campuses, and a teacher's classes at one campus say nothing about the row for
+    their membership at another. Org-level members (the principal) teach nowhere.
+    """
+    by_school: dict[UUID, list[UUID]] = {}
+    for m in members:
+        if m.school_id is not None:
+            by_school.setdefault(m.school_id, []).append(m.user_id)
+    assignments = {
+        school_id: await service.class_assignments(school_id=school_id, user_ids=user_ids)
+        for school_id, user_ids in by_school.items()
+    }
+
     items = []
     for m in members:
         item = _member_read(m)
-        item.assigned_classes = [
-            MemberClassAssignment.model_validate(a) for a in assignments.get(m.user_id, [])
-        ]
+        if m.school_id is not None:
+            item.assigned_classes = [
+                MemberClassAssignment.model_validate(a)
+                for a in assignments[m.school_id].get(m.user_id, [])
+            ]
         items.append(item)
-    return Page.create(items, total, params)
+    return items
 
 
 @members_router.get("/{school_id}/teachers", response_model=list[TeacherOption])

@@ -40,7 +40,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -48,6 +48,7 @@ from app.api.deps import AuthContext
 from app.common.audit import AuditAction, record_audit
 from app.common.email.sender import EmailSender
 from app.common.email.templates import ActionPurpose, render_action_email
+from app.common.schemas import PageParams
 from app.core.config import Settings
 from app.core.exceptions import (
     AppError,
@@ -384,6 +385,31 @@ class InvitationService:
         )
         await self.session.delete(invitation)
         await self.session.flush()
+
+    async def list_for_org(
+        self, *, school_id: UUID | None, status: InvitationStatus | None, params: PageParams
+    ) -> tuple[list[Invitation], int]:
+        """One page of invitations, newest first, plus how many match in all.
+
+        Across the whole organization, or one branch when `school_id` is given. RLS
+        bounds it to the caller's organization; the filters and the page are SQL.
+        """
+        conditions: list[ColumnElement[bool]] = []
+        if school_id is not None:
+            conditions.append(Invitation.school_id == school_id)
+        if status is not None:
+            conditions.append(Invitation.status == status)
+
+        total = await self.session.scalar(select(func.count(Invitation.id)).where(*conditions))
+        rows = await self.session.execute(
+            select(Invitation)
+            .options(joinedload(Invitation.role))
+            .where(*conditions)
+            .order_by(Invitation.created_at.desc(), Invitation.id)
+            .offset(params.offset)
+            .limit(params.limit)
+        )
+        return list(rows.scalars().all()), int(total or 0)
 
     async def list_for_school(self, school_id: UUID) -> list[Invitation]:
         rows = await self.session.execute(

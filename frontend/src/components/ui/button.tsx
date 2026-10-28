@@ -10,8 +10,9 @@ import { cn } from "@/lib/utils";
  *
  * The API is the panel's own (`variant`, `size`, `asChild`, `loading`), so the
  * eighty-odd call sites did not change; what renders is HeroUI's button class —
- * its pill shape, its colours from the tokens in globals.css, and its motion: a
- * quick press-in to 97% and an eased hover. `@heroui/styles` returns class names
+ * its colours from the tokens in globals.css, the control radius (heroui.css
+ * overrides HeroUI's pill), and its motion: a quick press-in to 97% and an
+ * eased hover. `@heroui/styles` returns class names
  * only, so this stays usable from server components and as a Radix `asChild`
  * trigger, neither of which HeroUI's React `Button` allows.
  *

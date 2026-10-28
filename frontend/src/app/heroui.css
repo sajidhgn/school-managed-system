@@ -29,3 +29,12 @@
 @import "@heroui/styles/components/chip.css" layer(components);
 @import "@heroui/styles/components/skeleton.css" layer(components);
 @import "@heroui/styles/components/drawer.css" layer(components);
+
+/* HeroUI draws its buttons as pills; the platform's controls share one radius
+   (`--control-radius`, globals.css). Later in the same layer, so it wins. */
+@layer components {
+  .button,
+  .close-button {
+    border-radius: var(--control-radius);
+  }
+}

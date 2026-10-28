@@ -41,6 +41,7 @@ from app.modules.guardians.schemas import (
     GuardianLinkCreate,
     GuardianLinkUpdate,
     GuardianPhoneChange,
+    GuardianPortalGrant,
     GuardianPortalToggle,
     GuardianRead,
     GuardianUpdate,
@@ -77,6 +78,27 @@ async def guardians_of_student(
     return await GuardianService(db).list_for_student(
         student_id, teacher_id=assigned_teacher(ctx.user_id, ctx.permissions)
     )
+
+
+@router.post(
+    "/students/{student_id}/portal-access",
+    response_model=list[StudentGuardianRead],
+    summary="Let a parent sign in to the portal and see this student",
+)
+async def grant_portal_access(
+    student_id: UUID,
+    payload: GuardianPortalGrant,
+    db: DbSession,
+    ctx: AuthContext = Depends(require("guardian:create", "guardian:update")),
+) -> list[StudentGuardianRead]:
+    """Register the phone if needed and link it to the student with portal access.
+
+    Both codes, because it can do both things: register a parent and link one. It
+    needs no more than doing the two steps separately would. Returns the student's
+    updated contact card. Turning access off again is the link PATCH with
+    `can_view_results: false`.
+    """
+    return await GuardianService(db).grant_portal_access(student_id, payload, actor_id=ctx.user_id)
 
 
 # ---------------------------------------------------------------------------

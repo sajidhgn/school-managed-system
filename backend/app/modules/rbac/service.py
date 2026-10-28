@@ -49,12 +49,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, delete, func, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.api.deps import AuthContext
 from app.common.audit import AuditAction, record_audit
+from app.common.repository import contains_pattern
 from app.common.schemas import PageParams
 from app.core.cache import invalidate_role_permissions
 from app.core.context import get_organization_id, get_school_id
@@ -427,9 +428,19 @@ class RbacService:
     # -----------------------------------------------------------------------
 
     async def list_members(
-        self, *, school_id: UUID | None, params: PageParams
+        self,
+        *,
+        school_id: UUID | None,
+        params: PageParams,
+        search: str | None = None,
+        role_code: str | None = None,
     ) -> tuple[list[Membership], int]:
         """One page of a school's staff (or the whole organization's), plus the total.
+
+        `search` matches the person's name or email, case-insensitively, anywhere in
+        the string. `role_code` filters by the role's CODE rather than its id: every
+        branch has its own `teacher` role row, and "show me the teachers" across the
+        organization means all of them.
 
         Ordered by the person's name, then by membership id so pagination stays
         deterministic when two people share a name — unstable ordering shuffles rows
@@ -438,14 +449,30 @@ class RbacService:
         conditions: list[ColumnElement[bool]] = [Membership.deleted_at.is_(None)]
         if school_id is not None:
             conditions.append(Membership.school_id == school_id)
+        if role_code is not None:
+            conditions.append(Role.code == role_code)
+        if search:
+            pattern = contains_pattern(search)
+            conditions.append(
+                or_(
+                    User.full_name.ilike(pattern, escape="\\"),
+                    User.email.ilike(pattern, escape="\\"),
+                )
+            )
 
         total = (
-            await self.session.execute(select(func.count(Membership.id)).where(*conditions))
+            await self.session.execute(
+                select(func.count(Membership.id))
+                .join(User, Membership.user_id == User.id)
+                .join(Role, Membership.role_id == Role.id)
+                .where(*conditions)
+            )
         ).scalar_one()
 
         stmt = (
             select(Membership)
             .join(User, Membership.user_id == User.id)
+            .join(Role, Membership.role_id == Role.id)
             .options(joinedload(Membership.user), joinedload(Membership.role))
             .where(*conditions)
             .order_by(User.full_name.asc(), Membership.id)

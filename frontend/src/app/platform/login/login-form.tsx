@@ -68,7 +68,7 @@ export function PlatformLoginForm() {
           type="email"
           autoComplete="email"
           autoFocus
-          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-slate-500"
+          className="h-9 rounded-control border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-slate-500"
           {...form.register("email")}
         />
         {form.formState.errors.email ? (
@@ -83,7 +83,7 @@ export function PlatformLoginForm() {
         <PasswordInput
           id="password"
           autoComplete="current-password"
-          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 shadow-none focus-visible:ring-slate-500 focus-visible:ring-offset-0"
+          className="h-9 rounded-control border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 shadow-none focus-visible:ring-slate-500 focus-visible:ring-offset-0"
           toggleClassName="text-slate-400 hover:text-slate-100 focus-visible:ring-slate-500"
           {...form.register("password")}
         />
@@ -104,7 +104,7 @@ export function PlatformLoginForm() {
           autoComplete="one-time-code"
           maxLength={6}
           placeholder="123456"
-          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 font-mono text-sm tracking-widest text-slate-100 outline-none focus:ring-2 focus:ring-slate-500"
+          className="h-9 rounded-control border border-slate-700 bg-slate-950 px-3 font-mono text-sm tracking-widest text-slate-100 outline-none focus:ring-2 focus:ring-slate-500"
           {...form.register("totp_code")}
         />
         {form.formState.errors.totp_code ? (
@@ -121,7 +121,7 @@ export function PlatformLoginForm() {
       <button
         type="submit"
         disabled={form.formState.isSubmitting}
-        className="h-9 rounded-md bg-slate-100 text-sm font-medium text-slate-950 transition-colors hover:bg-white disabled:opacity-60"
+        className="h-9 rounded-control bg-slate-100 text-sm font-medium text-slate-950 transition-colors hover:bg-white disabled:opacity-60"
       >
         {form.formState.isSubmitting ? "Signing in…" : "Sign in"}
       </button>

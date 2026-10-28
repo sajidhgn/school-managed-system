@@ -41,7 +41,7 @@ export function ColorInput({
         value={valid ? value : "#94a3b8"}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-background p-1 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-9 w-10 shrink-0 cursor-pointer rounded-control border border-border bg-background p-1 disabled:cursor-not-allowed disabled:opacity-50"
       />
       <Input
         id={id}
@@ -56,7 +56,7 @@ export function ColorInput({
         <button
           type="button"
           onClick={() => onChange("")}
-          className="rounded-sm p-1 text-muted-foreground hover:text-foreground"
+          className="rounded-control p-1 text-muted-foreground hover:text-foreground"
         >
           <X className="size-4" aria-hidden />
           <span className="sr-only">Clear colour</span>

@@ -80,6 +80,9 @@ const Tabs = TabsPrimitive.Root;
  *
  * Until that first measurement the active tab paints its own white fill, so the
  * selection is visible before hydration; `data-ready` hands the job to the pill.
+ *
+ * The tabs and the pill take the control radius; the track adds its 4px padding
+ * to that, so the corners stay concentric.
  */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
@@ -120,7 +123,7 @@ const TabsList = React.forwardRef<
       ref={setRefs}
       data-ready={pill ? "true" : undefined}
       className={cn(
-        "group/tabs relative inline-flex h-10 items-center justify-center rounded-full bg-[var(--default)] p-1 text-muted-foreground",
+        "group/tabs relative inline-flex h-10 items-center justify-center rounded-[calc(var(--control-radius)+4px)] bg-[var(--default)] p-1 text-muted-foreground",
         className,
       )}
       {...props}
@@ -128,7 +131,7 @@ const TabsList = React.forwardRef<
       {pill ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-1 left-0 rounded-full bg-card shadow-[0_1px_2px_0_rgb(10_12_16/0.08),0_0_1px_0_rgb(10_12_16/0.1)] transition-[transform,width] duration-300 ease-fluid"
+          className="pointer-events-none absolute inset-y-1 left-0 rounded-control bg-card shadow-[0_1px_2px_0_rgb(10_12_16/0.08),0_0_1px_0_rgb(10_12_16/0.1)] transition-[transform,width] duration-300 ease-fluid"
           style={{ width: pill.width, transform: `translateX(${pill.left}px)` }}
         />
       ) : null}
@@ -145,7 +148,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "relative z-10 inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-medium",
+      "relative z-10 inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-control px-4 text-sm font-medium",
       "transition-[color,transform] duration-150 ease-out hover:text-foreground active:scale-[0.97]",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
       "data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm",

@@ -305,7 +305,7 @@ export function ChallanDesignDialog({
               set("footer_note", event.target.value.slice(0, 200))
             }
             placeholder="Fees once paid are not refundable."
-            className="h-8 rounded-md border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-8 rounded-control border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
 
@@ -570,7 +570,7 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value.slice(0, maxLength))}
-        className="h-8 rounded-md border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        className="h-8 rounded-control border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />
     </label>
   );

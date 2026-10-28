@@ -1,10 +1,19 @@
 """Textbook library HTTP endpoints -- one line of delegation each, mostly.
 
 AUTHORISATION SHAPE
-    book:read     see books, chapters, pages, files; search a book; search and
-                  ask the whole library (within the caller's teaching scope)
-    book:write    upload books and change the ones you uploaded
-    book:manage   change or delete any book
+    book:read     see the campus's books, chapters, pages, files; search a book;
+                  search and ask across them (within the caller's teaching
+                  scope); browse the shared library
+    book:write    upload books and change the ones you uploaded; add library
+                  books and change or remove the ones you added
+    book:manage   change or remove any of the campus's books
+
+THE SHARED LIBRARY
+    `GET /books` is the campus's books. `GET /books/library` is every school's:
+    a book is uploaded once for the whole platform, and `POST /books/library/{id}`
+    files it under one of the caller's classes instead of uploading it again.
+    `POST /books` refuses a book the library already has (409 `DUPLICATE_BOOK`,
+    `meta.book_id` naming it).
 
     Every route is guarded on `book:read`; writes then check `write` OR `manage` in
     the service, because `require()` demands ALL of its codes and a coordinator may
@@ -39,7 +48,8 @@ from fastapi.responses import FileResponse
 from openai import OpenAIError
 from sqlalchemy import select
 
-from app.api.deps import AuthContext, DbSession, SettingsDep, require
+from app.api.deps import AuthContext, DbSession, Pagination, SearchQuery, SettingsDep, require
+from app.common.schemas import Page
 from app.common.storage import LocalFileStorage, get_storage
 from app.core.config import Settings
 from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
@@ -73,9 +83,11 @@ from app.modules.books.schemas import (
     ChapterRead,
     ChapterUpdate,
     LibraryAnswer,
+    LibraryBook,
     LibraryHit,
     PageRead,
     ScanStatus,
+    ShelfInput,
 )
 from app.modules.books.service import BookService, Caller, IncomingFile
 
@@ -196,18 +208,85 @@ async def _chapter_school(chapter_id: UUID, db: DbSession) -> UUID:
 # -- books -------------------------------------------------------------------
 
 
-@router.get("", response_model=list[BookRead], summary="Books on the campus")
+@router.get("", response_model=Page[BookRead], summary="Books on the campus")
 async def list_books(
     db: DbSession,
     ctx: ReadCtx,
     storage: StorageDep,
     settings: SettingsDep,
+    params: Pagination,
+    search: SearchQuery,
     class_id: UUID | None = None,
     subject_id: UUID | None = None,
-) -> list[BookRead]:
+) -> Page[BookRead]:
+    """One page of the campus's books, newest first.
+
+    `class_id`, `subject_id` and `q` (title or publisher) narrow the list in the
+    database, and the page is an offset into the filtered result.
+    """
     return await _service(db, storage, settings).list_books(
-        _caller(ctx), class_id=class_id, subject_id=subject_id
+        _caller(ctx), params=params, class_id=class_id, subject_id=subject_id, search=search
     )
+
+
+# Declared before `/{book_id}`: "library" is not a book id.
+@router.get(
+    "/library",
+    response_model=Page[LibraryBook],
+    summary="The shared library: every book uploaded by any school on the platform",
+)
+async def library(
+    db: DbSession,
+    ctx: ReadCtx,
+    storage: StorageDep,
+    settings: SettingsDep,
+    params: Pagination,
+    search: SearchQuery,
+    grade: Annotated[str | None, Query(max_length=80)] = None,
+    subject: Annotated[str | None, Query(max_length=120)] = None,
+) -> Page[LibraryBook]:
+    """By title, one page at a time. `q` matches the title or publisher; `grade` is
+    a class name as any school writes it -- "Class 5", "Grade V" and "Fifth" find
+    the same books; `subject` is a subject name from `/books/library/subjects`.
+    `on_shelf` marks the books the caller's campus already has."""
+    return await _service(db, storage, settings).library(
+        params=params, search=search, grade=grade, subject=subject
+    )
+
+
+@router.get(
+    "/library/subjects",
+    response_model=list[str],
+    summary="The subject names the library's books are filed under",
+)
+async def library_subjects(
+    db: DbSession,
+    ctx: ReadCtx,
+    storage: StorageDep,
+    settings: SettingsDep,
+    grade: Annotated[str | None, Query(max_length=80)] = None,
+) -> list[str]:
+    return await _service(db, storage, settings).library_subjects(grade)
+
+
+@router.post(
+    "/library/{book_id}",
+    response_model=BookDetail,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a library book to one of your classes",
+)
+async def add_from_library(
+    book_id: UUID,
+    payload: ShelfInput,
+    db: DbSession,
+    ctx: ReadCtx,
+    storage: StorageDep,
+    settings: SettingsDep,
+) -> BookDetail:
+    """The book is used as it is -- its chapters, pages and search index are the
+    library's, kept up to date by the school that uploaded it. 409
+    `ALREADY_ON_SHELF` if the campus has it already."""
+    return await _service(db, storage, settings).add_from_library(book_id, payload, _caller(ctx))
 
 
 def _live_agent(agent_factory: AgentFactory) -> BookAgent:
@@ -354,7 +433,9 @@ async def scan_book(
 async def create_book(
     payload: BookCreate, db: DbSession, ctx: ReadCtx, storage: StorageDep, settings: SettingsDep
 ) -> BookDetail:
-    """409 `DUPLICATE_BOOK` if the class already has that title/publisher/version."""
+    """409 `DUPLICATE_BOOK` if the library already has that title, publisher and
+    version for that grade -- uploaded by any school; `meta.book_id` is that book,
+    to add from the library instead."""
     return await _service(db, storage, settings).create(payload, _caller(ctx))
 
 
@@ -365,7 +446,11 @@ async def get_book(
     return await _service(db, storage, settings).detail(book_id, _caller(ctx))
 
 
-@router.patch("/{book_id}", response_model=BookDetail, summary="Edit a book's details")
+@router.patch(
+    "/{book_id}",
+    response_model=BookDetail,
+    summary="Edit a book's details (uploader only) or where your campus files it",
+)
 async def update_book(
     book_id: UUID,
     payload: BookUpdate,
@@ -381,11 +466,14 @@ async def update_book(
     "/{book_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
-    summary="Delete a book, its files and its index",
+    summary="Remove a book from the campus; delete it if nobody else uses it",
 )
 async def delete_book(
     book_id: UUID, db: DbSession, ctx: ReadCtx, storage: StorageDep, settings: SettingsDep
 ) -> Response:
+    """The book leaves the campus's books. Its files, pages and index are deleted
+    too when the campus uploaded it and no other school uses it; otherwise it stays
+    in the library for them."""
     await _service(db, storage, settings).delete(book_id, _caller(ctx))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

@@ -14,7 +14,8 @@ from sqlalchemy import ColumnElement, Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
-from app.common.repository import BaseRepository
+from app.common.repository import BaseRepository, contains_pattern
+from app.common.schemas import PageParams
 from app.core.context import get_school_id
 from app.modules.academics.teaching_scope import taught_class_ids, teaches_subject
 from app.modules.books.models import BookChapter, BookPage
@@ -60,14 +61,31 @@ class PaperRepository(BaseRepository[Paper]):
     async def list_with_totals(
         self,
         *,
+        params: PageParams,
         class_id: UUID | None,
         subject_id: UUID | None,
         status: PaperStatus | None,
         teacher_id: UUID | None,
-        limit: int,
-        offset: int,
-    ) -> Sequence[tuple[Paper, int, int]]:
-        """Papers with (question count, total marks), newest first."""
+        search: str | None = None,
+    ) -> tuple[list[tuple[Paper, int, int]], int]:
+        """One page of papers with (question count, total marks), newest first, plus
+        how many papers match in all. Filters, title search and the page are SQL."""
+        conditions: list[ColumnElement[bool]] = []
+        if class_id is not None:
+            conditions.append(Paper.class_id == class_id)
+        if subject_id is not None:
+            conditions.append(Paper.subject_id == subject_id)
+        if status is not None:
+            conditions.append(Paper.status == status)
+        if teacher_id is not None:
+            conditions.append(taught(teacher_id, Paper.class_id, Paper.subject_id))
+        if search:
+            conditions.append(Paper.title.ilike(contains_pattern(search), escape="\\"))
+
+        total = await self.session.scalar(
+            _scoped(select(func.count(Paper.id)).where(*conditions), Paper.school_id)
+        )
+
         totals = (
             select(
                 PaperQuestion.paper_id,
@@ -80,20 +98,14 @@ class PaperRepository(BaseRepository[Paper]):
         stmt = (
             select(Paper, func.coalesce(totals.c.count, 0), func.coalesce(totals.c.marks, 0))
             .outerjoin(totals, totals.c.paper_id == Paper.id)
+            .where(*conditions)
             .order_by(Paper.created_at.desc(), Paper.id)
-            .limit(limit)
-            .offset(offset)
+            .offset(params.offset)
+            .limit(params.limit)
         )
         stmt = _scoped(stmt, Paper.school_id)
-        if class_id is not None:
-            stmt = stmt.where(Paper.class_id == class_id)
-        if subject_id is not None:
-            stmt = stmt.where(Paper.subject_id == subject_id)
-        if status is not None:
-            stmt = stmt.where(Paper.status == status)
-        if teacher_id is not None:
-            stmt = stmt.where(taught(teacher_id, Paper.class_id, Paper.subject_id))
-        return [(p, int(c), int(m)) for p, c, m in (await self.session.execute(stmt)).all()]
+        rows = [(p, int(c), int(m)) for p, c, m in (await self.session.execute(stmt)).all()]
+        return rows, int(total or 0)
 
     async def for_update(self, paper_id: UUID) -> Paper | None:
         stmt = _scoped(select(Paper).where(Paper.id == paper_id).with_for_update(), Paper.school_id)
@@ -178,12 +190,10 @@ class QuestionRepository(BaseRepository[Question]):
         language: PaperLanguage | None,
         text: str | None,
         teacher_id: UUID | None,
-        limit: int,
-        offset: int,
-    ) -> Sequence[Question]:
-        stmt = _scoped(select(Question), Question.school_id).order_by(
-            Question.created_at.desc(), Question.id
-        )
+        params: PageParams,
+    ) -> tuple[Sequence[Question], int]:
+        """One page of the bank, newest first, plus how many questions match in all."""
+        conditions: list[ColumnElement[bool]] = []
         for column, value in (
             (Question.class_id, class_id),
             (Question.subject_id, subject_id),
@@ -194,14 +204,22 @@ class QuestionRepository(BaseRepository[Question]):
             (Question.language, language),
         ):
             if value is not None:
-                stmt = stmt.where(column == value)
+                conditions.append(column == value)
         if text:
-            escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            stmt = stmt.where(Question.text.ilike(f"%{escaped}%", escape="\\"))
+            conditions.append(Question.text.ilike(contains_pattern(text), escape="\\"))
         if teacher_id is not None:
-            stmt = stmt.where(taught(teacher_id, Question.class_id, Question.subject_id))
-        stmt = stmt.limit(limit).offset(offset)
-        return (await self.session.execute(stmt)).scalars().all()
+            conditions.append(taught(teacher_id, Question.class_id, Question.subject_id))
+
+        total = await self.session.scalar(
+            _scoped(select(func.count(Question.id)).where(*conditions), Question.school_id)
+        )
+        stmt = (
+            _scoped(select(Question).where(*conditions), Question.school_id)
+            .order_by(Question.created_at.desc(), Question.id)
+            .offset(params.offset)
+            .limit(params.limit)
+        )
+        return (await self.session.execute(stmt)).scalars().all(), int(total or 0)
 
     async def visible(self, question_id: UUID, teacher_id: UUID) -> bool:
         stmt = select(Question.id).where(
@@ -212,24 +230,27 @@ class QuestionRepository(BaseRepository[Question]):
 
 
 class SourceRepository:
-    """The book text a paper is written from."""
+    """The book text a paper is written from.
+
+    Not campus-filtered: a book is shared library content, possibly another
+    school's upload. The paper itself is the campus's, and it was only created
+    from a book on the campus's shelf.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def chapters(self, book_id: UUID) -> Sequence[BookChapter]:
-        stmt = _scoped(
-            select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.number),
-            BookChapter.school_id,
+        stmt = (
+            select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.number)
         )
         return (await self.session.execute(stmt)).scalars().all()
 
     async def pages(self, chapter_ids: Sequence[UUID]) -> Sequence[tuple[UUID, int | None, str]]:
         """(chapter id, printed page number, text) in reading order per chapter."""
-        stmt = _scoped(
+        stmt = (
             select(BookPage.chapter_id, BookPage.printed_page_number, BookPage.text)
             .where(BookPage.chapter_id.in_(chapter_ids))
-            .order_by(BookPage.chapter_id, BookPage.position),
-            BookPage.school_id,
+            .order_by(BookPage.chapter_id, BookPage.position)
         )
         return [(c, n, t) for c, n, t in (await self.session.execute(stmt)).all()]

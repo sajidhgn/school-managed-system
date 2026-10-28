@@ -82,7 +82,7 @@ export function RtlDemo({ locale }: { locale: Locale }) {
       <div
         role="group"
         aria-label={toggle.group}
-        className="mb-5 inline-flex rounded-full border border-mk-line bg-mk-card p-1"
+        className="mb-5 inline-flex rounded-[calc(var(--control-radius)+5px)] border border-mk-line bg-mk-card p-1"
       >
         {(["en", "ur"] as const).map((option) => (
           <button
@@ -93,7 +93,7 @@ export function RtlDemo({ locale }: { locale: Locale }) {
               if (option !== lang) switchTo(option, setLang);
             }}
             className={cn(
-              "h-9 rounded-full px-4 text-sm font-bold transition-colors",
+              "h-9 rounded-control px-4 text-sm font-bold transition-colors",
               lang === option ? "bg-mk-ink text-mk-ink-fg" : "text-mk-muted hover:text-mk-text",
             )}
           >

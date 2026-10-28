@@ -12,8 +12,10 @@ WHY THIS FILE EXISTS
         address they do not have. The handset IS the channel, so the handset is the
         credential.
 
-    So: the phone number is the identifier, an SMS code is the proof, and the code
-    is short-lived, single-use, attempt-capped and rate-limited.
+    So: the phone number is the identifier, a code sent to it is the proof, and the
+    code is short-lived, single-use, attempt-capped and rate-limited. The code goes
+    out on WhatsApp from the child's own campus number, with SMS behind it -- see
+    `delivery.py`.
 
 RESPONSIBILITY
     Issue codes, verify them, choose an organization, mint and rotate sessions.
@@ -22,7 +24,8 @@ RESPONSIBILITY
 INTERACTIONS
     * `core/otp.py` for the cryptographic primitives -- generation, the peppered
       digest, and constant-time comparison. None of that is re-implemented here.
-    * `common/sms/sender.py` for delivery, injected so tests can capture it.
+    * `delivery.py` for sending. This file never sends anything itself: it hands
+      back a `PendingCode`, which the router delivers after the response.
     * `auth/models.Session` for the session row: guardians share the staff table and
       therefore its rotation and reuse detection.
 
@@ -32,7 +35,7 @@ FIVE CONTROLS, AND THE CODE IS WORTHLESS WITHOUT ANY ONE OF THEM
     A 6-digit code has 10^6 values. That is trivially brute-forceable, and the
     security comes entirely from the controls around it:
 
-      1. EXPIRY -- five minutes. An SMS lands on a lock screen in seconds; a longer
+      1. EXPIRY -- five minutes. A message lands on a lock screen in seconds; a longer
          window only widens the period in which a borrowed handset is a login.
       2. ATTEMPT CAP -- five wrong guesses burns the code AND counts against the
          identity. Held on the IDENTITY, not the code row, so requesting a fresh code
@@ -41,9 +44,10 @@ FIVE CONTROLS, AND THE CODE IS WORTHLESS WITHOUT ANY ONE OF THEM
       3. SINGLE USE -- `consumed_at`. A code that worked once must not work twice.
       4. NEWEST ONLY -- issuing a code retires the previous one. Otherwise ten sends
          become ten simultaneous guesses.
-      5. RATE LIMIT + DAILY QUOTA -- per phone and per IP. SMS costs real money, so an
-         unthrottled request endpoint spends a tenant's budget as easily as it
-         harasses a parent.
+      5. RATE LIMIT + DAILY QUOTA -- per phone and per IP. An SMS costs real money and
+         a burst of WhatsApp messages can get a campus's number banned, so an
+         unthrottled request endpoint spends a tenant's budget -- or its number -- as
+         easily as it harasses a parent.
 
 =============================================================================
 NO ENUMERATION, ANYWHERE ON THIS SURFACE
@@ -67,7 +71,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.sms import SmsMessage, SmsSender, build_sms_sender
 from app.core.config import Settings, get_settings
 from app.core.context import get_organization_id, get_school_id
 from app.core.exceptions import AuthenticationError, AuthorizationError, RateLimitError
@@ -83,6 +86,7 @@ from app.core.security import (
 )
 from app.db.session import bind_tenant
 from app.modules.auth.models import Session
+from app.modules.guardians.delivery import PendingCode
 from app.modules.guardians.models import (
     Guardian,
     GuardianIdentity,
@@ -121,6 +125,18 @@ class IssuedGuardianTokens:
 
 
 @dataclass(frozen=True, slots=True)
+class OtpRequestOutcome:
+    """What `request_code` tells the router. Identical for known and unknown numbers,
+    except `pending`, which never reaches the HTTP response."""
+
+    phone_masked: str
+    ttl_seconds: int
+    retry_after_seconds: int
+    pending: PendingCode | None = None
+    """The code to send, or None when the number is not a registered parent."""
+
+
+@dataclass(frozen=True, slots=True)
 class VerifiedGuardian:
     """The outcome of a successful code check, before an organization is chosen."""
 
@@ -131,15 +147,9 @@ class VerifiedGuardian:
 class GuardianAuthService:
     """Phone-OTP login for the parent portal."""
 
-    def __init__(
-        self,
-        session: AsyncSession,
-        settings: Settings | None = None,
-        sms: SmsSender | None = None,
-    ) -> None:
+    def __init__(self, session: AsyncSession, settings: Settings | None = None) -> None:
         self.session = session
         self.settings = settings or get_settings()
-        self.sms = sms or build_sms_sender(self.settings)
         self.identities = GuardianIdentityRepository(session)
 
     # -----------------------------------------------------------------------
@@ -152,12 +162,13 @@ class GuardianAuthService:
         *,
         ip: str | None = None,
         purpose: GuardianOtpPurpose = GuardianOtpPurpose.PORTAL_LOGIN,
-    ) -> tuple[str, int, int]:
-        """Send a login code. Returns `(masked_phone, ttl_seconds, retry_after)`.
+    ) -> OtpRequestOutcome:
+        """Issue a login code, and say where it should be sent.
 
         Runs the SAME bookkeeping whether or not the number is known -- see the module
         docstring on enumeration. The only observable difference between a registered
-        and an unregistered number is that one handset receives a text.
+        and an unregistered number is that one handset receives a message, and that
+        happens after the response (`delivery.py`).
         """
         phone = self._normalise(raw_phone)
         ttl_seconds = self.settings.GUARDIAN_OTP_TTL_MINUTES * 60
@@ -191,7 +202,7 @@ class GuardianAuthService:
         identity = await self.identities.get_by_phone(phone)
         if identity is None or not identity.can_authenticate:
             logger.info("guardian_otp_requested_unknown", phone_masked=masked)
-            return masked, ttl_seconds, cooldown
+            return OtpRequestOutcome(masked, ttl_seconds, cooldown)
 
         previous = await self.identities.latest_code(identity.id, purpose)
         if previous is not None:
@@ -227,19 +238,38 @@ class GuardianAuthService:
             )
         )
 
-        await self.sms.send(
-            SmsMessage(
-                to=phone,
-                body=(
-                    f"{code} is your {self.settings.SMS_SENDER_ID} verification code. "
-                    f"It expires in {self.settings.GUARDIAN_OTP_TTL_MINUTES} minutes. "
-                    "Do not share it with anyone."
-                ),
-                purpose=purpose.value,
-            )
+        pending = PendingCode(
+            phone=phone,
+            body=(
+                f"{code} is your {self.settings.SMS_SENDER_ID} parent portal code. "
+                f"It expires in {self.settings.GUARDIAN_OTP_TTL_MINUTES} minutes. "
+                "Do not share it with anyone."
+            ),
+            purpose=purpose.value,
+            school_ids=await self._delivery_schools(identity.id),
         )
-        logger.info("guardian_otp_sent", identity_id=str(identity.id), phone_masked=masked)
-        return masked, ttl_seconds, cooldown
+        logger.info("guardian_otp_issued", identity_id=str(identity.id), phone_masked=masked)
+        return OtpRequestOutcome(masked, ttl_seconds, cooldown, pending)
+
+    async def _delivery_schools(self, identity_id: UUID) -> tuple[UUID, ...]:
+        """The campuses whose WhatsApp may send this person a code, preferred first.
+
+        THE OTHER PLACE THE CROSS-TENANT READ IS ARMED, AND IT IS BEFORE VERIFICATION.
+        Which campus a child attends lives in RLS-protected rows, and no organization
+        is bound yet. The read is pinned to this identity, returns campus ids only, and
+        nothing it finds reaches the response: it only picks the number the code is
+        sent from. The binding is restored before returning, exactly as in
+        `_usable_contexts`.
+        """
+        previous_org = get_organization_id()
+        previous_school = get_school_id()
+        await bind_tenant(self.session, None, platform_admin=True)
+        try:
+            return tuple(await self.identities.delivery_schools_for_identity(identity_id))
+        finally:
+            await bind_tenant(
+                self.session, previous_org, school_id=previous_school, platform_admin=False
+            )
 
     # -----------------------------------------------------------------------
     # Step 2: verify it
@@ -325,12 +355,13 @@ class GuardianAuthService:
         """Every organization whose records this handset may open.
 
         =====================================================================
-        THE ONE PLACE THE CROSS-TENANT READ IS ARMED ON THIS SURFACE
+        WHERE THE CROSS-TENANT READ IS ARMED ON THIS SURFACE
         =====================================================================
             "Which organizations may this person choose between?" is by definition a
             cross-organization question asked before any organization is chosen -- the
             exact analogue of listing a staff user's memberships at login, which runs
-            the same way.
+            the same way. (`_delivery_schools` is the only other place, and returns
+            campus ids for addressing a code, never anything shown to the caller.)
 
             `guardians` is RLS-protected, so the query returns nothing unless the read
             GUC is armed. It is armed HERE, for this one query, AFTER the code has been
@@ -485,7 +516,7 @@ class GuardianAuthService:
         The reuse branch is not boilerplate here either: a parent's handset is shared,
         lost and resold far more often than a staff laptop, so a replayed token is a
         realistic event rather than a theoretical one. Revoking the whole family forces
-        both parties back through an SMS to a number only one of them holds.
+        both parties back through a code sent to a number only one of them holds.
         """
         presented = hash_token(raw_refresh_token)
 

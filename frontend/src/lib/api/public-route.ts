@@ -13,7 +13,11 @@ import { backendUrl } from "@/lib/api/config";
  */
 export async function forwardPublicMutation(
   request: NextRequest,
-  backendPath: "/auth/forgot-password" | "/auth/reset-password" | "/students/admissions",
+  backendPath:
+    | "/auth/forgot-password"
+    | "/auth/reset-password"
+    | "/students/admissions"
+    | "/guardian/auth/request-code",
 ): Promise<NextResponse> {
   const upstream = await fetch(backendUrl(backendPath), {
     method: "POST",

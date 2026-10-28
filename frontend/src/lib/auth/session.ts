@@ -5,7 +5,12 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { API_BASE_URL, API_V1_PREFIX, COOKIE_SECURE } from "@/lib/api/config";
-import type { MeResponse, PlatformAdminRead, SchoolRead } from "@/lib/api/types";
+import type {
+  GuardianProfile,
+  MeResponse,
+  PlatformAdminRead,
+  SchoolRead,
+} from "@/lib/api/types";
 
 /**
  * Server-only session handling.
@@ -67,12 +72,20 @@ export const ACTIVE_SCHOOL_COOKIE = "educloud_active_school";
 const RECOVERY_COOKIES = {
   tenant: "educloud_recovering",
   platform: "educloud_platform_recovering",
+  guardian: "educloud_guardian_recovering",
 } as const;
 const RECOVERY_MAX_AGE = 10;
 
 // --- Platform session ------------------------------------------------------
 export const PLATFORM_ACCESS_COOKIE = "educloud_platform_access";
 export const PLATFORM_REFRESH_COOKIE = "educloud_platform_refresh";
+
+// --- Parent-portal session -------------------------------------------------
+// A third pair, for the same reason as the platform one: a teacher who is also a
+// parent holds both sessions in one browser, and signing in to see their own child
+// must not sign them out of their job.
+export const GUARDIAN_ACCESS_COOKIE = "educloud_guardian_access";
+export const GUARDIAN_REFRESH_COOKIE = "educloud_guardian_refresh";
 
 const BASE_COOKIE = {
   httpOnly: true,
@@ -113,10 +126,14 @@ export function readAccessToken(response: Response): string | null {
   return response.headers.get("x-access-token");
 }
 
-export async function setAccessToken(accessToken: string): Promise<void> {
+export async function setAccessToken(
+  accessToken: string,
+  kind: SessionKind = "tenant",
+): Promise<void> {
   const store = await cookies();
-  store.set(ACCESS_COOKIE, accessToken, { ...BASE_COOKIE, maxAge: 60 * 5 });
-  store.delete(REFRESH_COOKIE);
+  const [access, refresh] = cookieNames(kind);
+  store.set(access, accessToken, { ...BASE_COOKIE, maxAge: 60 * 5 });
+  store.delete(refresh);
 }
 
 export async function setSession(tokens: TokenPair, kind: SessionKind = "tenant"): Promise<void> {
@@ -176,12 +193,12 @@ export async function setActiveSchoolId(schoolId: string): Promise<void> {
   store.set(ACTIVE_SCHOOL_COOKIE, schoolId, { ...BASE_COOKIE, maxAge: REFRESH_MAX_AGE });
 }
 
-export type SessionKind = "tenant" | "platform";
+export type SessionKind = "tenant" | "platform" | "guardian";
 
 function cookieNames(kind: SessionKind): [string, string] {
-  return kind === "platform"
-    ? [PLATFORM_ACCESS_COOKIE, PLATFORM_REFRESH_COOKIE]
-    : [ACCESS_COOKIE, REFRESH_COOKIE];
+  if (kind === "platform") return [PLATFORM_ACCESS_COOKIE, PLATFORM_REFRESH_COOKIE];
+  if (kind === "guardian") return [GUARDIAN_ACCESS_COOKIE, GUARDIAN_REFRESH_COOKIE];
+  return [ACCESS_COOKIE, REFRESH_COOKIE];
 }
 
 export async function getAccessToken(kind: SessionKind = "tenant"): Promise<string | undefined> {
@@ -204,8 +221,11 @@ export async function getRefreshToken(kind: SessionKind = "tenant"): Promise<str
  */
 const refreshes = new Map<string, Promise<TokenPair | null>>();
 
-async function rotateRefreshToken(refresh: string): Promise<TokenPair | null> {
-  const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/auth/refresh`, {
+async function rotateRefreshToken(refresh: string, kind: SessionKind): Promise<TokenPair | null> {
+  // Parent sessions rotate on their own endpoint: they live in the same session
+  // table but are minted, re-checked and revoked by the guardian auth service.
+  const path = kind === "guardian" ? "/guardian/auth/refresh" : "/auth/refresh";
+  const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -233,7 +253,7 @@ export async function refreshSession(kind: SessionKind = "tenant"): Promise<Toke
   const key = `${kind}:${createHash("sha256").update(refresh).digest("hex")}`;
   let pending = refreshes.get(key);
   if (!pending) {
-    pending = rotateRefreshToken(refresh);
+    pending = rotateRefreshToken(refresh, kind);
     refreshes.set(key, pending);
     void pending.finally(() => refreshes.delete(key));
   }
@@ -436,4 +456,24 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminRead> {
   const admin = await getCurrentPlatformAdmin();
   if (!admin) redirect(`/api/platform/recover?next=${encodeURIComponent(await currentPath())}`);
   return admin;
+}
+
+// ---------------------------------------------------------------------------
+// Parent-portal session
+// ---------------------------------------------------------------------------
+
+export async function getCurrentGuardian(): Promise<GuardianProfile | null> {
+  const response = await fetchWithSession("/portal/me", {}, "guardian");
+  if (!response || !response.ok) return null;
+  return (await response.json()) as GuardianProfile;
+}
+
+/** The portal half of `requireUser()`, with the same loop and the same fix. */
+export async function requireGuardian(): Promise<GuardianProfile> {
+  const guardian = await getCurrentGuardian();
+  if (!guardian) {
+    const path = safePath((await headers()).get("x-pathname")) ?? "/parent";
+    redirect(`/api/parent/recover?next=${encodeURIComponent(path)}`);
+  }
+  return guardian;
 }

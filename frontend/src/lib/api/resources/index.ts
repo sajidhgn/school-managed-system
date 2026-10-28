@@ -1,6 +1,7 @@
 import { api, authRequest } from "@/lib/api/client";
 import type {
   AuditLogRead,
+  AvatarResponse,
   InvitationCreate,
   InvitationRead,
   InvoiceRead,
@@ -40,6 +41,28 @@ import type {
  * The generic parameter is the RESPONSE type, taken from the generated schema. If the
  * backend renames a field, the compile error surfaces at the call site that reads it.
  */
+
+// --- Your profile ----------------------------------------------------------
+// Every member's own, whatever their role: the backend gates these on being signed
+// in, not on a permission.
+export const profile = {
+  uploadPhoto: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.upload<AvatarResponse>("/auth/me/avatar", form);
+  },
+  removePhoto: () => api.delete<void>("/auth/me/avatar"),
+};
+
+/**
+ * A browser-loadable `src` for a user's `avatar_url`. The API stores its own path
+ * (`/auth/avatars/...`), which only resolves through the BFF, where the session is
+ * attached; anything else is passed through as-is.
+ */
+export function avatarSrc(avatarUrl: string | null | undefined): string | undefined {
+  if (!avatarUrl) return undefined;
+  return avatarUrl.startsWith("/") ? `/api/bff${avatarUrl}` : avatarUrl;
+}
 
 // --- Organization ----------------------------------------------------------
 export const organization = {

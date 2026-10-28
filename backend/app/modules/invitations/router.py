@@ -22,16 +22,18 @@ from app.api.deps import (
     AuthContext,
     ClientIp,
     DbSession,
+    Pagination,
     PublicDbSession,
     SettingsDep,
     get_access_claims,
     require,
 )
+from app.common.schemas import Page
 from app.core.exceptions import AuthenticationError
 from app.core.rate_limit import enforce_rate_limit
 from app.modules.auth.router import EmailDispatcher, _attach_body_tokens, _wants_body_tokens
 from app.modules.auth.service import AuthService
-from app.modules.invitations.models import Invitation
+from app.modules.invitations.models import Invitation, InvitationStatus
 from app.modules.invitations.schemas import (
     InvitationAccept,
     InvitationAcceptResponse,
@@ -44,6 +46,8 @@ from app.modules.rbac.router import _assert_school_scope
 
 school_router = APIRouter()
 public_router = APIRouter()
+# Mounted at `/org`: the Members page's invitation list, across every branch.
+org_router = APIRouter()
 
 
 def _read(invitation: Invitation) -> InvitationRead:
@@ -125,6 +129,29 @@ async def list_invitations(
     _assert_school_scope(ctx, school_id)
     invitations = await InvitationService(session, settings).list_for_school(school_id)
     return [_read(i) for i in invitations]
+
+
+@org_router.get("/invitations", response_model=Page[InvitationRead])
+async def list_org_invitations(
+    session: DbSession,
+    settings: SettingsDep,
+    params: Pagination,
+    ctx: Annotated[AuthContext, Depends(require("invitation:read"))],
+    school_id: Annotated[UUID | None, Query()] = None,
+    status_filter: Annotated[InvitationStatus | None, Query(alias="status")] = None,
+) -> Page[InvitationRead]:
+    """One page of invitations across every branch the caller can see, newest first.
+
+    `school_id` and `status` narrow it in the database. A school-scoped caller sees
+    their own branch whatever they ask for; asking for another is a 403, as on the
+    school-scoped routes. Acting on a row still goes through its own branch's routes.
+    """
+    if school_id is not None:
+        _assert_school_scope(ctx, school_id)
+    rows, total = await InvitationService(session, settings).list_for_org(
+        school_id=ctx.school_id or school_id, status=status_filter, params=params
+    )
+    return Page.create([_read(i) for i in rows], total, params)
 
 
 @school_router.post(

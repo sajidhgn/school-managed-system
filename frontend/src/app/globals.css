@@ -22,6 +22,12 @@
 :root {
   --radius: 0.75rem;
 
+  /* Every control — button, input, select, textarea, segment — on the panel and
+     the public site. Fixed rather than derived from `--radius`, so cards and
+     overlays can change shape without moving the controls inside them. Read it
+     as the `rounded-control` utility. */
+  --control-radius: 8px;
+
   --background: #f3f4f6;
   --foreground: #0a0c10;
 
@@ -86,6 +92,24 @@
   --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
   --ease-out-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* The panel's type stack (`font-sans`). Latin in the system face; Urdu in the
+     public site's face, Noto Sans Arabic (`--face-urdu`, app/fonts.ts), so
+     both read the same. Declared here on `:root` because <html> carries the
+     face's variable, and it can only resolve where that is defined. */
+  --font-panel:
+    ui-sans-serif, system-ui, var(--face-urdu), sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* On Urdu pages the Urdu face leads, as it does on the public site: the system
+   face on Windows (Segoe UI) has Arabic letters of its own and would otherwise
+   draw the Urdu. The face carries Latin too, so names and figures inside Urdu
+   text match it. Printed papers set their own Nastaliq and are unaffected. */
+:root:lang(ur) {
+  --font-panel:
+    var(--face-urdu), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 .dark {
@@ -182,7 +206,7 @@
   --ring-offset-width: 2px;
   --cursor-interactive: pointer;
   --cursor-disabled: not-allowed;
-  --field-radius: calc(var(--radius) * 1.25);
+  --field-radius: var(--control-radius);
   --skeleton-animation: shimmer;
   --z-index-overlay: 60;
   --z-index-toast: 100;
@@ -303,6 +327,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-control: var(--control-radius);
 
   /* HeroUI's curves as utilities: `ease-fluid` is its drawer and toast curve,
      fast out of the gate and settling softly. */
@@ -321,6 +346,8 @@
   --color-mk-ink: var(--mk-ink);
   --color-mk-ink-soft: var(--mk-ink-soft);
   --color-mk-ink-fg: var(--mk-ink-fg);
+
+  --font-sans: var(--font-panel);
 
   /* The public site's stacks. marketing.css composes `--mk-font-*` so that on
      Urdu pages the Urdu face (Noto Sans Arabic) leads; the Urdu entry here is

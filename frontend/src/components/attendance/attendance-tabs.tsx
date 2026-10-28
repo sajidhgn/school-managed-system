@@ -28,7 +28,7 @@ export function AttendanceTabs({ className }: { className?: string }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Attendance" className={cn("-mx-1 overflow-x-auto px-1", className)}>
-      <ul className="inline-flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+      <ul className="inline-flex gap-1 rounded-[calc(var(--control-radius)+5px)] border border-border bg-muted/40 p-1">
         {TABS.map(({ href, label, Icon }) => {
           const active = pathname === href;
           return (
@@ -37,7 +37,7 @@ export function AttendanceTabs({ className }: { className?: string }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5 text-sm transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active
                     ? "bg-card font-medium text-foreground shadow-sm"

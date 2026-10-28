@@ -231,7 +231,7 @@ export function DiaryDemo({
             type="button"
             onClick={() => setPlaying((p) => !p)}
             aria-label={playing ? pauseLabel : playLabel}
-            className="grid size-8 shrink-0 place-items-center rounded-full border border-mk-line bg-mk-card text-mk-muted transition-colors hover:border-mk-ink hover:text-mk-ink"
+            className="grid size-8 shrink-0 place-items-center rounded-control border border-mk-line bg-mk-card text-mk-muted transition-colors hover:border-mk-ink hover:text-mk-ink"
           >
             {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
           </button>

@@ -105,14 +105,14 @@ export default async function DashboardPage() {
         {schoolId ? (
           <>
             <Can permission={PERMISSIONS.memberRead}>
-              <StatCard icon={Users} label={t.nav.members} value={members?.meta.total ?? 0} href="/members" />
+              <StatCard icon={Users} label={t.nav.members} value={members?.meta.total ?? 0} href={`/members?school=${schoolId}`} />
             </Can>
             <Can permission={PERMISSIONS.invitationRead}>
               <StatCard
                 icon={Mail}
                 label={t.nav.invitations}
                 value={pendingInvites.length}
-                href="/members?invite=1"
+                href={`/members?invite=1&school=${schoolId}`}
               />
             </Can>
           </>

@@ -166,6 +166,24 @@ class WahaClient:
             "POST", "/api/sendText", json={"session": session, "chatId": chat_id, "text": text}
         )
 
+    async def check_number(self, session: str, phone: str) -> str | None:
+        """The `...@c.us` chat for a phone number, or None when it has no WhatsApp.
+
+        Asked before a one-to-one send because WAHA accepts a text to any number and
+        reports nothing back when it has no account -- the message simply never
+        arrives. The chat id WhatsApp returns is also the one to send to: it is not
+        always the digits of the E.164 number.
+        """
+        data = await self._request(
+            "GET",
+            "/api/contacts/check-exists",
+            params={"phone": phone.lstrip("+"), "session": session},
+        )
+        if not isinstance(data, dict) or not data.get("numberExists"):
+            return None
+        chat_id = data.get("chatId")
+        return str(chat_id) if chat_id else f"{phone.lstrip('+')}@c.us"
+
     async def download_media(self, url: str, *, max_bytes: int) -> bytes:
         """Fetch a file WAHA saved for an incoming message.
 

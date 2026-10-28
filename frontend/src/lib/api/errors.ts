@@ -12,6 +12,8 @@ export interface ProblemDetails {
   instance?: string;
   /** Stable machine code, e.g. "NOT_FOUND", "VALIDATION_ERROR". */
   code?: string;
+  /** Machine-readable context for `code`, e.g. the existing book of a DUPLICATE_BOOK. */
+  meta?: Record<string, unknown>;
   /** Field-level errors from FastAPI/Pydantic validation failures. */
   errors?: Array<{ field?: string; loc?: (string | number)[]; message?: string; msg?: string }>;
 }

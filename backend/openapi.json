@@ -279,8 +279,8 @@
         "tags": [
           "Guardian portal"
         ],
-        "summary": "Send a one-time login code by SMS",
-        "description": "Text a code to the number, if it belongs to a registered guardian.\n\nTHE RESPONSE IS IDENTICAL EITHER WAY. See the enumeration note in\n`auth_service.py`: an honest \"no such guardian\" would turn this endpoint into a\nway to ask whether a specific person has a child at a school on this platform.",
+        "summary": "Send a one-time login code on WhatsApp",
+        "description": "Send a code to the number, if it belongs to a registered guardian.\n\nTHE RESPONSE IS IDENTICAL EITHER WAY. See the enumeration note in\n`auth_service.py`: an honest \"no such guardian\" would turn this endpoint into a\nway to ask whether a specific person has a child at a school on this platform.\nThe send itself runs after the response, so its latency cannot answer it either\n(see `delivery.py`).",
         "operationId": "request_code_api_v1_guardian_auth_request_code_post",
         "requestBody": {
           "content": {
@@ -1950,6 +1950,127 @@
         }
       }
     },
+    "/api/v1/auth/me/avatar": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Set your profile photo",
+        "description": "Set or replace the caller's photo. Stored as a square WebP, metadata removed.",
+        "operationId": "upload_avatar_api_v1_auth_me_avatar_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_avatar_api_v1_auth_me_avatar_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Remove your profile photo",
+        "operationId": "remove_avatar_api_v1_auth_me_avatar_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/avatars/{user_id}/{filename}": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "A profile photo",
+        "description": "Any signed-in member may see a colleague's photo: the URL comes from a\nresponse they were already allowed to read, and its random name cannot be\nguessed from the user id alone.",
+        "operationId": "avatar_image_api_v1_auth_avatars__user_id___filename__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/org": {
       "get": {
         "tags": [
@@ -2084,6 +2205,213 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/org/members": {
+      "get": {
+        "tags": [
+          "Members"
+        ],
+        "summary": "List Org Members",
+        "description": "Staff across every branch the caller can see, optionally narrowed to one.\n\nFilters combine: `school_id` (one branch), `q` (name or email contains), and\n`role` (a role CODE such as `teacher`, so it spans every branch's copy of it).\n\nThe principal opens Members straight after signing in, without first choosing a\ncampus: their membership is org-level, so the whole organization is theirs to\nlist, and `school_id` is a filter they apply rather than a precondition. RLS\nstill bounds the query to the caller's organization.\n\nA school-scoped caller sees their own branch whatever they ask for -- asking for\nanother one is the same 403 the school-scoped route gives.",
+        "operationId": "list_org_members_api_v1_org_members_get",
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Role code",
+              "title": "Role"
+            },
+            "description": "Role code"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search term",
+              "title": "Q"
+            },
+            "description": "Search term"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_MemberRead_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/org/invitations": {
+      "get": {
+        "tags": [
+          "Invitations"
+        ],
+        "summary": "List Org Invitations",
+        "description": "One page of invitations across every branch the caller can see, newest first.\n\n`school_id` and `status` narrow it in the database. A school-scoped caller sees\ntheir own branch whatever they ask for; asking for another is a 403, as on the\nschool-scoped routes. Acting on a row still goes through its own branch's routes.",
+        "operationId": "list_org_invitations_api_v1_org_invitations_get",
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/InvitationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_InvitationRead_"
                 }
               }
             }
@@ -5409,6 +5737,66 @@
         }
       }
     },
+    "/api/v1/guardians/students/{student_id}/portal-access": {
+      "post": {
+        "tags": [
+          "Guardians"
+        ],
+        "summary": "Let a parent sign in to the portal and see this student",
+        "description": "Register the phone if needed and link it to the student with portal access.\n\nBoth codes, because it can do both things: register a parent and link one. It\nneeds no more than doing the two steps separately would. Returns the student's\nupdated contact card. Turning access off again is the link PATCH with\n`can_view_results: false`.",
+        "operationId": "grant_portal_access_api_v1_guardians_students__student_id__portal_access_post",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardianPortalGrant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentGuardianRead"
+                  },
+                  "title": "Response Grant Portal Access Api V1 Guardians Students  Student Id  Portal Access Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/guardians": {
       "get": {
         "tags": [
@@ -8489,6 +8877,7 @@
           "Textbook library"
         ],
         "summary": "Books on the campus",
+        "description": "One page of the campus's books, newest first.\n\n`class_id`, `subject_id` and `q` (title or publisher) narrow the list in the\ndatabase, and the page is an offset into the filtered result.",
         "operationId": "list_books_api_v1_books_get",
         "parameters": [
           {
@@ -8524,6 +8913,49 @@
               ],
               "title": "Subject Id"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search term",
+              "title": "Q"
+            },
+            "description": "Search term"
           }
         ],
         "responses": {
@@ -8532,11 +8964,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/BookRead"
-                  },
-                  "title": "Response List Books Api V1 Books Get"
+                  "$ref": "#/components/schemas/Page_BookRead_"
                 }
               }
             }
@@ -8560,7 +8988,7 @@
           "Textbook library"
         ],
         "summary": "Add a book: Title, Class, Publisher, Version, and optionally its chapter list",
-        "description": "409 `DUPLICATE_BOOK` if the class already has that title/publisher/version.",
+        "description": "409 `DUPLICATE_BOOK` if the library already has that title, publisher and\nversion for that grade -- uploaded by any school; `meta.book_id` is that book,\nto add from the library instead.",
         "operationId": "create_book_api_v1_books_post",
         "requestBody": {
           "required": true,
@@ -8568,6 +8996,231 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/BookCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/library": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "The shared library: every book uploaded by any school on the platform",
+        "description": "By title, one page at a time. `q` matches the title or publisher; `grade` is\na class name as any school writes it -- \"Class 5\", \"Grade V\" and \"Fifth\" find\nthe same books; `subject` is a subject name from `/books/library/subjects`.\n`on_shelf` marks the books the caller's campus already has.",
+        "operationId": "library_api_v1_books_library_get",
+        "parameters": [
+          {
+            "name": "grade",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Grade"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search term",
+              "title": "Q"
+            },
+            "description": "Search term"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_LibraryBook_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/library/subjects": {
+      "get": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "The subject names the library's books are filed under",
+        "operationId": "library_subjects_api_v1_books_library_subjects_get",
+        "parameters": [
+          {
+            "name": "grade",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Grade"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Library Subjects Api V1 Books Library Subjects Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/books/library/{book_id}": {
+      "post": {
+        "tags": [
+          "Textbook library"
+        ],
+        "summary": "Add a library book to one of your classes",
+        "description": "The book is used as it is -- its chapters, pages and search index are the\nlibrary's, kept up to date by the school that uploaded it. 409\n`ALREADY_ON_SHELF` if the campus has it already.",
+        "operationId": "add_from_library_api_v1_books_library__book_id__post",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Book Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShelfInput"
               }
             }
           }
@@ -8898,7 +9551,7 @@
         "tags": [
           "Textbook library"
         ],
-        "summary": "Edit a book's details",
+        "summary": "Edit a book's details (uploader only) or where your campus files it",
         "operationId": "update_book_api_v1_books__book_id__patch",
         "parameters": [
           {
@@ -8951,7 +9604,8 @@
         "tags": [
           "Textbook library"
         ],
-        "summary": "Delete a book, its files and its index",
+        "summary": "Remove a book from the campus; delete it if nobody else uses it",
+        "description": "The book leaves the campus's books. Its files, pages and index are deleted\ntoo when the campus uploaded it and no other school uses it; otherwise it stays\nin the library for them.",
         "operationId": "delete_book_api_v1_books__book_id__delete",
         "parameters": [
           {
@@ -9651,6 +10305,7 @@
           "Test papers"
         ],
         "summary": "Test papers on the campus",
+        "description": "One page of the campus's papers, newest first.\n\n`class_id`, `subject_id`, `status` and `q` (title) narrow the list in the\ndatabase, and the page is an offset into the filtered result.",
         "operationId": "list_papers_api_v1_papers_get",
         "parameters": [
           {
@@ -9704,27 +10359,47 @@
             }
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 200,
               "minimum": 1,
-              "default": 50,
-              "title": "Limit"
+              "default": 1,
+              "title": "Page"
             }
           },
           {
-            "name": "offset",
+            "name": "size",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search term",
+              "title": "Q"
+            },
+            "description": "Search term"
           }
         ],
         "responses": {
@@ -9733,11 +10408,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PaperRead"
-                  },
-                  "title": "Response List Papers Api V1 Papers Get"
+                  "$ref": "#/components/schemas/Page_PaperRead_"
                 }
               }
             }
@@ -9941,26 +10612,26 @@
             }
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 200,
               "minimum": 1,
-              "default": 50,
-              "title": "Limit"
+              "default": 1,
+              "title": "Page"
             }
           },
           {
-            "name": "offset",
+            "name": "size",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
             }
           }
         ],
@@ -9970,11 +10641,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/QuestionRead"
-                  },
-                  "title": "Response Question Bank Api V1 Papers Questions Get"
+                  "$ref": "#/components/schemas/Page_QuestionRead_"
                 }
               }
             }
@@ -15766,6 +16433,20 @@
         "title": "AuditLogRead",
         "description": "One audit entry.\n\n`before`/`after` carry only the fields that changed, never whole rows -- see the\nmodel. A full snapshot would turn this endpoint into a second, less-protected\ncopy of the student database with a longer retention period."
       },
+      "AvatarResponse": {
+        "properties": {
+          "avatar_url": {
+            "type": "string",
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "avatar_url"
+        ],
+        "title": "AvatarResponse",
+        "description": "`POST /auth/me/avatar` -- where the new photo is served, relative to `/api/v1`."
+      },
       "BillingCycle": {
         "type": "string",
         "enum": [
@@ -15879,6 +16560,21 @@
         ],
         "title": "Body_scan_book_api_v1_books_scan_post"
       },
+      "Body_upload_avatar_api_v1_auth_me_avatar_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "A JPEG, PNG or WebP photo."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_avatar_api_v1_auth_me_avatar_post"
+      },
       "Body_upload_files_api_v1_books__book_id__chapters__chapter_id__files_post": {
         "properties": {
           "files": {
@@ -15976,6 +16672,10 @@
             "type": "string",
             "title": "Version"
           },
+          "grade": {
+            "type": "string",
+            "title": "Grade"
+          },
           "class_id": {
             "type": "string",
             "format": "uuid",
@@ -16036,6 +16736,18 @@
             "type": "boolean",
             "title": "Can Edit"
           },
+          "can_remove": {
+            "type": "boolean",
+            "title": "Can Remove"
+          },
+          "from_library": {
+            "type": "boolean",
+            "title": "From Library"
+          },
+          "school_count": {
+            "type": "integer",
+            "title": "School Count"
+          },
           "chapters": {
             "items": {
               "$ref": "#/components/schemas/ChapterRead"
@@ -16050,6 +16762,7 @@
           "title",
           "publisher",
           "version",
+          "grade",
           "class_id",
           "class_name",
           "subject_id",
@@ -16059,6 +16772,9 @@
           "created_by_name",
           "created_at",
           "can_edit",
+          "can_remove",
+          "from_library",
+          "school_count",
           "chapters"
         ],
         "title": "BookDetail"
@@ -16082,6 +16798,10 @@
             "type": "string",
             "title": "Version"
           },
+          "grade": {
+            "type": "string",
+            "title": "Grade"
+          },
           "class_id": {
             "type": "string",
             "format": "uuid",
@@ -16141,6 +16861,18 @@
           "can_edit": {
             "type": "boolean",
             "title": "Can Edit"
+          },
+          "can_remove": {
+            "type": "boolean",
+            "title": "Can Remove"
+          },
+          "from_library": {
+            "type": "boolean",
+            "title": "From Library"
+          },
+          "school_count": {
+            "type": "integer",
+            "title": "School Count"
           }
         },
         "type": "object",
@@ -16149,6 +16881,7 @@
           "title",
           "publisher",
           "version",
+          "grade",
           "class_id",
           "class_name",
           "subject_id",
@@ -16157,9 +16890,13 @@
           "ready_chapter_count",
           "created_by_name",
           "created_at",
-          "can_edit"
+          "can_edit",
+          "can_remove",
+          "from_library",
+          "school_count"
         ],
-        "title": "BookRead"
+        "title": "BookRead",
+        "description": "A book as the caller's campus has it: the library's book, filed under one of\nthe campus's classes."
       },
       "BookScan": {
         "properties": {
@@ -21106,6 +21843,51 @@
         "title": "GuardianPhoneChange",
         "description": "Re-point a guardian record at a different handset."
       },
+      "GuardianPortalGrant": {
+        "properties": {
+          "phone": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 7,
+            "title": "Phone",
+            "examples": [
+              "0300-1234567"
+            ]
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Full Name",
+            "examples": [
+              "Muhammad Aslam"
+            ]
+          },
+          "relationship_type": {
+            "$ref": "#/components/schemas/GuardianRelationship"
+          },
+          "relationship_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relationship Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phone",
+          "full_name",
+          "relationship_type"
+        ],
+        "title": "GuardianPortalGrant",
+        "description": "Turn on parent-portal access for one child, from the student's page.\n\nThe phone and name are normally the ones already on the student's record, which\nthe member of staff is confirming by sending them."
+      },
       "GuardianPortalToggle": {
         "properties": {
           "enabled": {
@@ -21857,6 +22639,16 @@
         "title": "InvitationRead",
         "description": "A pending or historical invitation, for the principal's invitations screen.\n\nCarries no token and no digest. The digest is a credential-equivalent: anyone\nholding it can confirm a guessed token offline, so it never leaves the database."
       },
+      "InvitationStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "accepted",
+          "expired",
+          "revoked"
+        ],
+        "title": "InvitationStatus"
+      },
       "InvoiceRead": {
         "properties": {
           "id": {
@@ -22424,6 +23216,73 @@
           "cited"
         ],
         "title": "LibraryAnswer"
+      },
+      "LibraryBook": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "grade": {
+            "type": "string",
+            "title": "Grade"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "chapter_count": {
+            "type": "integer",
+            "title": "Chapter Count"
+          },
+          "ready_chapter_count": {
+            "type": "integer",
+            "title": "Ready Chapter Count"
+          },
+          "school_count": {
+            "type": "integer",
+            "title": "School Count"
+          },
+          "on_shelf": {
+            "type": "boolean",
+            "title": "On Shelf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "publisher",
+          "version",
+          "grade",
+          "subject",
+          "chapter_count",
+          "ready_chapter_count",
+          "school_count",
+          "on_shelf"
+        ],
+        "title": "LibraryBook",
+        "description": "A book in the shared library, as any school browsing it sees it."
       },
       "LibraryHit": {
         "properties": {
@@ -24305,6 +25164,26 @@
         ],
         "title": "Page[AttendanceSessionRead]"
       },
+      "Page_BookRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BookRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[BookRead]"
+      },
       "Page_ClassRead_": {
         "properties": {
           "items": {
@@ -24465,6 +25344,46 @@
         ],
         "title": "Page[GuardianRead]"
       },
+      "Page_InvitationRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[InvitationRead]"
+      },
+      "Page_LibraryBook_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryBook"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[LibraryBook]"
+      },
       "Page_MemberRead_": {
         "properties": {
           "items": {
@@ -24484,6 +25403,46 @@
           "meta"
         ],
         "title": "Page[MemberRead]"
+      },
+      "Page_PaperRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaperRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[PaperRead]"
+      },
+      "Page_QuestionRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "Page[QuestionRead]"
       },
       "Page_StationeryItemRead_": {
         "properties": {
@@ -28680,6 +29639,33 @@
         },
         "type": "object",
         "title": "SectionUpdate"
+      },
+      "ShelfInput": {
+        "properties": {
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_id"
+        ],
+        "title": "ShelfInput",
+        "description": "Where a campus files a library book: one of its classes, optionally a subject."
       },
       "SortDirection": {
         "type": "string",

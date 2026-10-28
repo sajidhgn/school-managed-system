@@ -30,7 +30,7 @@ export function ChoiceGroup<T extends string>({
       <div
         role="radiogroup"
         aria-labelledby={id}
-        className="inline-flex w-full rounded-md border border-input bg-card p-0.5 shadow-sm"
+        className="inline-flex w-full rounded-[calc(var(--control-radius)+3px)] border border-input bg-card p-0.5 shadow-sm"
       >
         {options.map((option) => {
           const active = option.value === value;
@@ -43,7 +43,7 @@ export function ChoiceGroup<T extends string>({
               lang={option.lang}
               onClick={() => onChange(option.value)}
               className={cn(
-                "h-8 flex-1 rounded-[5px] px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "h-8 flex-1 rounded-control px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 active
                   ? "bg-primary font-medium text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",

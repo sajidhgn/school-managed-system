@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     INVITATION_EXPIRE_DAYS: int = 7
     INVITATION_MAX_RESENDS: int = 5
 
+    # --- Profile photos (`modules/auth/avatar.py`) ---------------------------
+    AVATARS_STORAGE_PATH: str = "storage/avatars"
+    """Local directory holding users' profile photos -- the re-encoded copy only,
+    never the file as uploaded."""
+    AVATAR_MAX_UPLOAD_MB: int = Field(default=10, ge=1, le=50)
+    """Per upload, before re-encoding. A phone photo is 2-6 MB; what is stored is
+    a 512 px WebP of a few tens of KB."""
+
     # --- Guardian portal: phone-OTP authentication -------------------------
     #
     # A SECOND AUTHENTICATION SURFACE, not a variant of the staff one. Guardians

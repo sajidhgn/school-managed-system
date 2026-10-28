@@ -21,7 +21,7 @@ export function PlatformSignOut({ children }: { children: ReactNode }) {
     <button
       type="button"
       onClick={signOut}
-      className="rounded-md p-1.5 text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-50"
+      className="rounded-control p-1.5 text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-50"
     >
       {children}
     </button>

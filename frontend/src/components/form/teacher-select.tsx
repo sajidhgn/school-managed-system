@@ -183,7 +183,7 @@ export function TeacherSelect({
       classNames={{
         control: ({ isFocused, isDisabled }) =>
           [
-            "flex min-h-9 w-full items-center gap-2 rounded-md border bg-card px-3 py-1 text-sm shadow-sm",
+            "flex min-h-9 w-full items-center gap-2 rounded-control border bg-card px-3 py-1 text-sm shadow-sm",
             isFocused ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : "",
             ariaInvalid ? "border-destructive" : "border-input",
             isDisabled ? "cursor-not-allowed opacity-50" : "",

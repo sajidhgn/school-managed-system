@@ -7,7 +7,11 @@ What a mocked suite would pass without:
     and the vectors it writes are found again by a `<=>` search.
   * OWNERSHIP. `book:write` changes only the books its holder uploaded;
     `book:manage` changes any.
-  * ISOLATION. Another organization cannot see a book, its pages or its vectors.
+  * ONE LIBRARY. A book is in the library once for the whole platform: another
+    organization cannot upload it again, but adds the same copy to its own class
+    and reads, searches and asks it from there -- without changing it. Until it
+    is added, that organization sees neither the book, its pages nor its vectors.
+    The uploader removing it leaves it for the schools that still use it.
   * FRESHNESS. Changing a chapter's files drops its old pages and vectors at once.
   * BATCH READING. A chapter waits in `reading` across worker passes, is locked
     against edits meanwhile, and finishes from the batch's readings.
@@ -547,7 +551,7 @@ async def test_write_covers_your_own_books_and_manage_covers_every_book(library:
 
     listed = await library.other_teacher.get(f"{API}/books")
     assert listed.status_code == 200, listed.text
-    assert [(b["id"], b["can_edit"]) for b in listed.json()] == [(book["id"], False)]
+    assert [(b["id"], b["can_edit"]) for b in listed.json()["items"]] == [(book["id"], False)]
 
     refused = await upload(library.other_teacher, book, 1, photos({121: (1, BODY)}))
     assert refused.status_code == 403, refused.text
@@ -606,11 +610,11 @@ async def test_uploads_are_checked_by_content_and_never_duplicated(library: Libr
 
 
 async def test_the_same_book_cannot_be_added_to_a_class_twice(library: Library) -> None:
-    await create_book(library.teacher, library.class_id)
+    created = await create_book(library.teacher, library.class_id)
     again = await library.teacher.post(
         f"{API}/books",
         json={
-            "title": "new countdown  5",
+            "title": "new countdown - 5.",
             "class_id": library.class_id,
             "publisher": " OXFORD ",
             "version": "3rd edition",
@@ -618,37 +622,119 @@ async def test_the_same_book_cannot_be_added_to_a_class_twice(library: Library) 
     )
     assert again.status_code == 409, again.text
     assert again.json()["code"] == "DUPLICATE_BOOK"
+    assert again.json()["meta"] == {"book_id": created["id"], "on_shelf": True}
 
     # A new version is a new book.
     newer = await create_book(library.teacher, library.class_id, version="4th Edition")
     assert newer["version"] == "4th Edition"
 
 
-async def test_another_organization_cannot_see_a_book(
-    library: Library, make_tenant: Callable[..., Any]
+async def test_a_book_is_in_the_library_once_and_every_school_reads_that_copy(
+    library: Library, make_tenant: Callable[..., Any], mailbox: list[EmailMessage]
 ) -> None:
     book = await create_book(library.teacher, library.class_id)
     await upload(library.teacher, book, 2, photos({141: (5, f"[CH 2] {BODY}")}))
     assert await library.process() == {"ready": 1}
+    assert book["grade"] == "Grade 9" and book["from_library"] is False
 
     rival: Tenant = await make_tenant(
         name="Rival Trust", email="rival@test.example", school_code="RIVAL"
     )
-    assert (await rival.get(f"{API}/books")).json() == []
-    assert (await rival.get(f"{API}/books/{book['id']}")).status_code == 404
-    searched = await rival.get(f"{API}/books/{book['id']}/search", params={"q": "fractions"})
+    campus = await build_campus(rival, mailbox, email="rival-head@test.example", students=0)
+    head = Actor(rival.client, campus.headers)
+    # The same grade under another name: their "Class IX" is the uploader's "Grade 9".
+    named = await head.post(f"{API}/classes", json={"name": "Class IX", "level": 10})
+    assert named.status_code == 201, named.text
+    class_ix = named.json()["id"]
+
+    # Until the campus adds it, the book is none of its business.
+    assert (await head.get(f"{API}/books")).json()["items"] == []
+    assert (await head.get(f"{API}/books/{book['id']}")).status_code == 404
+    searched = await head.get(f"{API}/books/{book['id']}/search", params={"q": "fractions"})
     assert searched.status_code == 404
-    assert (await rival.get(f"{API}/books/search", params={"q": "fractions"})).json() == []
+    assert (await head.get(f"{API}/books/search", params={"q": "fractions"})).json() == []
     ANSWERED.clear()
-    asked = await rival.post(f"{API}/books/ask", json={"question": "What are fractions?"})
-    assert asked.status_code == 200, asked.text
-    assert asked.json() == {
-        "found": False,
-        "answer": "The uploaded books do not cover this question.",
-        "sources": [],
-        "cited": [],
-    }
+    asked = await head.post(f"{API}/books/ask", json={"question": "What are fractions?"})
+    assert asked.json()["found"] is False
     assert ANSWERED == [], "with nothing retrieved, the answer model is never called"
+
+    # ... but it is in the library, found by the campus's own name for the grade.
+    found = await head.get(f"{API}/books/library", params={"q": "countdown", "grade": "Class IX"})
+    assert found.status_code == 200, found.text
+    [listed] = found.json()["items"]
+    assert listed["id"] == book["id"]
+    assert (listed["grade"], listed["on_shelf"], listed["school_count"]) == ("Grade 9", False, 1)
+    assert listed["ready_chapter_count"] == 1
+    other = await head.get(f"{API}/books/library", params={"grade": "Class 10"})
+    assert other.json()["items"] == []
+
+    # Uploading it again is refused, naming the copy to add instead.
+    again = await head.post(
+        f"{API}/books",
+        json={
+            "title": "NEW COUNTDOWN-5",
+            "class_id": class_ix,
+            "publisher": "oxford",
+            "version": "3rd edition.",
+        },
+    )
+    assert again.status_code == 409, again.text
+    assert again.json()["code"] == "DUPLICATE_BOOK"
+    assert again.json()["meta"] == {"book_id": book["id"], "on_shelf": False}
+
+    added = await head.post(f"{API}/books/library/{book['id']}", json={"class_id": class_ix})
+    assert added.status_code == 201, added.text
+    ours = added.json()
+    assert (ours["class_name"], ours["grade"]) == ("Class IX", "Grade 9")
+    assert (ours["from_library"], ours["can_edit"], ours["can_remove"]) == (True, False, True)
+    assert ours["school_count"] == 2 and ours["created_by_name"] is None
+    assert [c["id"] for c in ours["chapters"]] == [c["id"] for c in book["chapters"]]
+    twice = await head.post(f"{API}/books/library/{book['id']}", json={"class_id": campus.class_id})
+    assert twice.status_code == 409 and twice.json()["code"] == "ALREADY_ON_SHELF"
+    listed_again = await head.get(f"{API}/books/library", params={"q": "countdown"})
+    assert listed_again.json()["items"][0]["on_shelf"] is True
+
+    # It reads, searches and answers from the uploader's pages: read once, for both.
+    pages = await head.get(f"{API}/books/{book['id']}/chapters/{chapter(book, 2)['id']}/pages")
+    assert pages.status_code == 200, pages.text
+    assert BODY in pages.json()[0]["text"]
+    hits = await head.get(f"{API}/books/search", params={"q": "numerator denominator"})
+    assert [h["book_id"] for h in hits.json()] == [book["id"]]
+    answered = await head.post(f"{API}/books/ask", json={"question": "What are fractions?"})
+    assert answered.json()["found"] is True
+
+    # Only the uploader changes the book; the campus changes only where it files it.
+    refused = await upload(head, ours, 1, photos({142: (1, BODY)}))
+    assert refused.status_code == 403 and refused.json()["code"] == "BOOK_NOT_OWNED"
+    renamed = await head.patch(f"{API}/books/{book['id']}", json={"title": "Ours now"})
+    assert renamed.status_code == 403 and renamed.json()["code"] == "BOOK_NOT_OWNED"
+    refiled = await head.patch(
+        f"{API}/books/{book['id']}",
+        json={"title": book["title"], "class_id": campus.class_id},
+    )
+    assert refiled.status_code == 200, refiled.text
+    assert refiled.json()["class_id"] == campus.class_id
+    uploader = (await library.teacher.get(f"{API}/books/{book['id']}")).json()
+    assert uploader["class_id"] == library.class_id, "each campus files the book itself"
+
+    # The uploader removing it leaves it -- files and all -- for the school using it.
+    assert (await library.head.delete(f"{API}/books/{book['id']}")).status_code == 204
+    assert (await library.teacher.get(f"{API}/books/{book['id']}")).status_code == 404
+    kept = await head.get(f"{API}/books/{book['id']}")
+    assert kept.status_code == 200 and kept.json()["school_count"] == 1
+    assert any((library.root / library.tenant.organization_id).rglob("*.jpg"))
+
+    # Added back, it is the uploader's to change again.
+    back = await library.head.post(
+        f"{API}/books/library/{book['id']}", json={"class_id": library.class_id}
+    )
+    assert back.status_code == 201, back.text
+    assert (back.json()["from_library"], back.json()["can_edit"]) == (False, True)
+
+    # The other school removing it takes it off its own books only.
+    assert (await head.delete(f"{API}/books/{book['id']}")).status_code == 204
+    assert (await head.get(f"{API}/books")).json()["items"] == []
+    assert (await library.teacher.get(f"{API}/books/{book['id']}")).status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -810,3 +896,31 @@ async def test_the_dialog_learns_before_any_upload_whether_ai_reading_will_work(
     missing = (await library.teacher.get(f"{API}/books/scan/status")).json()
     assert missing["ready"] is False
     assert "OPENROUTER_API_KEY" in missing["problem"]
+
+
+async def test_list_is_searched_filtered_and_paged_in_the_database(library: Library) -> None:
+    head = library.head
+    await create_book(head, library.class_id, title="New Countdown 5", publisher="Oxford")
+    await create_book(head, library.class_id, title="Science Today", publisher="Oxford")
+    await create_book(head, library.class_id, title="Urdu Reader", publisher="Gohar")
+
+    async def titles(**query: Any) -> tuple[list[str], int]:
+        response = await head.get(f"{API}/books", params=query)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        return [b["title"] for b in body["items"]], body["meta"]["total"]
+
+    # Title or publisher, case-insensitively.
+    assert await titles(q="countdown") == (["New Countdown 5"], 1)
+    assert sorted((await titles(q="OXFORD"))[0]) == ["New Countdown 5", "Science Today"]
+    # Wildcards in the term are literal.
+    assert await titles(q="%") == ([], 0)
+    # The class filter narrows in SQL too.
+    assert (await titles(class_id=library.class_id))[1] == 3
+
+    # Offset paging: newest first, two per page, the total counts every match.
+    first, total = await titles(size=2, page=1)
+    second, _ = await titles(size=2, page=2)
+    assert total == 3
+    assert first == ["Urdu Reader", "Science Today"]
+    assert second == ["New Countdown 5"]

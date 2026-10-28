@@ -50,12 +50,18 @@ from app.modules.fees.router import router as fees_router
 from app.modules.guardians.auth_router import router as guardian_auth_router
 from app.modules.guardians.portal_router import router as guardian_portal_router
 from app.modules.guardians.router import router as guardians_router
+from app.modules.invitations.router import org_router as org_invitations_router
 from app.modules.invitations.router import public_router as public_invitations_router
 from app.modules.invitations.router import school_router as school_invitations_router
 from app.modules.papers.router import router as papers_router
 from app.modules.platform_admin.router import router as platform_router
 from app.modules.rbac.audit_router import router as audit_router
-from app.modules.rbac.router import members_router, permissions_router, roles_router
+from app.modules.rbac.router import (
+    members_router,
+    org_members_router,
+    permissions_router,
+    roles_router,
+)
 from app.modules.search.router import router as search_router
 from app.modules.students.router import router as students_router
 from app.modules.tenancy.router import org_router, schools_router
@@ -81,6 +87,11 @@ api_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 
 # --- Organization & billing ------------------------------------------------
 api_router.include_router(org_router, prefix="/org", tags=["Organization"])
+# The Members module's org-wide list (`/org/members`). Owned by rbac, mounted beside
+# the organization because it spans every branch: the principal opens it without
+# choosing a campus first. Writes stay on `/schools/{id}/members`, the member's branch.
+api_router.include_router(org_members_router, prefix="/org", tags=["Members"])
+api_router.include_router(org_invitations_router, prefix="/org", tags=["Invitations"])
 api_router.include_router(billing_router, prefix="/billing", tags=["Billing"])
 
 # --- Schools ---------------------------------------------------------------

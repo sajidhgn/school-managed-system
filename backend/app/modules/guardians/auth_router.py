@@ -7,8 +7,9 @@ WHY THIS ROUTER IS SEPARATE FROM `router.py`
     unauthenticated set by accident, which is the failure mode that matters most here.
 
 THE FLOW, IN THE ORDER A PARENT WALKS IT
-    1. POST /guardian/auth/request-code   -> an SMS, and a response that says nothing
-                                             about whether the number is known.
+    1. POST /guardian/auth/request-code   -> a WhatsApp message (SMS behind it), and a
+                                             response that says nothing about whether
+                                             the number is known.
     2. POST /guardian/auth/verify         -> either a full session, a picker, or
                                              `no_access`.
     3. POST /guardian/auth/context        -> only when step 2 returned a picker.
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response
 
 from app.api.deps import (
     ClientIp,
@@ -34,10 +35,12 @@ from app.api.deps import (
     SettingsDep,
 )
 from app.common.sms import SmsSender, build_sms_sender
+from app.common.whatsapp.waha import WahaClient
 from app.core.config import Settings
 from app.core.exceptions import AuthenticationError, NotFoundError
 from app.db.session import bind_tenant
 from app.modules.guardians.auth_service import GuardianAuthService, IssuedGuardianTokens
+from app.modules.guardians.delivery import GuardianCodeDelivery
 from app.modules.guardians.schemas import (
     GuardianContextRequest,
     GuardianLoginResponse,
@@ -67,6 +70,19 @@ def get_sms_dispatcher(settings: SettingsDep) -> SmsSender:
 
 
 SmsDispatcher = Annotated[SmsSender, Depends(get_sms_dispatcher)]
+
+
+def get_code_dispatcher(settings: SettingsDep, sms: SmsDispatcher) -> GuardianCodeDelivery:
+    """How a login code leaves: the campus's WhatsApp, with the SMS sender behind it.
+
+    The SMS sender is a sub-dependency, so a test that overrides only
+    `get_sms_dispatcher` still captures every code while WhatsApp is not configured.
+    Tests of the WhatsApp path override this whole dependency instead.
+    """
+    return GuardianCodeDelivery(sms=sms, waha=WahaClient(settings))
+
+
+CodeDispatcher = Annotated[GuardianCodeDelivery, Depends(get_code_dispatcher)]
 
 
 def _wants_body_tokens(transport: str | None) -> bool:
@@ -155,30 +171,35 @@ def _require_portal_enabled(settings: Settings) -> None:
 @router.post(
     "/request-code",
     response_model=OtpRequestResponse,
-    summary="Send a one-time login code by SMS",
+    summary="Send a one-time login code on WhatsApp",
 )
 async def request_code(
     payload: OtpRequest,
     session: PublicDbSession,
     settings: SettingsDep,
-    sms: SmsDispatcher,
+    dispatcher: CodeDispatcher,
+    background: BackgroundTasks,
     ip: ClientIp,
 ) -> OtpRequestResponse:
-    """Text a code to the number, if it belongs to a registered guardian.
+    """Send a code to the number, if it belongs to a registered guardian.
 
     THE RESPONSE IS IDENTICAL EITHER WAY. See the enumeration note in
     `auth_service.py`: an honest "no such guardian" would turn this endpoint into a
     way to ask whether a specific person has a child at a school on this platform.
+    The send itself runs after the response, so its latency cannot answer it either
+    (see `delivery.py`).
     """
     _require_portal_enabled(settings)
-    masked, ttl, retry_after = await GuardianAuthService(session, settings, sms).request_code(
-        payload.phone, ip=ip
-    )
+    outcome = await GuardianAuthService(session, settings).request_code(payload.phone, ip=ip)
+    if outcome.pending is not None:
+        background.add_task(dispatcher.deliver, outcome.pending)
     return OtpRequestResponse(
-        message="If that number is registered, a code has been sent to it.",
-        phone_masked=masked,
-        expires_in_seconds=ttl,
-        retry_after_seconds=retry_after,
+        message=(
+            "If that number is registered with the school, a code has been sent to it on WhatsApp."
+        ),
+        phone_masked=outcome.phone_masked,
+        expires_in_seconds=outcome.ttl_seconds,
+        retry_after_seconds=outcome.retry_after_seconds,
     )
 
 

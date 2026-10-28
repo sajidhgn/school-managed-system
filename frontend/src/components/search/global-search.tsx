@@ -327,9 +327,9 @@ function SearchTrigger({
       type="button"
       onClick={onClick}
       className={cn(
-        // HeroUI's search field as a pill: a gray fill that deepens under the
+        // HeroUI's search field: a gray fill that deepens under the
         // pointer and presses in, rather than a bordered box.
-        "flex h-9 cursor-pointer items-center gap-2 rounded-full bg-[var(--default)] px-3 text-sm text-muted-foreground",
+        "flex h-9 cursor-pointer items-center gap-2 rounded-control bg-[var(--default)] px-3 text-sm text-muted-foreground",
         "transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98]",
         "hover:bg-[var(--default-hover)] hover:text-foreground",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

@@ -63,7 +63,7 @@ export const PasswordInput = React.forwardRef<
         aria-label={revealed ? t.auth.hidePassword : t.auth.showPassword}
         title={revealed ? t.auth.hidePassword : t.auth.showPassword}
         className={cn(
-          "absolute inset-y-0 end-0 grid w-9 place-items-center rounded-e-md text-muted-foreground",
+          "absolute inset-y-0 end-0 grid w-9 place-items-center rounded-e-control text-muted-foreground",
           "transition-colors hover:text-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-50",

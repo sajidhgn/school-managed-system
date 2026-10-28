@@ -36,7 +36,7 @@ export function usePapers(params: PaperListParams) {
     placeholderData: (previous) => previous,
     // A paper just created is still being written; keep its row's status honest.
     refetchInterval: (query) =>
-      query.state.data?.some((p) => BUSY_PAPER_STATUSES.has(p.status)) ? 5000 : false,
+      query.state.data?.items.some((p) => BUSY_PAPER_STATUSES.has(p.status)) ? 5000 : false,
   });
 }
 

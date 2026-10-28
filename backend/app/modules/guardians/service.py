@@ -64,6 +64,7 @@ from app.modules.guardians.schemas import (
     GuardianDetail,
     GuardianLinkCreate,
     GuardianLinkUpdate,
+    GuardianPortalGrant,
     GuardianRead,
     GuardianUpdate,
     LinkedStudentRead,
@@ -386,28 +387,47 @@ class GuardianService:
 
         if await self.links.get_link(guardian_id, student.id) is not None:
             raise ConflictError(f"{guardian.full_name} is already linked to this student.")
+        return await self._link(guardian, student, payload, actor_id=actor_id)
 
+    async def _link(
+        self,
+        guardian: Guardian,
+        student: Student,
+        payload: GuardianLinkCreate,
+        *,
+        actor_id: UUID | None,
+    ) -> LinkedStudentRead:
+        """Create the link (or restore a removed one) and audit it. Callers check access."""
         self._validate_relationship(payload.relationship_type, payload.relationship_label)
         if payload.is_primary_contact:
             await self._release_primary(student.id, actor_id=actor_id)
 
-        link = await self.links.create(
-            organization_id=guardian.organization_id,
-            # From the STUDENT, not from the request context. A link inherits the
-            # child's campus so it can never end up scoped to a school the child does
-            # not attend -- which would make the child invisible on their own campus's
-            # contact list.
-            school_id=student.school_id,
-            guardian_id=guardian.id,
-            student_id=student.id,
-            relationship_type=payload.relationship_type,
-            relationship_label=payload.relationship_label,
-            is_primary_contact=payload.is_primary_contact,
-            is_emergency_contact=payload.is_emergency_contact,
-            can_pickup=payload.can_pickup,
-            receives_notifications=payload.receives_notifications,
-            can_view_results=payload.can_view_results,
-        )
+        values = {
+            "relationship_type": payload.relationship_type,
+            "relationship_label": payload.relationship_label,
+            "is_primary_contact": payload.is_primary_contact,
+            "is_emergency_contact": payload.is_emergency_contact,
+            "can_pickup": payload.can_pickup,
+            "receives_notifications": payload.receives_notifications,
+            "can_view_results": payload.can_view_results,
+        }
+        removed = await self.links.get_removed_link(guardian.id, student.id)
+        if removed is not None:
+            # The unique key on (guardian, student) is not partial, so the old row is
+            # brought back rather than a new one inserted beside it.
+            link = await self.links.update(removed, deleted_at=None, **values)
+        else:
+            link = await self.links.create(
+                organization_id=guardian.organization_id,
+                # From the STUDENT, not from the request context. A link inherits the
+                # child's campus so it can never end up scoped to a school the child
+                # does not attend -- which would make the child invisible on their own
+                # campus's contact list.
+                school_id=student.school_id,
+                guardian_id=guardian.id,
+                student_id=student.id,
+                **values,
+            )
         link.student = student
 
         await record_audit(
@@ -429,6 +449,58 @@ class GuardianService:
             },
         )
         return self._link_to_read(link)
+
+    async def grant_portal_access(
+        self, student_id: UUID, payload: GuardianPortalGrant, *, actor_id: UUID | None = None
+    ) -> list[StudentGuardianRead]:
+        """Let the person on this phone sign in to the parent portal and see this child.
+
+        Register + link in one step, for the student page: a member of staff checks
+        the number already on the student's record and turns access on. Nothing is
+        granted that a person did not confirm -- see the migration note on why the
+        free-text `students.guardian_phone` is never turned into a login by itself.
+
+        Idempotent. An existing record for the phone in this organization is reused
+        (its name is not overwritten), an existing link has `can_view_results` turned
+        back on, and a removed link is restored. The guardian is found organization
+        wide on purpose: a parent registered by the other campus is the same person,
+        and linking them to a child HERE is exactly what makes them visible here.
+        """
+        student = await self._get_student(student_id)
+        identity = await self.identities.get_by_phone(self._normalise(payload.phone))
+        guardian = await self.guardians.get_by_identity(identity.id) if identity else None
+        if guardian is None:
+            created = await self.register(
+                GuardianCreate(phone=payload.phone, full_name=payload.full_name),
+                actor_id=actor_id,
+            )
+            guardian = await self.guardians.get_with_identity(created.id)
+            if guardian is None:  # pragma: no cover - just created in this transaction
+                raise NotFoundError("Guardian not found.")
+
+        link = await self.links.get_link(guardian.id, student.id)
+        if link is None:
+            await self._link(
+                guardian,
+                student,
+                GuardianLinkCreate(
+                    student_id=student.id,
+                    relationship_type=payload.relationship_type,
+                    relationship_label=payload.relationship_label,
+                    # The first parent given access becomes the one the school calls.
+                    is_primary_contact=await self.links.current_primary(student.id) is None,
+                    can_view_results=True,
+                ),
+                actor_id=actor_id,
+            )
+        elif not link.can_view_results:
+            await self.update_link(
+                guardian.id,
+                student.id,
+                GuardianLinkUpdate(can_view_results=True),
+                actor_id=actor_id,
+            )
+        return await self.list_for_student(student.id)
 
     async def update_link(
         self,

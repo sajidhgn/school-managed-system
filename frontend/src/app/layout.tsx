@@ -7,6 +7,7 @@ import { getMessages } from "@/lib/i18n/messages";
 import { getLocale } from "@/lib/i18n/server";
 import { SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
+import { urduFace } from "./fonts";
 import "./globals.css";
 import "./heroui.css";
 
@@ -44,11 +45,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // resolve against it. Components therefore need no locale-aware styling —
     // which is the entire reason spec §9 asks for this on day one rather than as a
     // later "add Urdu" ticket.
-    <html lang={locale} dir={dir} suppressHydrationWarning>
+    //
+    // The Urdu face's variable goes on <html>, not <body>: globals.css composes the
+    // panel's stack from it on `:root`, and a custom property only resolves
+    // against variables defined on the same element or above.
+    <html lang={locale} dir={dir} className={urduFace.variable} suppressHydrationWarning>
       <body className="min-h-svh bg-background font-sans antialiased">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+          className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-control focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
         >
           Skip to content
         </a>

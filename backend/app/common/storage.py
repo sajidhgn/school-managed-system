@@ -12,7 +12,8 @@ RESPONSIBILITY
     regardless.
 
 INTERACTIONS
-    * `modules/books` is the only user today.
+    * `modules/books` (chapter uploads, page images) and `modules/auth/avatar.py`
+      (profile photos), each under its own root.
     * Local disk only. An S3-compatible backend is a second class with the same
       four methods and a config switch -- nothing upstream changes.
 """
@@ -75,3 +76,8 @@ def _storage_for(root: str) -> LocalFileStorage:
 def get_storage(settings: Settings | None = None) -> LocalFileStorage:
     settings = settings or get_settings()
     return _storage_for(settings.BOOKS_STORAGE_PATH)
+
+
+def get_avatar_storage(settings: Settings | None = None) -> LocalFileStorage:
+    settings = settings or get_settings()
+    return _storage_for(settings.AVATARS_STORAGE_PATH)

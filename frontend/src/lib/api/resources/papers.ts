@@ -12,6 +12,7 @@ import type {
   QuestionRead,
   QuestionType,
   QuestionUpdate,
+  Page,
 } from "@/lib/api/types";
 
 /**
@@ -25,8 +26,10 @@ export interface PaperListParams {
   class_id?: string | null;
   subject_id?: string | null;
   status?: PaperStatus | null;
-  limit?: number;
-  offset?: number;
+  /** Title contains this. */
+  q?: string | null;
+  page?: number;
+  size?: number;
 }
 
 export interface QuestionBankParams {
@@ -38,13 +41,13 @@ export interface QuestionBankParams {
   difficulty?: QuestionDifficulty | null;
   language?: PaperLanguage | null;
   q?: string | null;
-  limit?: number;
-  offset?: number;
+  page?: number;
+  size?: number;
 }
 
 export const papersApi = {
   list: (params: PaperListParams = {}) =>
-    api.get<PaperRead[]>("/papers", { params: { ...params } }),
+    api.get<Page<PaperRead>>("/papers", { params: { ...params } }),
   get: (id: string) => api.get<PaperDetail>(`/papers/${id}`),
   create: (body: PaperCreate) => api.post<PaperDetail>("/papers", body),
   update: (id: string, body: PaperUpdate) => api.patch<PaperDetail>(`/papers/${id}`, body),
@@ -53,7 +56,7 @@ export const papersApi = {
   regenerate: (id: string) => api.post<PaperDetail>(`/papers/${id}/regenerate`),
 
   bank: (params: QuestionBankParams = {}) =>
-    api.get<QuestionRead[]>("/papers/questions", { params: { ...params } }),
+    api.get<Page<QuestionRead>>("/papers/questions", { params: { ...params } }),
 
   addQuestion: (paperId: string, body: PaperQuestionAdd) =>
     api.post<PaperQuestionRead>(`/papers/${paperId}/questions`, body),

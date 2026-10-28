@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Loader2, Plus } from "lucide-react";
 
 import { ErrorState } from "@/components/data-states";
+import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,7 +48,18 @@ export function QuestionBankDialog({
   const [difficulty, setDifficulty] = React.useState<QuestionDifficulty | "">("");
   const [q, setQ] = React.useState("");
   const debounced = useDebouncedValue(q.trim(), 350);
+  const [page, setPage] = React.useState(1);
 
+  // Any filter change starts again at page 1, adjusted during render so the stale
+  // page is never fetched against the new filters.
+  const filterKey = `${type}|${difficulty}|${debounced}`;
+  const [filteredBy, setFilteredBy] = React.useState(filterKey);
+  if (filterKey !== filteredBy) {
+    setFilteredBy(filterKey);
+    setPage(1);
+  }
+
+  // The filters, the search and the page are applied by the API in the database.
   const bank = useQuestionBank(
     {
       class_id: paper.class_id,
@@ -55,7 +67,8 @@ export function QuestionBankDialog({
       type: type || null,
       difficulty: difficulty || null,
       q: debounced || null,
-      limit: 50,
+      page,
+      size: 20,
     },
     open,
   );
@@ -118,65 +131,68 @@ export function QuestionBankDialog({
             </p>
           ) : bank.isError ? (
             <ErrorState error={bank.error} onRetry={() => void bank.refetch()} className="py-8" />
-          ) : !bank.data?.length ? (
+          ) : !bank.data?.items.length ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               {debounced || type || difficulty
                 ? "No question in the bank matches."
                 : "The bank has no questions for this class in this language yet."}
             </p>
           ) : (
-            <ul className="space-y-2">
-              {bank.data.map((question) => {
-                const already = onPaper.has(question.id);
-                const adding = add.isPending && add.variables?.question_id === question.id;
-                return (
-                  <li
-                    key={question.id}
-                    className="flex items-start gap-3 rounded-lg border border-border p-3"
-                  >
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        <Badge variant="outline">{QUESTION_TYPE_LABELS[question.type]}</Badge>
-                        <Badge variant={DIFFICULTY_VARIANT[question.difficulty]}>
-                          {DIFFICULTY_LABELS[question.difficulty]}
-                        </Badge>
-                        <Badge variant="neutral">
-                          {question.marks} mark{question.marks === 1 ? "" : "s"}
-                        </Badge>
-                        {question.chapter_number !== null && (
-                          <span className="text-muted-foreground">
-                            Ch {question.chapter_number}
-                            {question.printed_page !== null ? `, p. ${question.printed_page}` : ""}
-                          </span>
-                        )}
-                        {!fits.has(question.type) && (
-                          <span className="text-warning-foreground dark:text-warning">
-                            not usually on this paper type
-                          </span>
-                        )}
+            <>
+              <ul className="space-y-2">
+                {bank.data.items.map((question) => {
+                  const already = onPaper.has(question.id);
+                  const adding = add.isPending && add.variables?.question_id === question.id;
+                  return (
+                    <li
+                      key={question.id}
+                      className="flex items-start gap-3 rounded-lg border border-border p-3"
+                    >
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <Badge variant="outline">{QUESTION_TYPE_LABELS[question.type]}</Badge>
+                          <Badge variant={DIFFICULTY_VARIANT[question.difficulty]}>
+                            {DIFFICULTY_LABELS[question.difficulty]}
+                          </Badge>
+                          <Badge variant="neutral">
+                            {question.marks} mark{question.marks === 1 ? "" : "s"}
+                          </Badge>
+                          {question.chapter_number !== null && (
+                            <span className="text-muted-foreground">
+                              Ch {question.chapter_number}
+                              {question.printed_page !== null ? `, p. ${question.printed_page}` : ""}
+                            </span>
+                          )}
+                          {!fits.has(question.type) && (
+                            <span className="text-warning-foreground dark:text-warning">
+                              not usually on this paper type
+                            </span>
+                          )}
+                        </div>
+                        <QuestionContent question={question} compact />
                       </div>
-                      <QuestionContent question={question} compact />
-                    </div>
-                    {already ? (
-                      <Badge variant="success" className="mt-1 shrink-0 gap-1">
-                        <Check className="size-3" /> On paper
-                      </Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        loading={adding}
-                        disabled={add.isPending && !adding}
-                        onClick={() => add.mutate({ question_id: question.id })}
-                      >
-                        {!adding && <Plus />} Add
-                      </Button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      {already ? (
+                        <Badge variant="success" className="mt-1 shrink-0 gap-1">
+                          <Check className="size-3" /> On paper
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          loading={adding}
+                          disabled={add.isPending && !adding}
+                          onClick={() => add.mutate({ question_id: question.id })}
+                        >
+                          {!adding && <Plus />} Add
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              <Pagination meta={bank.data.meta} onPageChange={setPage} disabled={bank.isFetching} />
+            </>
           )}
         </div>
       </DialogContent>

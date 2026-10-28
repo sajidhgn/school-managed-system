@@ -5,6 +5,7 @@ import type {
   StudentAttendanceParams,
 } from "@/lib/api/resources/attendance";
 import type { ExamListParams } from "@/lib/api/resources/exams";
+import type { BookListParams, LibraryParams } from "@/lib/api/resources/books";
 import type { PaperListParams, QuestionBankParams } from "@/lib/api/resources/papers";
 import type { SubjectListParams } from "@/lib/api/resources/subjects";
 import type { StudentListParams } from "@/lib/api/resources/students";
@@ -24,6 +25,11 @@ export const queryKeys = {
     all: ["students"] as const,
     list: (params: StudentListParams) => ["students", "list", params] as const,
     detail: (id: string) => ["students", "detail", id] as const,
+  },
+
+  guardians: {
+    /** The contact card on a student's page: who may sign in to the portal for them. */
+    forStudent: (studentId: string) => ["guardians", "student", studentId] as const,
   },
 
   classes: {
@@ -71,8 +77,10 @@ export const queryKeys = {
 
   books: {
     all: ["books"] as const,
-    list: (classId: string | null) => ["books", "list", classId] as const,
+    list: (params: BookListParams) => ["books", "list", params] as const,
     detail: (id: string) => ["books", "detail", id] as const,
+    library: (params: LibraryParams) => ["books", "library", params] as const,
+    librarySubjects: (grade: string) => ["books", "library-subjects", grade] as const,
     // `version` is the chapter's `processed_at`: a run finishing in the background
     // gives the pages a new key, so an open page list refetches by itself.
     pages: (bookId: string, chapterId: string, version: string | null) =>

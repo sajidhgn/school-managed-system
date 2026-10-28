@@ -43,6 +43,11 @@ const BLOCKED = new Set([
   "students/admissions",
   "platform/auth/login",
   "invitations/accept",
+  // Parent-portal sign-in: `/api/parent/*` handles these and keeps the tokens.
+  "guardian/auth/request-code",
+  "guardian/auth/verify",
+  "guardian/auth/context",
+  "guardian/auth/refresh",
 ]);
 
 /** Header names that must not be forwarded upstream or back downstream. */

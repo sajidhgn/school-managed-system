@@ -27,7 +27,7 @@ export function LocaleSwitcher() {
       value={locale}
       disabled={pending}
       onChange={(event) => select(event.target.value)}
-      className="h-9 cursor-pointer rounded-full bg-transparent px-3 text-sm text-muted-foreground outline-none transition-[background-color,color] duration-150 ease-out hover:bg-[var(--default)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      className="h-9 cursor-pointer rounded-control bg-transparent px-3 text-sm text-muted-foreground outline-none transition-[background-color,color] duration-150 ease-out hover:bg-[var(--default)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
     >
       {LOCALES.map((code) => (
         <option key={code} value={code}>

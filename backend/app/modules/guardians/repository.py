@@ -211,6 +211,24 @@ class GuardianStudentRepository(BaseRepository[GuardianStudent]):
             GuardianStudent.student_id == student_id,
         )
 
+    async def get_removed_link(self, guardian_id: UUID, student_id: UUID) -> GuardianStudent | None:
+        """A soft-deleted link for this pair, if one exists.
+
+        `uq_guardian_students_guardian_student` is NOT partial, so an unlinked pair
+        still occupies the key. Re-linking must restore that row; inserting a new one
+        fails on the constraint.
+        """
+        stmt = (
+            self._base_select(include_deleted=True)
+            .where(
+                GuardianStudent.guardian_id == guardian_id,
+                GuardianStudent.student_id == student_id,
+                GuardianStudent.deleted_at.is_not(None),
+            )
+            .limit(1)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def list_for_guardian(self, guardian_id: UUID) -> Sequence[GuardianStudent]:
         """Every live link for one guardian, with the student joined in.
 
@@ -352,6 +370,30 @@ class GuardianIdentityRepository:
             )
         )
         return (await self.session.execute(stmt)).unique().scalars().all()
+
+    async def delivery_schools_for_identity(self, identity_id: UUID) -> Sequence[UUID]:
+        """Campuses where this person has a child they may view, newest link first.
+
+        The same three conditions as `contexts_for_identity` -- live record, portal on,
+        child viewable -- because a campus the parent cannot open must not be the one
+        that texts them a code for it. Runs with the cross-tenant read armed by the
+        caller, like that method.
+        """
+        newest = func.max(GuardianStudent.created_at)
+        stmt = (
+            select(GuardianStudent.school_id)
+            .join(Guardian, Guardian.id == GuardianStudent.guardian_id)
+            .where(
+                Guardian.identity_id == identity_id,
+                Guardian.deleted_at.is_(None),
+                Guardian.portal_enabled.is_(True),
+                GuardianStudent.deleted_at.is_(None),
+                GuardianStudent.can_view_results.is_(True),
+            )
+            .group_by(GuardianStudent.school_id)
+            .order_by(newest.desc())
+        )
+        return (await self.session.execute(stmt)).scalars().all()
 
     # -- OTP codes ----------------------------------------------------------
 

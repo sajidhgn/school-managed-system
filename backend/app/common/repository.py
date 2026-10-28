@@ -49,6 +49,16 @@ from app.core.exceptions import ValidationError
 from app.db.base import Base
 
 
+def contains_pattern(term: str) -> str:
+    """`%term%` for `ILIKE ... ESCAPE '\\'`, with the term's own wildcards made literal.
+
+    Pair it with `escape="\\"` on the `ilike`. Without the escaping a search for "a_b"
+    also matches "axb", and a lone "%" matches every row.
+    """
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 class BaseRepository[ModelT: Base]:
     """CRUD + query primitives for a single ORM model.
 

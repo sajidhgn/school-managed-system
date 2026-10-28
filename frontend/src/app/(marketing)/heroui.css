@@ -44,6 +44,25 @@
 @import "@heroui/styles/components/card.css" layer(components);
 @import "@heroui/styles/components/separator.css" layer(components);
 
+/* Toggle buttons take the platform's control radius, not HeroUI's pill. A group
+   keeps it on its outer corners only, as HeroUI's own rules do. */
+@layer components {
+  .toggle-button,
+  .toggle-button-group--horizontal .toggle-button:first-child:last-child {
+    border-radius: var(--control-radius);
+  }
+
+  .toggle-button-group--horizontal .toggle-button:first-child {
+    border-start-start-radius: var(--control-radius);
+    border-end-start-radius: var(--control-radius);
+  }
+
+  .toggle-button-group--horizontal .toggle-button:last-child {
+    border-start-end-radius: var(--control-radius);
+    border-end-end-radius: var(--control-radius);
+  }
+}
+
 @layer base {
   /* Re-declared on each band, because a variable built from `var(--mk-ink)`
      resolves where it is declared, not where it is read. */
@@ -61,7 +80,7 @@
     --cursor-interactive: pointer;
     --cursor-disabled: not-allowed;
     --radius: 0.75rem;
-    --field-radius: calc(var(--radius) * 1.5);
+    --field-radius: var(--control-radius);
     --field-border: transparent;
     --skeleton-animation: shimmer;
     --tooltip-delay: 1500ms;

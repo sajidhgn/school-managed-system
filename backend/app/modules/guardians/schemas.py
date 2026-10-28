@@ -156,6 +156,19 @@ class GuardianLinkUpdate(BaseSchema):
     can_view_results: bool | None = None
 
 
+class GuardianPortalGrant(BaseSchema):
+    """Turn on parent-portal access for one child, from the student's page.
+
+    The phone and name are normally the ones already on the student's record, which
+    the member of staff is confirming by sending them.
+    """
+
+    phone: str = Field(min_length=7, max_length=32, examples=["0300-1234567"])
+    full_name: str = Field(min_length=1, max_length=200, examples=["Muhammad Aslam"])
+    relationship_type: GuardianRelationship
+    relationship_label: str | None = Field(default=None, max_length=60)
+
+
 class StudentGuardianRead(BaseSchema):
     """One guardian as seen from the student's record -- the contact card."""
 

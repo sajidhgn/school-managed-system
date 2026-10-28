@@ -25,6 +25,8 @@ import {
 } from "@/lib/api/types";
 import type { CurrencyCatalog } from "@/lib/currency-timezones";
 
+import { ProfilePhoto } from "./profile-photo";
+
 function withCurrent(options: string[], current: string): string[] {
   // A stored value outside ICU's list (an old tzdata alias, say) must still
   // appear, otherwise the select would silently show — and save — a different one.
@@ -141,6 +143,7 @@ export function SettingsView({
 
       <section className="mb-8 rounded-xl border border-border bg-card p-5">
         <h2 className="mb-4 font-medium">{t.settings.yourAccount}</h2>
+        <ProfilePhoto user={user} />
         <dl className="grid gap-3 text-sm">
           <Row label={t.common.name} value={user.full_name} />
           <Row label={t.common.email} value={user.email} />
@@ -289,7 +292,7 @@ export function SettingsView({
           {ownershipCandidates.length > 0 ? (
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <select
-                className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
+                className="h-9 flex-1 rounded-control border border-border bg-background px-3 text-sm"
                 value={newOwnerMembershipId}
                 onChange={(event) => setNewOwnerMembershipId(event.target.value)}
                 aria-label="New owner"

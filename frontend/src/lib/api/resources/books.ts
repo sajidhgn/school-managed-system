@@ -11,7 +11,31 @@ import type {
   ChapterInput,
   ChapterRead,
   ChapterUpdate,
+  LibraryBook,
+  Page,
+  ShelfInput,
 } from "@/lib/api/types";
+
+/** The book list's filters and page, all applied by the API in the database. */
+export interface BookListParams {
+  class_id?: string | null;
+  /** Title or publisher contains this. */
+  q?: string | null;
+  page?: number;
+  size?: number;
+}
+
+/** The shared library's filters and page. */
+export interface LibraryParams {
+  /** Title or publisher contains this. */
+  q?: string | null;
+  /** A class name as any school writes it: "Class 5" also finds "Grade V". */
+  grade?: string | null;
+  /** One of `librarySubjects`. */
+  subject?: string | null;
+  page?: number;
+  size?: number;
+}
 
 /**
  * Mirrors backend/app/modules/books/router.py. Uploading QUEUES the chapter; the
@@ -19,9 +43,17 @@ import type {
  * orders, verifies and indexes it, and the chapter's `status` reports where it is.
  */
 export const booksApi = {
-  list: (classId?: string | null) =>
-    api.get<BookRead[]>("/books", { params: { class_id: classId ?? undefined } }),
+  list: (params: BookListParams = {}) =>
+    api.get<Page<BookRead>>("/books", { params: { ...params } }),
   get: (id: string) => api.get<BookDetail>(`/books/${id}`),
+  /** Every school's books -- uploaded once for the platform, added by any school. */
+  library: (params: LibraryParams = {}) =>
+    api.get<Page<LibraryBook>>("/books/library", { params: { ...params } }),
+  librarySubjects: (grade?: string | null) =>
+    api.get<string[]>("/books/library/subjects", { params: { grade: grade || undefined } }),
+  /** File a library book under one of the campus's classes, instead of uploading it. */
+  addFromLibrary: (id: string, body: ShelfInput) =>
+    api.post<BookDetail>(`/books/library/${id}`, body),
   create: (body: BookCreate) => api.post<BookDetail>("/books", body),
   /** Photos or a PDF of a new book's cover and contents pages -> its details as
    * the AI read them. Nothing is saved; the answer pre-fills "Add a book". */
@@ -33,6 +65,8 @@ export const booksApi = {
   /** Whether reading with AI will work: the provider's key, model and server. */
   scanStatus: () => api.get<BookScanStatus>("/books/scan/status"),
   update: (id: string, body: BookUpdate) => api.patch<BookDetail>(`/books/${id}`, body),
+  /** Off the campus's books; deleted outright only when it uploaded it and no other
+   * school uses it. */
   remove: (id: string) => api.delete<void>(`/books/${id}`),
 
   addChapter: (bookId: string, body: ChapterInput) =>

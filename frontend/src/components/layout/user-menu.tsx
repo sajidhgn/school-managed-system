@@ -16,19 +16,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UserAvatar } from "@/components/user-avatar";
 import { authRequest } from "@/lib/api/client";
 import type { SchoolRead } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
-
-/** Initials for the avatar. Two letters max — three starts to look like a word. */
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 /**
  * Account menu: who you are, where you are, and how to change either.
@@ -109,7 +100,12 @@ export function UserMenu({
           className="grid size-9 cursor-pointer place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-2 ring-card transition-transform duration-250 ease-out-quart hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-ring data-[state=open]:scale-95"
           aria-label="Account menu"
         >
-          {initials(user.full_name)}
+          <UserAvatar
+            name={user.full_name}
+            avatarUrl={user.avatar_url}
+            className="size-full"
+            fallbackClassName="bg-transparent text-sm font-semibold text-primary-foreground"
+          />
         </button>
       </DropdownMenuTrigger>
 

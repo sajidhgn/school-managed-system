@@ -40,6 +40,15 @@ export default async function StudentDetailPage({
       canVoid={hasPermission(user, PERMISSIONS.feeVoid)}
       // Its own code, like the fees: a role can hold the record without the register.
       canReadAttendance={hasPermission(user, PERMISSIONS.attendanceRead)}
+      // Granting registers a parent AND links them, so it needs both codes -- the
+      // same two the API's portal-access route demands.
+      canReadGuardians={hasPermission(user, PERMISSIONS.guardianRead)}
+      canGrantPortal={hasPermission(
+        user,
+        PERMISSIONS.guardianCreate,
+        PERMISSIONS.guardianUpdate,
+      )}
+      canTogglePortal={hasPermission(user, PERMISSIONS.guardianUpdate)}
     />
   );
 }

@@ -216,7 +216,7 @@ export function RegisterDialog({
                           setPending((prev) => ({ ...prev, [entry.student_id]: status }))
                         }
                         className={[
-                          "rounded border px-2 py-1 text-xs transition disabled:opacity-50",
+                          "rounded-control border px-2 py-1 text-xs transition disabled:opacity-50",
                           current === status
                             ? STATUS_STYLE[status]
                             : "bg-background text-muted-foreground hover:bg-muted",

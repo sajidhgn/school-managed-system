@@ -209,7 +209,7 @@ export function SchoolDetailView({
             label={t.nav.members}
             value={memberCount}
             disabled={busy}
-            onOpen={() => openScoped("/members")}
+            onOpen={() => openScoped(`/members?school=${school.id}`)}
           />
         </Can>
         <Can permission={PERMISSIONS.invitationRead}>
@@ -218,7 +218,7 @@ export function SchoolDetailView({
             label={t.nav.invitations}
             value={pendingInvitationCount}
             disabled={busy}
-            onOpen={() => openScoped("/members?invite=1")}
+            onOpen={() => openScoped(`/members?invite=1&school=${school.id}`)}
           />
         </Can>
         <Can permission={PERMISSIONS.roleRead}>

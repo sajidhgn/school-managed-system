@@ -12,7 +12,8 @@ What a mocked suite would pass without:
   * URDU AND ARABIC. A paper asks the writer for its language and prints that
     language's true/false words.
   * OWNERSHIP AND ISOLATION. `paper:write` changes only your own papers; another
-    organization sees nothing.
+    organization sees nothing -- and writes a paper from a book only once it has
+    added the book from the shared library, the paper then being its own.
 
 The model calls are the fakes in `tests/books_fakes.py` and `tests/papers_fakes.py`.
 """
@@ -31,8 +32,10 @@ from app.modules.papers.models import Difficulty, PaperLanguage
 from app.modules.papers.router import get_paper_agent_factory
 from tests.books_fakes import make_pdf
 from tests.integration.conftest import API, Tenant
+from tests.integration.test_academic_foundation import build_campus
 from tests.integration.test_books import (
     BODY,
+    Actor,
     Library,
     build_library,
     chapter,
@@ -144,8 +147,21 @@ async def test_a_teacher_generates_reviews_and_edits_a_paper(
     assert detail["report"]["chosen"] == 11 and detail["report"]["issues"] == []
     assert detail["chapters"] == [{"id": chapter(book, 2)["id"], "number": 2, "title": "Fractions"}]
 
-    listed = (await library.teacher.get(f"{API}/papers")).json()
+    listed = (await library.teacher.get(f"{API}/papers")).json()["items"]
     assert [(p["id"], p["question_count"]) for p in listed] == [(paper["id"], 11)]
+
+    # The list is searched and paged in the database: title search, and a page
+    # carries the total of every match, not just the rows on it.
+    page = (await library.teacher.get(f"{API}/papers", params={"q": "unit TEST"})).json()
+    assert [p["id"] for p in page["items"]] == [paper["id"]]
+    assert page["meta"]["total"] == 1
+    none = (await library.teacher.get(f"{API}/papers", params={"q": "%"})).json()
+    assert none["items"] == [] and none["meta"]["total"] == 0
+    bank_page = (
+        await library.teacher.get(f"{API}/papers/questions", params={"size": 4, "page": 2})
+    ).json()
+    assert len(bank_page["items"]) == 4
+    assert bank_page["meta"]["total"] == 11 and bank_page["meta"]["has_next"] is True
 
     # -- edit: options are checked against the type; the edit is marked manual.
     entry = first["id"]
@@ -168,7 +184,9 @@ async def test_a_teacher_generates_reviews_and_edits_a_paper(
     assert gone.status_code == 204, gone.text
     after = (await library.teacher.get(url)).json()
     assert [q["position"] for s in after["sections"] for q in s["questions"]] == list(range(1, 11))
-    bank = (await library.teacher.get(f"{API}/papers/questions", params={"type": "short"})).json()
+    bank = (await library.teacher.get(f"{API}/papers/questions", params={"type": "short"})).json()[
+        "items"
+    ]
     assert removed_entry["question"]["id"] in {q["id"] for q in bank}
 
     # -- add it back from the bank: it lands at the end of its own section.
@@ -262,7 +280,7 @@ async def test_an_urdu_paper_is_written_in_urdu(
     assert "درست یا غلط" in true_false["text"]
     assert {r.language for r in FAKE_PAPER.requests} == {PaperLanguage.URDU}
     urdu_bank = await library.teacher.get(f"{API}/papers/questions", params={"language": "ur"})
-    assert len(urdu_bank.json()) == 3
+    assert len(urdu_bank.json()["items"]) == 3
 
 
 async def test_an_arabic_paper_is_written_in_arabic(
@@ -318,8 +336,8 @@ async def test_another_organization_cannot_see_a_paper(
     rival: Tenant = await make_tenant(
         name="Rival Trust", email="rival@test.example", school_code="RIVAL"
     )
-    assert (await rival.get(f"{API}/papers")).json() == []
-    assert (await rival.get(f"{API}/papers/questions")).json() == []
+    assert (await rival.get(f"{API}/papers")).json()["items"] == []
+    assert (await rival.get(f"{API}/papers/questions")).json()["items"] == []
     assert (await rival.get(f"{API}/papers/{created.json()['id']}")).status_code == 404
     stolen = await rival.post(
         f"{API}/papers",
@@ -331,4 +349,41 @@ async def test_another_organization_cannot_see_a_paper(
             "sections": [{"type": "mcq", "count": 1}],
         },
     )
-    assert stolen.status_code == 404, "another organization's book does not exist"
+    assert stolen.status_code == 404, "a book the campus has not added does not exist"
+
+
+async def test_a_paper_from_a_library_book_belongs_to_the_school_that_wrote_it(
+    library: Library,
+    ready_book: dict[str, Any],
+    make_tenant: Callable[..., Any],
+    mailbox: list[EmailMessage],
+) -> None:
+    rival: Tenant = await make_tenant(
+        name="Rival Trust", email="rival@test.example", school_code="RIVAL"
+    )
+    campus = await build_campus(rival, mailbox, email="rival-head@test.example", students=0)
+    head = Actor(rival.client, campus.headers)
+    added = await head.post(
+        f"{API}/books/library/{ready_book['id']}", json={"class_id": campus.class_id}
+    )
+    assert added.status_code == 201, added.text
+
+    created = await head.post(
+        f"{API}/papers",
+        json={
+            "title": "Their test",
+            "book_id": ready_book["id"],
+            "chapter_ids": [chapter(ready_book, 2)["id"]],
+            "paper_type": "objective",
+            "sections": [{"type": "mcq", "count": 1}],
+        },
+    )
+    assert created.status_code == 201, created.text
+    paper = created.json()
+    assert paper["class_id"] == campus.class_id, "filed under the adding school's class"
+    assert await generate() == {"paper_ready": 1}, "written from the uploader's pages"
+    assert (await head.get(f"{API}/papers/{paper['id']}")).json()["status"] == "ready"
+
+    # The uploading school shares the book, not the papers written from it.
+    assert (await library.teacher.get(f"{API}/papers/{paper['id']}")).status_code == 404
+    assert (await library.teacher.get(f"{API}/papers")).json()["items"] == []

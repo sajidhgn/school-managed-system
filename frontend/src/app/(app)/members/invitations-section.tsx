@@ -1,41 +1,39 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, KeyRound, Mail, RotateCw, Trash2, X } from "lucide-react";
+import { ChevronDown, Mail, RotateCw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useState, type ReactNode } from "react";
 
+import { AddMemberForm, type Branch } from "./add-member-form";
 import { Can } from "@/components/auth/can";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/data-states";
-import { Field } from "@/components/form/field";
+import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api/errors";
-import { invitations as invitationsApi, members as membersApi } from "@/lib/api/resources";
+import { invitations as invitationsApi } from "@/lib/api/resources";
 import {
   INVITATION_STATUS_LABELS,
   PERMISSIONS,
   label,
   type InvitationRead,
+  type Page,
   type RoleRead,
   type UsageItem,
 } from "@/lib/api/types";
-import { invitationCreateSchema, type InvitationCreateValues } from "@/lib/validation/rbac";
-import { memberCreateSchema, type MemberCreateValues } from "@/lib/validation/rbac";
 
 /**
- * Send and manage staff invitations (spec §7), embedded in the Members page as a
- * collapsible section — the "Invite staff" button in the page header opens it.
+ * Add staff and manage invitations (spec §7) across the branches the Members page is
+ * showing, embedded as a collapsible section — the "Add member" button in the page
+ * header opens it. The form sits on top; the invitations sent follow below it.
  *
- * Three things this section makes explicit, because each is surprising otherwise:
+ * Two things this section makes explicit, because each is surprising otherwise:
  *
  *   SEATS ARE CONSUMED ON SEND, not on accept. Otherwise a school could invite
  *   fifty people onto a twenty-five seat plan and discover the problem when the
@@ -45,23 +43,41 @@ import { memberCreateSchema, type MemberCreateValues } from "@/lib/validation/rb
  *   re-sent — only its digest was stored — and rotating is the safer behaviour if
  *   the first email went somewhere it should not have.
  *
- *   THE ROLE LIST IS LIMITED to roles the inviter could grant. Inviting into a role
- *   more powerful than your own is the same escalation as editing a role, through a
- *   different door, and the server refuses it.
+ * Every action is addressed to the invitation's OWN branch. Rows from several
+ * branches share this list, and the page's branch filter says nothing about which
+ * campus a given row was sent from.
+ *
+ * The list is one page of `GET /org/invitations`: the branch and status filters and
+ * the page are applied in the database, and the pending badge is that query's total
+ * — so neither depends on how many rows happen to be on screen.
  */
 export function InvitationsSection({
-  schoolId,
-  schoolName,
   invitations,
-  roles,
+  pendingCount,
+  statusFilter,
+  onStatusChange,
+  onPageChange,
+  branches,
+  branchNames,
+  rolesByBranch,
+  defaultBranchId,
+  showBranch,
   staffSeats,
   open,
   onToggle,
 }: {
-  schoolId: string;
-  schoolName: string;
-  invitations: InvitationRead[];
-  roles: RoleRead[];
+  invitations: Page<InvitationRead>;
+  /** Pending invitations in scope, counted by the database. */
+  pendingCount: number;
+  statusFilter: string | null;
+  onStatusChange: (status: string | null) => void;
+  onPageChange: (page: number) => void;
+  /** Branches a member can be added to. */
+  branches: Branch[];
+  branchNames: Record<string, string>;
+  rolesByBranch: Record<string, RoleRead[]>;
+  defaultBranchId: string | null;
+  showBranch: boolean;
   staffSeats: UsageItem | null;
   open: boolean;
   onToggle: () => void;
@@ -69,77 +85,7 @@ export function InvitationsSection({
   const router = useRouter();
   const { t } = useTranslations();
   const [busy, setBusy] = useState<string | null>(null);
-  const [creationMode, setCreationMode] = useState<"invite" | "manual">("invite");
-
-  const form = useForm<InvitationCreateValues>({
-    resolver: zodResolver(invitationCreateSchema),
-    defaultValues: { email: "", full_name: "", role_id: roles[0]?.id ?? "" },
-  });
-  const manualForm = useForm<MemberCreateValues>({
-    resolver: zodResolver(memberCreateSchema),
-    defaultValues: { email: "", full_name: "", password: "", role_id: roles[0]?.id ?? "" },
-  });
-
-  const seatsExhausted = staffSeats?.is_exhausted ?? false;
-  const pendingCount = invitations.filter((i) => i.status === "pending").length;
-
-  async function send(values: InvitationCreateValues) {
-    try {
-      await invitationsApi.create(schoolId, {
-        email: values.email,
-        full_name: values.full_name || undefined,
-        role_id: values.role_id,
-      });
-      toast({ title: `Invitation sent to ${values.email}.` });
-      form.reset({ email: "", full_name: "", role_id: values.role_id });
-      router.refresh();
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.code === "plan_limit_exceeded") {
-          toast({
-            variant: "destructive",
-            title: t.invitations.noSeatsTitle,
-            description: `${error.message} Upgrade your plan to invite more people.`,
-          });
-          return;
-        }
-        if (error.code === "ALREADY_MEMBER" || error.code === "INVITATION_PENDING") {
-          form.setError("email", { message: error.message });
-          return;
-        }
-        toast({ variant: "destructive", title: t.common.somethingWrong, description: error.message });
-        return;
-      }
-      toast({ variant: "destructive", title: t.common.somethingWrong });
-    }
-  }
-
-  async function createManually(values: MemberCreateValues) {
-    try {
-      await membersApi.create(schoolId, values);
-      toast({ title: `${values.full_name} was added to ${schoolName}.` });
-      manualForm.reset({ email: "", full_name: "", password: "", role_id: values.role_id });
-      router.refresh();
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.code === "plan_limit_exceeded") {
-          toast({ variant: "destructive", title: t.invitations.noSeatsTitle, description: error.message });
-          return;
-        }
-        if (error.code === "ACCOUNT_EXISTS_USE_INVITATION") {
-          manualForm.setError("email", { message: error.message });
-          return;
-        }
-        if (error.code === "WEAK_PASSWORD") {
-          manualForm.setError("password", { message: error.message });
-          return;
-        }
-        toast({ variant: "destructive", title: t.common.somethingWrong, description: error.message });
-        return;
-      }
-      toast({ variant: "destructive", title: t.common.somethingWrong });
-    }
-  }
+  const [deleting, setDeleting] = useState<InvitationRead | null>(null);
 
   async function act(id: string, fn: () => Promise<unknown>, message: string) {
     setBusy(id);
@@ -158,18 +104,18 @@ export function InvitationsSection({
     }
   }
 
-  function remove(id: string, email: string) {
-    if (!window.confirm(`Delete the invitation to ${email}? It will be removed from this list.`)) {
-      return;
-    }
-    void act(id, () => invitationsApi.remove(schoolId, id), `Invitation to ${email} deleted.`);
+  // Listed per branch, so `school_id` is always the branch the row was fetched from.
+  const branchOf = (invitation: InvitationRead) => invitation.school_id ?? "";
+
+  // Confirmed in the same dialog the staff table uses for "Remove", not the
+  // browser's `window.confirm`: that one cannot be styled or translated, and some
+  // browsers offer to suppress it, after which deletes go through unasked.
+  function remove(invitation: InvitationRead) {
+    setDeleting(invitation);
   }
 
-  const pending = invitations.filter((i) => i.status === "pending");
-  const past = invitations.filter((i) => i.status !== "pending");
-
   return (
-    <section className="mb-8 rounded-xl border border-border bg-card">
+    <section className="mb-4 rounded-xl border border-border bg-card">
       <button
         type="button"
         onClick={onToggle}
@@ -205,138 +151,121 @@ export function InvitationsSection({
               </p>
             }
           >
-            <div className="mb-3 flex gap-2" role="group" aria-label="Member creation method">
-              <Button type="button" variant={creationMode === "invite" ? "default" : "outline"} onClick={() => setCreationMode("invite")}>
-                <Mail className="size-4" aria-hidden /> Send invite
-              </Button>
-              <Button type="button" variant={creationMode === "manual" ? "default" : "outline"} onClick={() => setCreationMode("manual")}>
-                <KeyRound className="size-4" aria-hidden /> Create with password
-              </Button>
-            </div>
-            <p className="mb-3 text-sm text-muted-foreground">
-              School branch: <span className="font-medium text-foreground">{schoolName}</span>
-            </p>
-            {creationMode === "invite" ? <form
-              onSubmit={form.handleSubmit(send)}
-              className="mb-8 grid gap-4 rounded-xl border border-border bg-background p-5"
-              noValidate
-            >
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label={t.common.email} htmlFor="email" error={form.formState.errors.email} required>
-                  <Input type="email" placeholder="teacher@school.pk" {...form.register("email")} />
-                </Field>
-                <Field label={t.common.name} htmlFor="full_name" error={form.formState.errors.full_name}>
-                  <Input placeholder={t.invitations.namePlaceholder} {...form.register("full_name")} />
-                </Field>
-                <Field label={t.common.role} htmlFor="role_id" error={form.formState.errors.role_id} required>
-                  <NativeSelect {...form.register("role_id")}>
-                    {roles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </Field>
-              </div>
-
-              {seatsExhausted ? (
-                <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">
-                  You have used all {staffSeats?.allowed} staff seats on your plan. Upgrade, or
-                  remove a member, before inviting anyone else.
-                </p>
-              ) : staffSeats && !staffSeats.is_unlimited ? (
-                <p className="text-xs text-muted-foreground">
-                  {staffSeats.remaining} of {staffSeats.allowed} staff seats remaining.
-                </p>
-              ) : null}
-
-              <div>
-                <Button type="submit" disabled={form.formState.isSubmitting || seatsExhausted}>
-                  <Mail className="size-4" aria-hidden />
-                  {t.invitations.sendInvitation}
-                </Button>
-              </div>
-            </form> : (
-              <form onSubmit={manualForm.handleSubmit(createManually)} className="mb-8 grid gap-4 rounded-xl border border-border bg-background p-5" noValidate>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t.common.email} htmlFor="manual-email" error={manualForm.formState.errors.email} required>
-                    <Input id="manual-email" type="email" {...manualForm.register("email")} />
-                  </Field>
-                  <Field label={t.common.name} htmlFor="manual-name" error={manualForm.formState.errors.full_name} required>
-                    <Input id="manual-name" {...manualForm.register("full_name")} />
-                  </Field>
-                  <Field label="Temporary password" htmlFor="manual-password" error={manualForm.formState.errors.password} required>
-                    <PasswordInput id="manual-password" autoComplete="new-password" {...manualForm.register("password")} />
-                  </Field>
-                  <Field label={t.common.role} htmlFor="manual-role" error={manualForm.formState.errors.role_id} required>
-                    <NativeSelect id="manual-role" {...manualForm.register("role_id")}>
-                      {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-                    </NativeSelect>
-                  </Field>
-                </div>
-                {seatsExhausted ? <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">No staff seats remain on the current plan.</p> : null}
-                <div><Button type="submit" disabled={manualForm.formState.isSubmitting || seatsExhausted}><KeyRound className="size-4" aria-hidden />Create member</Button></div>
-              </form>
-            )}
+            <AddMemberForm
+              branches={branches}
+              rolesByBranch={rolesByBranch}
+              defaultBranchId={defaultBranchId}
+              staffSeats={staffSeats}
+            />
           </Can>
 
-          {invitations.length === 0 ? (
+          <div className="mb-3 flex items-center gap-2">
+            <label htmlFor="invitation-status" className="text-sm text-muted-foreground">
+              {t.common.status}
+            </label>
+            <NativeSelect
+              id="invitation-status"
+              className="w-44"
+              value={statusFilter ?? ""}
+              onChange={(event) => onStatusChange(event.target.value || null)}
+            >
+              <option value="">All statuses</option>
+              {Object.entries(INVITATION_STATUS_LABELS).map(([value, text]) => (
+                <option key={value} value={value}>
+                  {text}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          {invitations.meta.total === 0 ? (
             <EmptyState
-              title={t.invitations.emptyTitle}
-              description={t.invitations.emptyBody}
+              title={statusFilter ? "No invitations with this status" : t.invitations.emptyTitle}
+              description={statusFilter ? undefined : t.invitations.emptyBody}
             />
           ) : (
-            <div className="grid gap-6">
-              <InvitationTable
-                heading={t.invitations.pending}
-                rows={pending}
-                busy={busy}
-                onResend={(id, email) =>
-                  act(id, () => invitationsApi.resend(schoolId, id), `New link sent to ${email}.`)
-                }
-                onRevoke={(id, email) =>
-                  act(id, () => invitationsApi.revoke(schoolId, id), `Invitation to ${email} revoked.`)
-                }
-                onDelete={remove}
-              />
-              {past.length > 0 ? (
-                <InvitationTable heading={t.invitations.past} rows={past} busy={busy} onDelete={remove} />
-              ) : null}
-            </div>
+            <InvitationTable
+              rows={invitations.items}
+              busy={busy}
+              branchNames={showBranch ? branchNames : null}
+              onResend={(invitation) =>
+                act(
+                  invitation.id,
+                  () => invitationsApi.resend(branchOf(invitation), invitation.id),
+                  `New link sent to ${invitation.email}.`,
+                )
+              }
+              onRevoke={(invitation) =>
+                act(
+                  invitation.id,
+                  () => invitationsApi.revoke(branchOf(invitation), invitation.id),
+                  `Invitation to ${invitation.email} revoked.`,
+                )
+              }
+              onDelete={remove}
+              footer={
+                <Pagination
+                  meta={invitations.meta}
+                  onPageChange={onPageChange}
+                  disabled={busy !== null}
+                />
+              }
+            />
           )}
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(isOpen) => !isOpen && setDeleting(null)}
+        title={`Delete the invitation to ${deleting?.email}?`}
+        description="It will be removed from this list. A pending invitation's link stops working and its staff seat is returned."
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleting !== null && busy === deleting.id}
+        onConfirm={async () => {
+          if (!deleting) return;
+          await act(
+            deleting.id,
+            () => invitationsApi.remove(branchOf(deleting), deleting.id),
+            `Invitation to ${deleting.email} deleted.`,
+          );
+          setDeleting(null);
+        }}
+      />
     </section>
   );
 }
 
 function InvitationTable({
-  heading,
   rows,
   busy,
+  branchNames,
   onResend,
   onRevoke,
   onDelete,
+  footer,
 }: {
-  heading: string;
   rows: InvitationRead[];
   busy: string | null;
-  onResend?: (id: string, email: string) => void;
-  onRevoke?: (id: string, email: string) => void;
-  onDelete?: (id: string, email: string) => void;
+  /** Branch name by id, or null to leave the Branch column out. */
+  branchNames: Record<string, string> | null;
+  onResend?: (invitation: InvitationRead) => void;
+  onRevoke?: (invitation: InvitationRead) => void;
+  onDelete?: (invitation: InvitationRead) => void;
+  /** Rendered under the table, inside its border — the pagination. */
+  footer?: ReactNode;
 }) {
   const hasActions = Boolean(onResend || onRevoke || onDelete);
 
-  if (rows.length === 0) return null;
-
   return (
     <section>
-      <h2 className="mb-2 text-sm font-medium text-muted-foreground">{heading}</h2>
       <div className="rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Email</TableHead>
+              {branchNames ? <TableHead>Branch</TableHead> : null}
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Expires</TableHead>
@@ -352,6 +281,9 @@ function InvitationTable({
                     <div className="text-xs text-muted-foreground">{invitation.full_name}</div>
                   ) : null}
                 </TableCell>
+                {branchNames ? (
+                  <TableCell>{branchNames[invitation.school_id ?? ""] ?? "—"}</TableCell>
+                ) : null}
                 <TableCell>{invitation.role_name ?? "—"}</TableCell>
                 <TableCell>
                   <Badge
@@ -372,13 +304,13 @@ function InvitationTable({
                 {hasActions ? (
                   <TableCell>
                     <div className="flex gap-1">
-                      {onResend ? (
+                      {onResend && invitation.status === "pending" ? (
                       <Can permission={PERMISSIONS.invitationResend}>
                         <Button
                           variant="ghost"
                           size="icon"
                           disabled={busy === invitation.id}
-                          onClick={() => onResend(invitation.id, invitation.email)}
+                          onClick={() => onResend(invitation)}
                           title="Send a new link (the old one stops working)"
                         >
                           <RotateCw className="size-4" aria-hidden />
@@ -386,13 +318,13 @@ function InvitationTable({
                         </Button>
                       </Can>
                       ) : null}
-                      {onRevoke ? (
+                      {onRevoke && invitation.status === "pending" ? (
                       <Can permission={PERMISSIONS.invitationRevoke}>
                         <Button
                           variant="ghost"
                           size="icon"
                           disabled={busy === invitation.id}
-                          onClick={() => onRevoke?.(invitation.id, invitation.email)}
+                          onClick={() => onRevoke?.(invitation)}
                           title="Revoke — the link dies immediately and the seat is returned"
                         >
                           <X className="size-4" aria-hidden />
@@ -407,7 +339,7 @@ function InvitationTable({
                             size="icon"
                             className="text-destructive hover:text-destructive"
                             disabled={busy === invitation.id}
-                            onClick={() => onDelete(invitation.id, invitation.email)}
+                            onClick={() => onDelete(invitation)}
                             title="Delete — removes it from this list"
                           >
                             <Trash2 className="size-4" aria-hidden />
@@ -422,6 +354,7 @@ function InvitationTable({
             ))}
           </TableBody>
         </Table>
+        {footer}
       </div>
     </section>
   );

@@ -79,6 +79,13 @@ class ScanStatus(BaseSchema):
     unreachable server."""
 
 
+class ShelfInput(BaseSchema):
+    """Where a campus files a library book: one of its classes, optionally a subject."""
+
+    class_id: UUID
+    subject_id: UUID | None = None
+
+
 class BookUpdate(BaseSchema):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     class_id: UUID | None = None
@@ -166,10 +173,15 @@ class ChapterRead(BaseSchema):
 
 
 class BookRead(BaseSchema):
+    """A book as the caller's campus has it: the library's book, filed under one of
+    the campus's classes."""
+
     id: UUID
     title: str
     publisher: str
     version: str
+    grade: str
+    """The class it is for, as its uploader names it -- the library's label."""
     class_id: UUID
     class_name: str
     subject_id: UUID | None
@@ -177,12 +189,39 @@ class BookRead(BaseSchema):
     chapter_count: int
     ready_chapter_count: int
     created_by_name: str | None
+    """The uploader, for books this campus uploaded; None for a library book."""
     created_at: datetime
+    """When the book was added to this campus."""
     can_edit: bool
+    """May change the content: details, chapters, uploads. Only the uploading campus."""
+    can_remove: bool
+    """May refile it under another class or subject, or remove it from the campus."""
+    from_library: bool
+    """Uploaded by another school and added from the shared library."""
+    school_count: int
+    """Campuses on the platform that use this book, this one included."""
 
 
 class BookDetail(BookRead):
     chapters: list[ChapterRead]
+
+
+class LibraryBook(BaseSchema):
+    """A book in the shared library, as any school browsing it sees it."""
+
+    id: UUID
+    title: str
+    publisher: str
+    version: str
+    grade: str
+    subject: str | None
+    """The uploader's subject name."""
+    chapter_count: int
+    ready_chapter_count: int
+    school_count: int
+    """Campuses on the platform that use it."""
+    on_shelf: bool
+    """The caller's campus already has it."""
 
 
 class PageRead(BaseSchema):

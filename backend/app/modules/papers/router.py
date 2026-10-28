@@ -24,7 +24,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from openai import OpenAIError
 from sqlalchemy import select
 
-from app.api.deps import AuthContext, DbSession, SettingsDep, require
+from app.api.deps import AuthContext, DbSession, Pagination, SearchQuery, SettingsDep, require
+from app.common.schemas import Page
 from app.core.config import Settings
 from app.core.exceptions import NotFoundError, ServiceUnavailableError
 from app.modules.academics.teaching_scope import assigned_teacher
@@ -116,24 +117,29 @@ async def _after_queue(
 # -- papers ------------------------------------------------------------------
 
 
-@router.get("", response_model=list[PaperRead], summary="Test papers on the campus")
+@router.get("", response_model=Page[PaperRead], summary="Test papers on the campus")
 async def list_papers(
     db: DbSession,
     ctx: ReadCtx,
     settings: SettingsDep,
+    params: Pagination,
+    search: SearchQuery,
     class_id: UUID | None = None,
     subject_id: UUID | None = None,
     status_filter: Annotated[PaperStatus | None, Query(alias="status")] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[PaperRead]:
+) -> Page[PaperRead]:
+    """One page of the campus's papers, newest first.
+
+    `class_id`, `subject_id`, `status` and `q` (title) narrow the list in the
+    database, and the page is an offset into the filtered result.
+    """
     return await _service(db, settings).list_papers(
         _caller(ctx),
         class_id=class_id,
         subject_id=subject_id,
         status=status_filter,
-        limit=limit,
-        offset=offset,
+        params=params,
+        search=search,
     )
 
 
@@ -160,13 +166,14 @@ async def create_paper(
 # Declared before `/{paper_id}`: "questions" is not a paper id.
 @router.get(
     "/questions",
-    response_model=list[QuestionRead],
+    response_model=Page[QuestionRead],
     summary="The question bank",
 )
 async def question_bank(
     db: DbSession,
     ctx: ReadCtx,
     settings: SettingsDep,
+    params: Pagination,
     class_id: UUID | None = None,
     subject_id: UUID | None = None,
     book_id: UUID | None = None,
@@ -175,9 +182,7 @@ async def question_bank(
     difficulty: Difficulty | None = None,
     language: PaperLanguage | None = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[QuestionRead]:
+) -> Page[QuestionRead]:
     return await _service(db, settings).question_bank(
         _caller(ctx),
         class_id=class_id,
@@ -188,8 +193,7 @@ async def question_bank(
         difficulty=difficulty,
         language=language,
         text=q.strip() if q else None,
-        limit=limit,
-        offset=offset,
+        params=params,
     )
 
 

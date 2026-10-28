@@ -12,6 +12,7 @@ import {
   Clock,
   FileText,
   Image as ImageIcon,
+  Library,
   Loader2,
   Pencil,
   Plus,
@@ -106,6 +107,9 @@ export function BookDetailView({ bookId }: { bookId: string }) {
     );
   }
   const data = book.data;
+  // Other campuses using it keep it: removing it here deletes it only when nobody does.
+  const others = data.school_count - 1;
+  const deletes = data.can_edit && others < 1;
 
   return (
     <div className="space-y-6">
@@ -126,18 +130,35 @@ export function BookDetailView({ bookId }: { bookId: string }) {
           .filter(Boolean)
           .join(" · ")}
         actions={
-          data.can_edit ? (
+          data.can_remove ? (
             <>
               <Button variant="outline" onClick={() => setEditing(true)}>
-                <Pencil /> Edit
+                <Pencil /> {data.can_edit ? "Edit" : "Change class"}
               </Button>
               <Button variant="outline" onClick={() => setDeleting(true)}>
-                <Trash2 /> Delete
+                <Trash2 /> {deletes ? "Delete" : "Remove"}
               </Button>
             </>
           ) : null
         }
       />
+
+      {data.from_library && (
+        <div className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+          <Library
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <p>
+            From the shared library: uploaded by another school, which keeps its
+            chapters and pages up to date. Printed for {data.grade}
+            {data.school_count > 1
+              ? `, used by ${data.school_count} schools`
+              : ""}
+            .
+          </p>
+        </div>
+      )}
 
       <SearchCard book={data} />
 
@@ -165,9 +186,15 @@ export function BookDetailView({ bookId }: { bookId: string }) {
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title={`Delete ${data.title}?`}
-        description="Every chapter, uploaded file, page and search index of this book is removed. This cannot be undone."
-        confirmLabel="Delete book"
+        title={`${deletes ? "Delete" : "Remove"} ${data.title}?`}
+        description={
+          deletes
+            ? "Every chapter, uploaded file, page and search index of this book is removed. This cannot be undone."
+            : data.from_library
+              ? "It leaves your school's books. The book stays in the shared library, and you can add it again later."
+              : `${others} other school${others === 1 ? " uses" : "s use"} this book, so it stays in the library for them with its chapters and pages. It leaves your school's books; you can add it back from the library.`
+        }
+        confirmLabel={deletes ? "Delete book" : "Remove book"}
         loading={removeBook.isPending}
         onConfirm={() =>
           removeBook.mutate(data.id, {

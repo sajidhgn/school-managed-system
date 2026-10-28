@@ -87,7 +87,6 @@ from app.core.context import (
 )
 from app.core.logging import get_logger
 from app.db.session import session_scope
-from app.modules.academics.models import SchoolClass
 from app.modules.books.agent import (
     BatchClient,
     BatchEmbedder,
@@ -518,11 +517,7 @@ async def _claim(chapter_id: UUID, organization_id: UUID, school_id: UUID) -> _C
             book = (
                 await session.execute(select(Book).where(Book.id == chapter.book_id))
             ).scalar_one()
-            class_name = (
-                await session.execute(
-                    select(SchoolClass.name).where(SchoolClass.id == book.class_id)
-                )
-            ).scalar_one_or_none() or "the class"
+            class_name = book.grade or "the class"
             siblings = (
                 await session.execute(
                     select(BookChapter.number, BookChapter.title)
