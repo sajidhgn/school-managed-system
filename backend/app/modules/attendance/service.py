@@ -108,6 +108,7 @@ from app.modules.attendance.schemas import (
 )
 from app.modules.students.repository import StudentRepository
 from app.modules.students.service import EnrollmentService
+from app.modules.whatsapp.service import WhatsAppService
 
 logger = get_logger(__name__)
 
@@ -524,13 +525,27 @@ class AttendanceService:
             raise ConflictError("This register has already been submitted.")
         self._assert_not_locked(register.session_date, may_amend=may_amend)
 
-        tally = self._tally(await self.records.list_for_session(session_id))
+        records = await self.records.list_for_session(session_id)
+        tally = self._tally(records)
         await self.sessions.update(
             register,
             status=AttendanceSessionStatus.SUBMITTED,
             submitted_at=datetime.now(UTC),
             taken_by_user_id=register.taken_by_user_id or actor_id,
         )
+        # Absence alerts: a WHOLE-DAY register, for TODAY. A lesson register would
+        # text a parent once per period, and a register back-filled days later would
+        # tell them "today" about a day that is long gone. Queued in this transaction,
+        # so a submit that fails queues nothing; the campus switch decides whether any.
+        today = datetime.now(UTC).date()
+        if register.period == WHOLE_DAY_PERIOD and register.session_date == today:
+            await WhatsAppService(self.session).queue_absence_alerts(
+                school_id=register.school_id,
+                session_date=register.session_date,
+                absent_student_ids=[
+                    r.student_id for r in records if r.status is AttendanceStatus.ABSENT
+                ],
+            )
         await self._audit(
             AuditAction.ATTENDANCE_SESSION_SUBMITTED,
             session_id=session_id,

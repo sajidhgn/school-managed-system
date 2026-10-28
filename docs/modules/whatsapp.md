@@ -73,6 +73,26 @@ A parent can sign in only once staff turn access on from the student's page
 registers the phone if needed and links it to the child. The free-text guardian
 phone on the student form never becomes a login by itself.
 
+## Absence alerts
+
+Off for every campus until the office turns it on (WhatsApp → **Absence alerts**,
+`whatsapp_settings.absence_alerts_enabled`). When on, submitting **today's whole-day**
+register queues one message per guardian of each child marked `absent`:
+
+- to guardians linked with `receives_notifications` **and** `can_view_results` (a
+  pickup-only contact is never told, and "Turn off" on the student page stops them);
+- one to one, from the campus's own WhatsApp: `recipient_phone` is set and
+  `invite_code` is null on the outbox row (kind `absence_alert`);
+- in English or Urdu, by the guardian's `preferred_locale`;
+- at most once per date, child and guardian (`dedupe_key`, unique per campus), so a
+  register reopened and resubmitted sends nothing new.
+
+Late, half day and leave send nothing; nor do lesson registers or a register for a
+past date. The outbox worker sends them like any other row; with `waha` the number is
+checked first, and a number with no WhatsApp is marked **failed** with that reason.
+Code: `WhatsAppService.queue_absence_alerts`, called from `AttendanceService.submit`.
+The transports' one-to-one path is `send_direct` in `app/common/whatsapp/sender.py`.
+
 ## The fee notice
 
 - The notice is queued only when the class has **issued** challans for the

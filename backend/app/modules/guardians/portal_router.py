@@ -35,10 +35,17 @@ WHY THE PROJECTION IS NARROWER THAN THE STAFF ONE
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentGuardian, GuardianDbSession, SettingsDep
+from app.modules.attendance.schemas import StudentAttendanceCalendar
 from app.modules.guardians.portal_service import GuardianPortalService
-from app.modules.guardians.schemas import GuardianChildRead, GuardianProfile
+from app.modules.guardians.schemas import (
+    GuardianChildRead,
+    GuardianProfile,
+    PortalExamResult,
+    PortalFeeStatement,
+)
 
 router = APIRouter()
 
@@ -86,3 +93,74 @@ async def child(
     small but real leak on a surface reachable by anyone with a handset and a code.
     """
     return await GuardianPortalService(db, settings).child(ctx, student_id)
+
+
+# ---------------------------------------------------------------------------
+# One child's records. Each resolves the child through the link filter first, so
+# every one of these is a 404 for a child this guardian may not view.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/children/{student_id}/attendance",
+    response_model=StudentAttendanceCalendar,
+    summary="One child's attendance this academic year",
+)
+async def child_attendance(
+    student_id: str, ctx: CurrentGuardian, db: GuardianDbSession, settings: SettingsDep
+) -> StudentAttendanceCalendar:
+    """Day by day with a rate per month, from submitted whole-day registers only --
+    the calendar staff see on the student's page."""
+    return await GuardianPortalService(db, settings).attendance(ctx, student_id)
+
+
+@router.get(
+    "/children/{student_id}/fees",
+    response_model=PortalFeeStatement,
+    summary="One child's challans and what is owed",
+)
+async def child_fees(
+    student_id: str, ctx: CurrentGuardian, db: GuardianDbSession, settings: SettingsDep
+) -> PortalFeeStatement:
+    """Issued, part-paid, paid and overdue challans, newest first. Drafts and voided
+    challans are never shown to parents."""
+    return await GuardianPortalService(db, settings).fees(ctx, student_id)
+
+
+@router.get(
+    "/children/{student_id}/fees/{voucher_id}/pdf",
+    summary="Download a challan to pay at the bank",
+)
+async def child_challan_pdf(
+    student_id: str,
+    voucher_id: str,
+    ctx: CurrentGuardian,
+    db: GuardianDbSession,
+    settings: SettingsDep,
+) -> StreamingResponse:
+    """The same printable challan the office prints, for one of the statement's bills."""
+    payload, number = await GuardianPortalService(db, settings).challan_pdf(
+        ctx, student_id, voucher_id
+    )
+    return StreamingResponse(
+        iter([payload]),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="challan-{number}.pdf"',
+            # Names a minor and what their family owes: never in a shared cache.
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.get(
+    "/children/{student_id}/results",
+    response_model=list[PortalExamResult],
+    summary="One child's results in published exams",
+)
+async def child_results(
+    student_id: str, ctx: CurrentGuardian, db: GuardianDbSession, settings: SettingsDep
+) -> list[PortalExamResult]:
+    """Only exams the school has PUBLISHED, newest first, each with marks per
+    subject, the total, the percentage and the rank in class."""
+    return await GuardianPortalService(db, settings).results(ctx, student_id)

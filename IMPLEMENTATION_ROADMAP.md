@@ -1,6 +1,6 @@
 # SchoolYar implementation status and delivery guide
 
-Last audited: 2026-08-24
+Last audited: 2026-10-28 (foundation sections unchanged since 2026-08-24)
 
 This document tracks implementation against `educloud-core-spec.md`. The core spec
 is the source of truth for product behavior; this file records what the repository
@@ -300,8 +300,11 @@ These are the only items still open; none is an unimplemented core backend or UI
 feature:
 
 1. Product decision and sandbox credentials for the real payment gateway adapter.
-2. The expanded authenticated Playwright journey matrix in slice 10.
+2. The expanded authenticated Playwright journey matrix in slice 10, now including the
+   parent portal (staff grants access, parent signs in, reads a child's records).
 3. A recorded staging run of the checked-in 1,000-organization k6 profile.
+4. An SMS provider for parent sign-in codes when WhatsApp cannot deliver
+   (`SMS_BACKEND` has only `console` and `null`).
 
 ## Academic modules
 
@@ -488,10 +491,50 @@ Implemented:
 
 Attendance consumes no plan capacity; there is no 402 path in this module.
 
-Deferred by agreement and recorded in the spec: absence notifications (the WhatsApp
-transport now exists, but the outbox only posts to groups and an absence alert must
-go to one parent, never the class group), leave applications, staff attendance, and
-device-driven auto-marking.
+Absence notifications shipped 2026-10-28 as WhatsApp absence alerts (see "Guardians
+and the parent portal" below). Still deferred by agreement and recorded in the spec:
+leave applications, staff attendance, and device-driven auto-marking.
+
+### Modules shipped after the 2026-08-24 audit
+
+Recorded here so this file matches the code. Each has its own tests; the module docs
+are the source of truth for behaviour.
+
+- **Exams** (`app/modules/exams`): exams, papers per class and subject, marks, a
+  ranked class result sheet, a printable result card, and a draft/published status.
+  No module spec exists yet -- checklist item 11 below still applies.
+- **Textbook library** (`docs/modules/books.md`): AI-read book details, chapter
+  uploads, page extraction and semantic search over pgvector. An uncommitted change
+  in progress makes books platform-wide with a shelf per campus (`e5b7d9f1a3c5`).
+- **Question bank and test papers** (`app/modules/papers`), including Arabic papers.
+- **WhatsApp** (`docs/modules/whatsapp.md`): class groups, the monthly fee notice,
+  custom messages, the outbox, and the WAHA gateway; the **diary agent**
+  (`docs/modules/diary-agent.md`) and **attendance agent**
+  (`docs/modules/attendance-agent.md`) ride the same number.
+- **Global search** (`docs/modules/search.md`).
+
+### Guardians and the parent portal -- implemented, real-gateway check pending
+
+The guardian registry (`app/modules/guardians`) holds one global identity per phone,
+one record per organization, and a per-child link whose flags decide pickup,
+notifications and whether the parent may see the child's records.
+
+- **Staff turn access on** from the student page ("Parent portal" card):
+  `POST /guardians/students/{id}/portal-access` registers the phone if needed and
+  links it. The free-text `students.guardian_phone` never becomes a login by itself.
+- **Sign-in** at `/parent/login`: phone, then a six-digit code sent on WhatsApp from
+  the child's campus number (`guardians/delivery.py`), checked for a WhatsApp account
+  first, with the SMS seam behind it. Sent after the HTTP response so timing does not
+  reveal which numbers are registered.
+- **What a parent sees** (`/parent`, `/parent/children/{id}`): attendance (the staff
+  calendar), fees (issued, part-paid, paid and overdue challans, totals, and the
+  challan PDF to pay at the bank), and results of **published** exams with rank. All
+  read through the staff services, behind the per-child link filter. English and Urdu.
+- **Absence alerts**: off per campus until enabled; today's whole-day register queues a
+  one-to-one WhatsApp message to each absent child's guardians, once per day.
+
+Pending: a run against a real WAHA gateway, an SMS provider for parents without
+WhatsApp, and sibling fee remission (now unblocked by the registry).
 
 ### Guidance for every future school module
 

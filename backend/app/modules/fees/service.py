@@ -185,6 +185,23 @@ _STATIONERY_SORT_BASE = 1000
 _ARREARS_SORT_ORDER = 999
 
 
+def display_status(voucher: FeeVoucher, today: date | None = None) -> VoucherStatus:
+    """The status a reader should see, deriving OVERDUE on read.
+
+    A voucher past its due date with money owed reads as overdue whether or not a
+    job has stamped it. Doing this on read means the figure is right the morning
+    after a due date rather than the morning after a job runs. Public so the parent
+    portal shows the same word the office does.
+    """
+    if (
+        voucher.status in {VoucherStatus.ISSUED, VoucherStatus.PARTLY_PAID}
+        and voucher.due_date < (today or date.today())
+        and voucher.outstanding > _ZERO
+    ):
+        return VoucherStatus.OVERDUE
+    return voucher.status
+
+
 class FeeService:
     """Fee heads, structures, vouchers and payments."""
 
@@ -3283,19 +3300,8 @@ class FeeService:
         await self.vouchers.update(voucher, paid_total=paid, status=status, paid_at=paid_at)
 
     def _voucher_read(self, voucher: FeeVoucher) -> FeeVoucherRead:
-        """Serialise a voucher, deriving OVERDUE on read.
-
-        A voucher past its due date with money owed reads as overdue whether or not a
-        job has stamped it. Doing this on read means the figure is right the morning
-        after a due date rather than the morning after a job runs.
-        """
-        status = voucher.status
-        if (
-            status in {VoucherStatus.ISSUED, VoucherStatus.PARTLY_PAID}
-            and voucher.due_date < date.today()
-            and voucher.outstanding > _ZERO
-        ):
-            status = VoucherStatus.OVERDUE
+        """Serialise a voucher, deriving OVERDUE on read (see `display_status`)."""
+        status = display_status(voucher)
 
         return FeeVoucherRead(
             id=voucher.id,

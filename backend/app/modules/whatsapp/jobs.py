@@ -27,7 +27,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.whatsapp.sender import WhatsAppGroupMessage, WhatsAppSender
+from app.common.whatsapp.sender import (
+    WhatsAppDirectMessage,
+    WhatsAppGroupMessage,
+    WhatsAppSender,
+)
 from app.core.context import (
     get_organization_id,
     get_school_id,
@@ -114,19 +118,30 @@ async def dispatch_outbox(
             message.attempts += 1
             group = await session.get(WhatsAppGroup, message.group_id) if message.group_id else None
             try:
-                await sender.send(
-                    WhatsAppGroupMessage(
-                        group_code=message.invite_code,
-                        body=message.body,
-                        purpose=message.kind.value,
-                        # Only while the group still has the link the message was
-                        # queued for -- a changed link means a different group.
-                        chat_id=group.chat_id
-                        if group is not None and group.invite_code == message.invite_code
-                        else None,
-                        school_id=message.school_id,
+                if message.recipient_phone is not None:
+                    # One person, not a group: an absence alert to a parent.
+                    await sender.send_direct(
+                        WhatsAppDirectMessage(
+                            phone=message.recipient_phone,
+                            body=message.body,
+                            purpose=message.kind.value,
+                            school_id=message.school_id,
+                        )
                     )
-                )
+                else:
+                    await sender.send(
+                        WhatsAppGroupMessage(
+                            group_code=message.invite_code or "",
+                            body=message.body,
+                            purpose=message.kind.value,
+                            # Only while the group still has the link the message was
+                            # queued for -- a changed link means a different group.
+                            chat_id=group.chat_id
+                            if group is not None and group.invite_code == message.invite_code
+                            else None,
+                            school_id=message.school_id,
+                        )
+                    )
             except Exception as exc:  # any transport failure fails ONE message
                 message.status = WhatsAppMessageStatus.FAILED
                 message.last_error = f"{type(exc).__name__}: {exc}"[:500]

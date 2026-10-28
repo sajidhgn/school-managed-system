@@ -4184,6 +4184,197 @@
         }
       }
     },
+    "/api/v1/portal/children/{student_id}/attendance": {
+      "get": {
+        "tags": [
+          "Guardian portal"
+        ],
+        "summary": "One child's attendance this academic year",
+        "description": "Day by day with a rate per month, from submitted whole-day registers only --\nthe calendar staff see on the student's page.",
+        "operationId": "child_attendance_api_v1_portal_children__student_id__attendance_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentAttendanceCalendar"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/portal/children/{student_id}/fees": {
+      "get": {
+        "tags": [
+          "Guardian portal"
+        ],
+        "summary": "One child's challans and what is owed",
+        "description": "Issued, part-paid, paid and overdue challans, newest first. Drafts and voided\nchallans are never shown to parents.",
+        "operationId": "child_fees_api_v1_portal_children__student_id__fees_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalFeeStatement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/portal/children/{student_id}/fees/{voucher_id}/pdf": {
+      "get": {
+        "tags": [
+          "Guardian portal"
+        ],
+        "summary": "Download a challan to pay at the bank",
+        "description": "The same printable challan the office prints, for one of the statement's bills.",
+        "operationId": "child_challan_pdf_api_v1_portal_children__student_id__fees__voucher_id__pdf_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          },
+          {
+            "name": "voucher_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Voucher Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/portal/children/{student_id}/results": {
+      "get": {
+        "tags": [
+          "Guardian portal"
+        ],
+        "summary": "One child's results in published exams",
+        "description": "Only exams the school has PUBLISHED, newest first, each with marks per\nsubject, the total, the percentage and the rank in class.",
+        "operationId": "child_results_api_v1_portal_children__student_id__results_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PortalExamResult"
+                  },
+                  "title": "Response Child Results Api V1 Portal Children  Student Id  Results Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -27311,6 +27502,264 @@
         ],
         "title": "PlatformLoginRequest"
       },
+      "PortalExamResult": {
+        "properties": {
+          "exam_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Exam Id"
+          },
+          "exam_name": {
+            "type": "string",
+            "title": "Exam Name"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/PortalPaperResult"
+            },
+            "type": "array",
+            "title": "Papers"
+          },
+          "total_obtained": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Obtained"
+          },
+          "total_max": {
+            "type": "integer",
+            "title": "Total Max"
+          },
+          "percentage": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Percentage"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "class_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exam_id",
+          "exam_name",
+          "start_date",
+          "end_date",
+          "class_name",
+          "papers",
+          "total_obtained",
+          "total_max",
+          "percentage",
+          "rank",
+          "class_size"
+        ],
+        "title": "PortalExamResult",
+        "description": "A child's result in one PUBLISHED exam.\n\nBuilt from the same class result sheet staff print, so the percentage and rank\ncannot disagree with the report card. Only this child's row leaves the server:\n`class_size` is a count, not a list."
+      },
+      "PortalFeeStatement": {
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "outstanding_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Outstanding Total"
+          },
+          "overdue_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Overdue Total"
+          },
+          "vouchers": {
+            "items": {
+              "$ref": "#/components/schemas/PortalVoucherRead"
+            },
+            "type": "array",
+            "title": "Vouchers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "currency",
+          "outstanding_total",
+          "overdue_total",
+          "vouchers"
+        ],
+        "title": "PortalFeeStatement",
+        "description": "A child's challans, newest first, with what is owed now."
+      },
+      "PortalPaperResult": {
+        "properties": {
+          "subject_name": {
+            "type": "string",
+            "title": "Subject Name"
+          },
+          "max_marks": {
+            "type": "integer",
+            "title": "Max Marks"
+          },
+          "pass_marks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Marks"
+          },
+          "marks_obtained": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks Obtained"
+          },
+          "is_absent": {
+            "type": "boolean",
+            "title": "Is Absent"
+          },
+          "marked": {
+            "type": "boolean",
+            "title": "Marked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_name",
+          "max_marks",
+          "pass_marks",
+          "marks_obtained",
+          "is_absent",
+          "marked"
+        ],
+        "title": "PortalPaperResult",
+        "description": "One subject of one exam. `marks_obtained` is None when absent or not yet marked."
+      },
+      "PortalVoucherRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "voucher_number": {
+            "type": "string",
+            "title": "Voucher Number"
+          },
+          "academic_year": {
+            "type": "string",
+            "title": "Academic Year"
+          },
+          "period_label": {
+            "type": "string",
+            "title": "Period Label"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Issue Date"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Due Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total"
+          },
+          "paid_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Paid Total"
+          },
+          "outstanding": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Outstanding"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "voucher_number",
+          "academic_year",
+          "period_label",
+          "issue_date",
+          "due_date",
+          "status",
+          "currency",
+          "total",
+          "paid_total",
+          "outstanding"
+        ],
+        "title": "PortalVoucherRead",
+        "description": "One challan as a parent sees it: what it is for, when it is due, what is owed.\n\nNo line items, no receipts' staff names, no notes -- the downloadable challan\ncarries the lines, and it is the document the bank counter reads anyway."
+      },
       "PromotionRequest": {
         "properties": {
           "from_section_id": {
@@ -33271,7 +33720,8 @@
         "enum": [
           "fee_notice",
           "custom",
-          "diary"
+          "diary",
+          "absence_alert"
         ],
         "title": "WhatsAppMessageKind"
       },
@@ -33437,6 +33887,11 @@
             ],
             "title": "Monthly Note"
           },
+          "absence_alerts_enabled": {
+            "type": "boolean",
+            "title": "Absence Alerts Enabled",
+            "default": false
+          },
           "placeholders": {
             "items": {
               "type": "string"
@@ -33495,6 +33950,17 @@
               }
             ],
             "title": "Monthly Note"
+          },
+          "absence_alerts_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Absence Alerts Enabled"
           }
         },
         "type": "object",

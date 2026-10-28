@@ -1,6 +1,6 @@
 # Plan: Textbook library, AI extraction agent, question bank and paper builder
 
-Status: **proposal, not implemented**. Written 2026-10-04.
+Status: **implemented** (books: `docs/modules/books.md`; question bank and paper builder: `backend/app/modules/papers`). Written 2026-10-04 as the proposal; kept for its reasoning. Where the code and this plan differ, the code and the module docs win.
 
 ## 1. What we're building
 

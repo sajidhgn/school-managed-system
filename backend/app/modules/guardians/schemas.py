@@ -15,6 +15,7 @@ WHY THE AUTH SCHEMAS LIVE HERE AND NOT IN `auth/schemas.py`
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import EmailStr, Field
@@ -303,6 +304,71 @@ class GuardianChildRead(BaseSchema):
     status: str
     relationship_type: GuardianRelationship
     can_view_results: bool
+
+
+class PortalVoucherRead(BaseSchema):
+    """One challan as a parent sees it: what it is for, when it is due, what is owed.
+
+    No line items, no receipts' staff names, no notes -- the downloadable challan
+    carries the lines, and it is the document the bank counter reads anyway.
+    """
+
+    id: UUID
+    voucher_number: str
+    academic_year: str
+    period_label: str
+    issue_date: date
+    due_date: date
+    status: str
+    """issued | partly_paid | paid | overdue. Drafts and voided challans are never
+    shown to parents."""
+    currency: str
+    total: Decimal
+    paid_total: Decimal
+    outstanding: Decimal
+
+
+class PortalFeeStatement(BaseSchema):
+    """A child's challans, newest first, with what is owed now."""
+
+    currency: str
+    outstanding_total: Decimal
+    overdue_total: Decimal
+    vouchers: list[PortalVoucherRead]
+
+
+class PortalPaperResult(BaseSchema):
+    """One subject of one exam. `marks_obtained` is None when absent or not yet marked."""
+
+    subject_name: str
+    max_marks: int
+    pass_marks: int | None
+    marks_obtained: Decimal | None
+    is_absent: bool
+    marked: bool
+
+
+class PortalExamResult(BaseSchema):
+    """A child's result in one PUBLISHED exam.
+
+    Built from the same class result sheet staff print, so the percentage and rank
+    cannot disagree with the report card. Only this child's row leaves the server:
+    `class_size` is a count, not a list.
+    """
+
+    exam_id: UUID
+    exam_name: str
+    start_date: date | None
+    end_date: date | None
+    class_name: str
+    papers: list[PortalPaperResult]
+    total_obtained: Decimal
+    total_max: int
+    percentage: Decimal
+    rank: int | None
+    """None when the child has since moved class and is no longer on that class's
+    roster, so a rank among the old classmates cannot be computed honestly."""
+    class_size: int | None
 
 
 class GuardianMessageResponse(BaseSchema):

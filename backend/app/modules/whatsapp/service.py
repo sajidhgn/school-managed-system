@@ -36,11 +36,13 @@ INTERACTIONS
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +58,13 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.modules.academics.models import SchoolClass, Section
+from app.modules.guardians.models import (
+    Guardian,
+    GuardianIdentity,
+    GuardianIdentityStatus,
+    GuardianStudent,
+)
+from app.modules.students.models import Student
 from app.modules.tenancy.models import School
 from app.modules.whatsapp.models import (
     DEFAULT_FEE_TEMPLATE,
@@ -339,6 +348,8 @@ class WhatsAppService:
         row = await self.settings.for_campus()
         values = payload.model_dump()
         values["monthly_note"] = (payload.monthly_note or "").strip() or None
+        if values["absence_alerts_enabled"] is None:
+            del values["absence_alerts_enabled"]
         if row is None:
             row = await self.settings.create(
                 **values,
@@ -352,7 +363,11 @@ class WhatsAppService:
             "whatsapp_settings",
             row.id,
             actor_id,
-            after={"fee_notice_enabled": row.fee_notice_enabled, "send_day": row.send_day},
+            after={
+                "fee_notice_enabled": row.fee_notice_enabled,
+                "send_day": row.send_day,
+                "absence_alerts_enabled": row.absence_alerts_enabled,
+            },
         )
         return self._settings_read(row, date.today())
 
@@ -491,6 +506,126 @@ class WhatsAppService:
         await self.session.flush()
         return message
 
+    # -- absence alerts -----------------------------------------------------
+
+    async def queue_absence_alerts(
+        self,
+        *,
+        school_id: UUID,
+        session_date: date,
+        absent_student_ids: Sequence[UUID],
+    ) -> int:
+        """Queue a WhatsApp message to each guardian of each absent child. Returns how many.
+
+        Called by `AttendanceService.submit` for a WHOLE-DAY register of today. The
+        campus comes from the register, not the request: an org-level principal may
+        submit with no campus selected.
+
+        WHO IS MESSAGED
+            Guardians linked to the child with `receives_notifications` (they have not
+            opted out for this child) AND `can_view_results` (they may know about this
+            child at all -- the neighbour who only collects them is not told). One
+            message per guardian per child: a parent of two absent children gets two,
+            each naming its child, because two registers are often submitted hours
+            apart.
+
+        NEVER TWICE
+            Each alert carries a dedupe key of date, child and guardian, so a register
+            reopened and submitted again queues nothing new. The keys already present
+            are read first; the partial unique index is the backstop.
+        """
+        if not absent_student_ids:
+            return 0
+        settings = (
+            await self.session.execute(
+                select(WhatsAppSettings).where(WhatsAppSettings.school_id == school_id)
+            )
+        ).scalar_one_or_none()
+        if settings is None or not settings.absence_alerts_enabled:
+            return 0
+
+        recipients = (
+            await self.session.execute(
+                select(
+                    GuardianStudent.student_id,
+                    Guardian.full_name,
+                    GuardianIdentity.id,
+                    GuardianIdentity.phone,
+                    GuardianIdentity.preferred_locale,
+                    Student.first_name,
+                    Student.last_name,
+                )
+                .join(Guardian, Guardian.id == GuardianStudent.guardian_id)
+                .join(GuardianIdentity, GuardianIdentity.id == Guardian.identity_id)
+                .join(Student, Student.id == GuardianStudent.student_id)
+                .where(
+                    GuardianStudent.student_id.in_(absent_student_ids),
+                    GuardianStudent.school_id == school_id,
+                    GuardianStudent.deleted_at.is_(None),
+                    GuardianStudent.receives_notifications.is_(True),
+                    GuardianStudent.can_view_results.is_(True),
+                    Guardian.deleted_at.is_(None),
+                    GuardianIdentity.deleted_at.is_(None),
+                    GuardianIdentity.status == GuardianIdentityStatus.ACTIVE,
+                )
+            )
+        ).all()
+        if not recipients:
+            return 0
+
+        def key(student_id: UUID, identity_id: UUID) -> str:
+            return f"absence:{session_date.isoformat()}:{student_id}:{identity_id}"
+
+        wanted = {key(r[0], r[2]) for r in recipients}
+        already = set(
+            (
+                await self.session.execute(
+                    select(WhatsAppMessage.dedupe_key).where(
+                        WhatsAppMessage.school_id == school_id,
+                        WhatsAppMessage.dedupe_key.in_(wanted),
+                    )
+                )
+            ).scalars()
+        )
+
+        school = await self.session.get(School, school_id)
+        school_name = school.name if school else ""
+        queued = 0
+        for student_id, guardian_name, identity_id, phone, locale, first, last in recipients:
+            dedupe = key(student_id, identity_id)
+            if dedupe in already:
+                continue
+            already.add(dedupe)
+            student_name = f"{first} {last}".strip()
+            self.session.add(
+                WhatsAppMessage(
+                    organization_id=settings.organization_id,
+                    school_id=school_id,
+                    group_id=None,
+                    group_name=f"{guardian_name} · parent of {student_name}"[:120],
+                    invite_code=None,
+                    recipient_phone=phone,
+                    dedupe_key=dedupe,
+                    kind=WhatsAppMessageKind.ABSENCE_ALERT,
+                    period_label=session_date.isoformat(),
+                    body=render_absence_alert(
+                        guardian=guardian_name,
+                        student=student_name,
+                        school=school_name,
+                        on=session_date,
+                        locale=locale,
+                    ),
+                    status=WhatsAppMessageStatus.QUEUED,
+                    attempts=0,
+                    created_by_user_id=None,
+                )
+            )
+            queued += 1
+        if queued:
+            await self.session.flush()
+            logger.info("absence_alerts_queued", school_id=str(school_id), count=queued)
+        return queued
+
     # -- the outbox -------------------------------------------------------
 
     async def list_messages(
@@ -617,6 +752,7 @@ class WhatsAppService:
             send_day=send_day,
             fee_template=row.fee_template if row else DEFAULT_FEE_TEMPLATE,
             monthly_note=row.monthly_note if row else None,
+            absence_alerts_enabled=row.absence_alerts_enabled if row else False,
             placeholders=list(PLACEHOLDERS),
             next_send_on=next_send,
         )
@@ -695,3 +831,25 @@ class WhatsAppService:
             before=before,
             after=after,
         )
+
+
+def render_absence_alert(*, guardian: str, student: str, school: str, on: date, locale: str) -> str:
+    """The message a parent receives, in their language (`GuardianIdentity.preferred_locale`).
+
+    Worded without a gendered verb in Urdu ("کی غیر حاضری لگی ہے"), because the
+    record does not say which form a child takes. It tells the parent what happened
+    and what to do; it does not ask them to reply, because nobody reads replies to
+    an automated alert.
+    """
+    day = f"{on:%a} {on.day} {on:%b} {on.year}"
+    if locale.startswith("ur"):
+        return (
+            f"السلام علیکم {guardian}۔\n"  # noqa: RUF001 -- Urdu full stop
+            f"آج ({day}) {school} میں {student} کی غیر حاضری لگی ہے۔\n"  # noqa: RUF001
+            "اگر آپ کو اس کا علم نہیں تھا تو براہِ کرم اسکول آفس سے رابطہ کریں۔"  # noqa: RUF001
+        )
+    return (
+        f"Assalam-o-Alaikum {guardian}.\n"
+        f"{student} was marked absent at {school} today ({day}).\n"
+        "If you were not expecting this, please contact the school office."
+    )

@@ -220,7 +220,8 @@ class ExamMark(
     __table_args__ = (
         UniqueConstraint("paper_id", "student_id", name="uq_exam_marks_paper_student"),
         CheckConstraint(
-            "(is_absent AND marks_obtained IS NULL) OR (NOT is_absent AND marks_obtained IS NOT NULL)",
+            "(is_absent AND marks_obtained IS NULL) "
+            "OR (NOT is_absent AND marks_obtained IS NOT NULL)",
             name="absent_xor_marks",
         ),
         CheckConstraint("marks_obtained IS NULL OR marks_obtained >= 0", name="marks_non_negative"),

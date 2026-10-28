@@ -1595,6 +1595,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/children/{student_id}/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One child's attendance this academic year
+         * @description Day by day with a rate per month, from submitted whole-day registers only --
+         *     the calendar staff see on the student's page.
+         */
+        get: operations["child_attendance_api_v1_portal_children__student_id__attendance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/children/{student_id}/fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One child's challans and what is owed
+         * @description Issued, part-paid, paid and overdue challans, newest first. Drafts and voided
+         *     challans are never shown to parents.
+         */
+        get: operations["child_fees_api_v1_portal_children__student_id__fees_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/children/{student_id}/fees/{voucher_id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a challan to pay at the bank
+         * @description The same printable challan the office prints, for one of the statement's bills.
+         */
+        get: operations["child_challan_pdf_api_v1_portal_children__student_id__fees__voucher_id__pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/children/{student_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One child's results in published exams
+         * @description Only exams the school has PUBLISHED, newest first, each with marks per
+         *     subject, the total, the percentage and the rank in class.
+         */
+        get: operations["child_results_api_v1_portal_children__student_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -9500,6 +9583,113 @@ export interface components {
             totp_code?: string | null;
         };
         /**
+         * PortalExamResult
+         * @description A child's result in one PUBLISHED exam.
+         *
+         *     Built from the same class result sheet staff print, so the percentage and rank
+         *     cannot disagree with the report card. Only this child's row leaves the server:
+         *     `class_size` is a count, not a list.
+         */
+        PortalExamResult: {
+            /**
+             * Exam Id
+             * Format: uuid
+             */
+            exam_id: string;
+            /** Exam Name */
+            exam_name: string;
+            /** Start Date */
+            start_date: string | null;
+            /** End Date */
+            end_date: string | null;
+            /** Class Name */
+            class_name: string;
+            /** Papers */
+            papers: components["schemas"]["PortalPaperResult"][];
+            /** Total Obtained */
+            total_obtained: string;
+            /** Total Max */
+            total_max: number;
+            /** Percentage */
+            percentage: string;
+            /** Rank */
+            rank: number | null;
+            /** Class Size */
+            class_size: number | null;
+        };
+        /**
+         * PortalFeeStatement
+         * @description A child's challans, newest first, with what is owed now.
+         */
+        PortalFeeStatement: {
+            /** Currency */
+            currency: string;
+            /** Outstanding Total */
+            outstanding_total: string;
+            /** Overdue Total */
+            overdue_total: string;
+            /** Vouchers */
+            vouchers: components["schemas"]["PortalVoucherRead"][];
+        };
+        /**
+         * PortalPaperResult
+         * @description One subject of one exam. `marks_obtained` is None when absent or not yet marked.
+         */
+        PortalPaperResult: {
+            /** Subject Name */
+            subject_name: string;
+            /** Max Marks */
+            max_marks: number;
+            /** Pass Marks */
+            pass_marks: number | null;
+            /** Marks Obtained */
+            marks_obtained: string | null;
+            /** Is Absent */
+            is_absent: boolean;
+            /** Marked */
+            marked: boolean;
+        };
+        /**
+         * PortalVoucherRead
+         * @description One challan as a parent sees it: what it is for, when it is due, what is owed.
+         *
+         *     No line items, no receipts' staff names, no notes -- the downloadable challan
+         *     carries the lines, and it is the document the bank counter reads anyway.
+         */
+        PortalVoucherRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Voucher Number */
+            voucher_number: string;
+            /** Academic Year */
+            academic_year: string;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Issue Date
+             * Format: date
+             */
+            issue_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Status */
+            status: string;
+            /** Currency */
+            currency: string;
+            /** Total */
+            total: string;
+            /** Paid Total */
+            paid_total: string;
+            /** Outstanding */
+            outstanding: string;
+        };
+        /**
          * PromotionRequest
          * @description Move a whole section up into the next year (PDF: end-of-year rollover).
          */
@@ -11882,7 +12072,7 @@ export interface components {
          * WhatsAppMessageKind
          * @enum {string}
          */
-        WhatsAppMessageKind: "fee_notice" | "custom" | "diary";
+        WhatsAppMessageKind: "fee_notice" | "custom" | "diary" | "absence_alert";
         /** WhatsAppMessageRead */
         WhatsAppMessageRead: {
             /**
@@ -11936,6 +12126,11 @@ export interface components {
             fee_template: string;
             /** Monthly Note */
             monthly_note?: string | null;
+            /**
+             * Absence Alerts Enabled
+             * @default false
+             */
+            absence_alerts_enabled?: boolean;
             /** Placeholders */
             placeholders: string[];
             /** Next Send On */
@@ -11951,6 +12146,8 @@ export interface components {
             fee_template: string;
             /** Monthly Note */
             monthly_note?: string | null;
+            /** Absence Alerts Enabled */
+            absence_alerts_enabled?: boolean | null;
         };
         /** SectionRead */
         app__modules__academics__schemas__SectionRead: {
@@ -16121,6 +16318,207 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GuardianChildRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    child_attendance_api_v1_portal_children__student_id__attendance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentAttendanceCalendar"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    child_fees_api_v1_portal_children__student_id__fees_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalFeeStatement"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    child_challan_pdf_api_v1_portal_children__student_id__fees__voucher_id__pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+                voucher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    child_results_api_v1_portal_children__student_id__results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalExamResult"][];
                 };
             };
             /** @description Bad Request */

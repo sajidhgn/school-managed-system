@@ -39,6 +39,7 @@ import type {
   WhatsAppMessageStatus,
 } from "@/lib/api/types";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { AbsenceAlertsPanel } from "./absence-alerts-panel";
 import { ConnectionCard } from "./connection-card";
 import { DiaryAgentPanel } from "./diary-agent-panel";
 import { GroupFormDialog } from "./group-form-dialog";
@@ -65,6 +66,7 @@ export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canMana
           <TabsTrigger value="groups">Groups</TabsTrigger>
           <TabsTrigger value="fee-notice">Monthly fee notice</TabsTrigger>
           <TabsTrigger value="diary">Diary</TabsTrigger>
+          <TabsTrigger value="absence">Absence alerts</TabsTrigger>
           {canSend && <TabsTrigger value="send">Send message</TabsTrigger>}
           <TabsTrigger value="outbox">Outbox</TabsTrigger>
         </TabsList>
@@ -76,6 +78,9 @@ export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canMana
         </TabsContent>
         <TabsContent value="diary">
           <DiaryAgentPanel canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="absence">
+          <AbsenceAlertsPanel canManage={canManage} />
         </TabsContent>
         {canSend && (
           <TabsContent value="send">
@@ -484,6 +489,8 @@ function messageKindLabel(message: WhatsAppMessageRead): string {
       return `Fee notice ${message.period_label ?? ""}`;
     case "diary":
       return `Diary${by}`;
+    case "absence_alert":
+      return `Absence alert ${message.period_label ?? ""}`;
     default:
       return `Custom${by}`;
   }

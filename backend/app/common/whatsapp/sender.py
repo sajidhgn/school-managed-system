@@ -40,6 +40,7 @@ from uuid import UUID
 from app.common.whatsapp.waha import WahaClient, WahaError, session_name
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.core.phone import mask_phone
 
 logger = get_logger(__name__)
 
@@ -61,10 +62,24 @@ class WhatsAppGroupMessage:
     """Which campus's linked number posts it -- WAHA has one session per campus."""
 
 
+@dataclass(frozen=True, slots=True)
+class WhatsAppDirectMessage:
+    """One message to one person -- an absence alert to a parent, never a group."""
+
+    phone: str
+    """E.164, as stored on the guardian identity."""
+    body: str
+    purpose: str = "generic"
+    school_id: UUID | None = None
+    """Which campus's linked number sends it -- WAHA has one session per campus."""
+
+
 class WhatsAppSender(Protocol):
     """What the dispatcher depends on. Raises on failure; returns on success."""
 
     async def send(self, message: WhatsAppGroupMessage) -> None: ...
+
+    async def send_direct(self, message: WhatsAppDirectMessage) -> None: ...
 
 
 class ConsoleWhatsAppSender:
@@ -81,12 +96,25 @@ class ConsoleWhatsAppSender:
             body=message.body,
         )
 
+    async def send_direct(self, message: WhatsAppDirectMessage) -> None:
+        # The number is masked even here: a log aggregator is read by more people
+        # than the guardian record is.
+        logger.info(
+            "whatsapp_console_direct",
+            to=mask_phone(message.phone),
+            purpose=message.purpose,
+            body=message.body,
+        )
+
 
 class NullWhatsAppSender:
     """Accepts and discards. For a staging copy that must not post to real groups."""
 
     async def send(self, message: WhatsAppGroupMessage) -> None:
         logger.info("whatsapp_suppressed", group_code=message.group_code, purpose=message.purpose)
+
+    async def send_direct(self, message: WhatsAppDirectMessage) -> None:
+        logger.info("whatsapp_suppressed", to=mask_phone(message.phone), purpose=message.purpose)
 
 
 class PyWhatKitSender:
@@ -117,6 +145,23 @@ class PyWhatKitSender:
             "whatsapp_pywhatkit_dispatch", group_code=message.group_code, purpose=message.purpose
         )
 
+    async def send_direct(self, message: WhatsAppDirectMessage) -> None:
+        await asyncio.to_thread(self._send_direct_blocking, message)
+
+    def _send_direct_blocking(self, message: WhatsAppDirectMessage) -> None:
+        import pywhatkit
+
+        pywhatkit.sendwhatmsg_instantly(
+            message.phone,
+            message.body,
+            wait_time=self.wait_seconds,
+            tab_close=True,
+            close_time=5,
+        )
+        logger.info(
+            "whatsapp_pywhatkit_direct", to=mask_phone(message.phone), purpose=message.purpose
+        )
+
 
 class WahaSender:
     """Posts through the campus's WAHA session. Headless; runs anywhere WAHA is reachable.
@@ -135,6 +180,19 @@ class WahaSender:
         chat_id = message.chat_id or await self.client.group_chat_id(session, message.group_code)
         await self.client.send_text(session, chat_id, message.body)
         logger.info("whatsapp_waha_dispatch", chat_id=chat_id, purpose=message.purpose)
+
+    async def send_direct(self, message: WhatsAppDirectMessage) -> None:
+        """Checked first: WAHA accepts a text to a number with no WhatsApp and the
+        message simply never arrives. Failing here leaves a FAILED row the office
+        can see in the outbox, instead of a SENT one nobody received."""
+        if message.school_id is None:
+            raise WahaError("No campus on the message; cannot pick a WhatsApp session.")
+        session = session_name(message.school_id)
+        chat_id = await self.client.check_number(session, message.phone)
+        if chat_id is None:
+            raise WahaError("This number is not on WhatsApp.")
+        await self.client.send_text(session, chat_id, message.body)
+        logger.info("whatsapp_waha_direct", to=mask_phone(message.phone), purpose=message.purpose)
 
 
 def build_whatsapp_sender(settings: Settings | None = None) -> WhatsAppSender:

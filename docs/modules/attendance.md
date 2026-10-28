@@ -30,7 +30,7 @@ Each was considered and deferred. None requires a table rewrite to add.
 | Excluded | Why, and what it would need |
 | --- | --- |
 | A holiday / working-days calendar | The percentage denominator is "registers actually submitted", which is correct without one (§7). A `school_days` table is what a *timetable* needs, and it should land with the timetable rather than being half-built here. |
-| Absence notifications (WhatsApp/SMS) | The messaging transport does not exist yet. `AttendanceStatus.ABSENT` on a SUBMITTED register is the trigger; nothing about the schema changes when a sender is added. |
+| ~~Absence notifications~~ | **Shipped 2026-10-28** as WhatsApp absence alerts: submitting today's whole-day register queues a one-to-one message to each absent child's guardians, if the campus has turned alerts on. See `docs/modules/whatsapp.md` ("Absence alerts"). No attendance table changed. |
 | Leave applications | An approval workflow with its own states and actors. Today a school records the outcome (`excused`), not the request. |
 | Staff attendance | Different subject, different table. Staff are `memberships`, not `students`, and conflating them would put a teacher's payroll record behind `student:read`. |
 | Auto-marking from a device | Needs an authentication story for the device. The write path it would use already exists. |

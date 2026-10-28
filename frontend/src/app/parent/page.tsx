@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { GraduationCap } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, GraduationCap } from "lucide-react";
 
-import { LocaleSwitcher } from "@/components/locale-switcher";
-import { LogoMark } from "@/components/marketing/logo";
 import { Card, CardContent } from "@/components/ui/card";
 import { serverGet } from "@/lib/api/server";
 import type { GuardianChildRead } from "@/lib/api/types";
@@ -10,7 +9,7 @@ import { requireGuardian } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 import { formatDate } from "@/lib/utils";
 
-import { ParentSignOutButton } from "./sign-out-button";
+import { ParentHeader } from "./parent-header";
 
 export const metadata: Metadata = { title: "My children" };
 export const dynamic = "force-dynamic";
@@ -32,18 +31,7 @@ export default async function ParentHomePage() {
 
   return (
     <div className="min-h-svh bg-muted/40">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex h-14 w-full max-w-2xl items-center justify-between gap-3 px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <LogoMark className="size-7 shrink-0" />
-            <span className="truncate font-semibold">{guardian.organization_name}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <LocaleSwitcher />
-            <ParentSignOutButton />
-          </div>
-        </div>
-      </header>
+      <ParentHeader organizationName={guardian.organization_name} />
 
       <main id="main" className="mx-auto w-full max-w-2xl px-4 py-6">
         <p className="text-sm text-muted-foreground">{t.parent.portalName}</p>
@@ -60,8 +48,11 @@ export default async function ParentHomePage() {
           <ul className="grid gap-3">
             {children.map((child) => (
               <li key={child.student_id}>
-                <Card>
-                  <CardContent className="flex items-start gap-3 p-4">
+                <Card className="transition-colors hover:border-primary">
+                  <Link
+                    href={`/parent/children/${child.student_id}`}
+                    className="flex items-start gap-3 p-4"
+                  >
                     <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
                       <GraduationCap className="size-5" aria-hidden />
                     </span>
@@ -84,15 +75,19 @@ export default async function ParentHomePage() {
                           <dd>{formatDate(child.date_of_birth)}</dd>
                         </div>
                       </dl>
+                      <p className="mt-3 text-sm font-medium text-primary">{t.parent.viewChild}</p>
                     </div>
-                  </CardContent>
+                    <ChevronRight
+                      className="mt-1 size-5 shrink-0 text-muted-foreground rtl:rotate-180"
+                      aria-hidden
+                    />
+                  </Link>
                 </Card>
               </li>
             ))}
           </ul>
         )}
 
-        <p className="mt-6 text-center text-sm text-muted-foreground">{t.parent.moreSoon}</p>
       </main>
     </div>
   );

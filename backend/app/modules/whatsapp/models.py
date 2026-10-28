@@ -12,8 +12,9 @@ RESPONSIBILITY
       * `whatsapp_settings`  one row per campus: is the monthly notice on, on which
                              day, and the template and standing note it is built from;
       * `whatsapp_messages`  the OUTBOX -- every post, queued, then sent or failed:
-                             fee notices, custom notices, and the diaries teachers
-                             send through the diary agent.
+                             fee notices, custom notices, the diaries teachers
+                             send through the diary agent, and absence alerts --
+                             the one kind sent to a single parent, not a group.
 
 WHY AN OUTBOX AND NOT A SEND
     The configured transport (`common/whatsapp/sender.py`) may be pywhatkit, which
@@ -75,6 +76,8 @@ class WhatsAppMessageKind(StrEnum):
     """Anything the office typed and chose groups for."""
     DIARY = "diary"
     """The day's diary a teacher photographed and confirmed (`modules/diary_agent`)."""
+    ABSENCE_ALERT = "absence_alert"
+    """To ONE guardian: their child was marked absent on today's whole-day register."""
 
 
 class WhatsAppMessageStatus(StrEnum):
@@ -152,6 +155,13 @@ class WhatsAppSettings(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMix
     """The office's standing "custom message" appended under the fee notice every
     month -- holidays, uniform reminders, PTM date. Blank = nothing appended."""
 
+    absence_alerts_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    """Message each absent child's guardians when a whole-day register is submitted.
+    OFF until the office turns it on, for the fee notice's reason -- and because a
+    burst of automated one-to-one messages is what gets a number flagged."""
+
     __table_args__ = (
         UniqueConstraint("school_id", name="uq_whatsapp_settings_school_id"),
         CheckConstraint("send_day BETWEEN 1 AND 28", name="send_day_in_month"),
@@ -170,10 +180,16 @@ class WhatsAppMessage(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixi
         index=True,
     )
     group_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    """Snapshot, so the history still reads correctly after a group is renamed or removed."""
-    invite_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    """Snapshot, so the history still reads correctly after a group is renamed or removed.
+    For a one-to-one message, who it is for ("Ayesha Khan · parent of Ali Khan")."""
+    invite_code: Mapped[str | None] = mapped_column(String(64))
     """Snapshot of where it is going. A queued message keeps its destination even if
-    the group's link is changed before the dispatcher runs."""
+    the group's link is changed before the dispatcher runs. Null for a one-to-one
+    message, which goes to `recipient_phone` instead."""
+    recipient_phone: Mapped[str | None] = mapped_column(String(20))
+    """E.164, for a message to one person rather than a group (absence alerts)."""
+    dedupe_key: Mapped[str | None] = mapped_column(String(120))
+    """Unique per campus when set: what makes queueing the same alert twice a no-op."""
 
     kind: Mapped[WhatsAppMessageKind] = mapped_column(
         str_enum(WhatsAppMessageKind, name="kind"), nullable=False
@@ -207,4 +223,10 @@ class WhatsAppMessage(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixi
         # cannot post October's reminder to 5-A twice. Partial, created by hand in
         # the migration:
         #   UNIQUE (group_id, period_label) WHERE kind = 'fee_notice'
+        # And the general form, used by absence alerts:
+        #   UNIQUE (school_id, dedupe_key) WHERE dedupe_key IS NOT NULL
+        CheckConstraint(
+            "invite_code IS NOT NULL OR recipient_phone IS NOT NULL",
+            name="destination_present",
+        ),
     )

@@ -367,6 +367,10 @@ async def seed_demo(session: AsyncSession, settings: Settings) -> dict[str, Any]
             .scalars()
             .first()
         )
+        if school is None:
+            raise SystemExit(
+                "The demo organization has no school. Reset the database and seed again."
+            )
         academics = await _seed_academics_demo(session, organization.id, school.id)
         await reconcile_usage(session, organization.id)
         return {

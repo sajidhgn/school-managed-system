@@ -84,7 +84,7 @@ export function useSaveWhatsAppSettings() {
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.whatsapp.settings, settings);
       void queryClient.invalidateQueries({ queryKey: ["whatsapp", "preview"] });
-      toast.success("Fee notice settings saved");
+      toast.success("WhatsApp settings saved");
     },
     onError: (error) => toast.error("Couldn't save the settings", errorMessage(error)),
   });

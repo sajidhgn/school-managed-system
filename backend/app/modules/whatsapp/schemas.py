@@ -47,9 +47,13 @@ class WhatsAppSettingsWrite(BaseSchema):
     send_day: int = Field(ge=1, le=28)
     fee_template: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
     monthly_note: str | None = Field(default=None, max_length=MAX_MESSAGE_LENGTH)
+    absence_alerts_enabled: bool | None = None
+    """Omitted (or null) leaves it as it is, so a client that only edits the fee
+    notice cannot switch absence alerts off by not knowing about them."""
 
 
 class WhatsAppSettingsRead(WhatsAppSettingsWrite):
+    absence_alerts_enabled: bool = False
     placeholders: list[str]
     """What `fee_template` may use, so the form can list them without hardcoding."""
     next_send_on: str | None
