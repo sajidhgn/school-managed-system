@@ -33,6 +33,7 @@ from app.modules.fees.models import (
     FeeLineType,
     FeePayment,
     FeePaymentStatus,
+    FeeSiblingRule,
     FeeStructure,
     FeeStructureItem,
     FeeStructureStatus,
@@ -289,6 +290,23 @@ class StudentFeeAssignmentRepository(BaseRepository[StudentFeeAssignment]):
             StudentFeeAssignment.academic_year == academic_year,
             StudentFeeAssignment.head_id == head_id,
         )
+
+    async def get_removed_for_student(
+        self, student_id: UUID, academic_year: str, head_id: UUID
+    ) -> StudentFeeAssignment | None:
+        """The soft-deleted arrangement for this head and year, if there is one.
+
+        `uq_student_fee_assignments_student_year_head` covers removed rows too, so
+        putting a child back on a head they were taken off must RESTORE that row --
+        inserting a second one is a unique violation.
+        """
+        stmt = self._base_select(include_deleted=True).where(
+            StudentFeeAssignment.student_id == student_id,
+            StudentFeeAssignment.academic_year == academic_year,
+            StudentFeeAssignment.head_id == head_id,
+            StudentFeeAssignment.deleted_at.is_not(None),
+        )
+        return (await self.session.execute(stmt)).scalars().first()
 
     async def for_students(
         self, student_ids: Sequence[UUID], academic_year: str
@@ -981,6 +999,50 @@ class FeeConcessionRepository(BaseRepository[FeeConcession]):
             .order_by(FeeConcession.sort_order, FeeConcession.name)
         )
         return (await self.session.execute(stmt)).scalars().all()
+
+
+class FeeSiblingRuleRepository(BaseRepository[FeeSiblingRule]):
+    """The one sibling rule per campus."""
+
+    model = FeeSiblingRule
+
+    async def get_current(self) -> FeeSiblingRule | None:
+        """This campus's rule, with its head and schemes loaded."""
+        stmt = (
+            self._base_select()
+            .options(
+                selectinload(FeeSiblingRule.head),
+                selectinload(FeeSiblingRule.second_concession),
+                selectinload(FeeSiblingRule.third_concession),
+                selectinload(FeeSiblingRule.later_concession),
+            )
+            # Re-read after an update in the same session, so the schemes reflect
+            # the ids just written rather than the ones loaded before.
+            .execution_options(populate_existing=True)
+        )
+        return (await self.session.execute(stmt)).scalars().first()
+
+    async def head_usage_count(self, head_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(FeeSiblingRule)
+            .where(FeeSiblingRule.head_id == head_id)
+        )
+        scoped = _scope(stmt, FeeSiblingRule.school_id)
+        return int((await self.session.execute(scoped)).scalar_one() or 0)
+
+    async def concession_usage_count(self, concession_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(FeeSiblingRule)
+            .where(
+                (FeeSiblingRule.second_concession_id == concession_id)
+                | (FeeSiblingRule.third_concession_id == concession_id)
+                | (FeeSiblingRule.later_concession_id == concession_id)
+            )
+        )
+        scoped = _scope(stmt, FeeSiblingRule.school_id)
+        return int((await self.session.execute(scoped)).scalar_one() or 0)
 
 
 class LateFeePolicyRepository(BaseRepository[LateFeePolicy]):

@@ -75,6 +75,7 @@ from app.modules.fees.repository import (
     FeeHeadRepository,
     FeeLedgerRepository,
     FeePaymentRepository,
+    FeeSiblingRuleRepository,
     FeeStructureItemRepository,
     FeeStructureRepository,
     FeeVoucherItemRepository,
@@ -218,6 +219,7 @@ class FeeService:
         self.billing_schedules = FeeBillingScheduleRepository(session)
         self.concessions = FeeConcessionRepository(session)
         self.late_fee_policies = LateFeePolicyRepository(session)
+        self.sibling_rules = FeeSiblingRuleRepository(session)
         self.ledger = FeeLedgerRepository(session)
 
     # =====================================================================
@@ -303,7 +305,10 @@ class FeeService:
         # bills carried-forward dues under a head, unattended, once a month. Deleting
         # it would break the run in the middle of the night with nobody watching.
         in_schedules = await self.billing_schedules.head_usage_count(head_id)
-        if in_structures or on_students or in_policies or in_schedules:
+        # The fifth: the sibling rule proposes remissions off this head, and a rule
+        # pointing at a deleted head would propose them against nothing.
+        in_sibling_rule = await self.sibling_rules.head_usage_count(head_id)
+        if in_structures or on_students or in_policies or in_schedules or in_sibling_rule:
             where = []
             if in_structures:
                 where.append(f"{in_structures} fee structure line(s)")
@@ -313,6 +318,8 @@ class FeeService:
                 where.append(f"{in_policies} late fee policy(ies)")
             if in_schedules:
                 where.append(f"{in_schedules} billing schedule(s)")
+            if in_sibling_rule:
+                where.append("the sibling rule")
             raise ConflictError(
                 f"This fee head is used by {' and '.join(where)}. "
                 "Deactivate it instead, or remove those first."
@@ -834,8 +841,25 @@ class FeeService:
                     code="CONCESSION_INACTIVE",
                 )
 
+        await self.record_assignment(student, head, payload, actor_id=actor_id)
+        return await self.get_student_fee_profile(student_id, payload.academic_year)
+
+    async def record_assignment(
+        self,
+        student: Student,
+        head: FeeHead,
+        payload: StudentFeeAssignmentInput,
+        *,
+        actor_id: UUID,
+    ) -> None:
+        """Write one arrangement and its audit row. Callers have resolved and checked
+        the student, the head and any concession.
+
+        Shared by the arrangement route and the sibling review's apply, so a sibling
+        discount is recorded exactly like one typed on the student's page.
+        """
         existing = await self.assignments.get_for_student(
-            student_id, payload.academic_year, payload.head_id
+            student.id, payload.academic_year, head.id
         )
         # WRITTEN AS ONE DICT for both branches. The create and the update must agree
         # on every value column: a mode change from ADDED to DISCOUNT that updated
@@ -850,16 +874,24 @@ class FeeService:
             "note": payload.note,
         }
         if existing is None:
-            await self.assignments.create(
-                student_id=student.id,
-                head_id=head.id,
-                academic_year=payload.academic_year,
-                **values,
-                # Inherited from the student, so an arrangement can never end up
-                # scoped differently from the child it belongs to.
-                organization_id=student.organization_id,
-                school_id=student.school_id,
+            removed = await self.assignments.get_removed_for_student(
+                student.id, payload.academic_year, head.id
             )
+            if removed is not None:
+                # Restored rather than inserted beside it: the unique key covers
+                # removed rows, and the restored row keeps its history.
+                await self.assignments.update(removed, deleted_at=None, **values)
+            else:
+                await self.assignments.create(
+                    student_id=student.id,
+                    head_id=head.id,
+                    academic_year=payload.academic_year,
+                    **values,
+                    # Inherited from the student, so an arrangement can never end up
+                    # scoped differently from the child it belongs to.
+                    organization_id=student.organization_id,
+                    school_id=student.school_id,
+                )
             before: dict[str, Any] | None = None
         else:
             before = {
@@ -873,7 +905,7 @@ class FeeService:
         await self._audit(
             AuditAction.STUDENT_FEE_ASSIGNED,
             entity_type="student",
-            entity_id=student_id,
+            entity_id=student.id,
             actor_id=actor_id,
             before=before,
             after={
@@ -889,11 +921,10 @@ class FeeService:
         )
         logger.info(
             "student_fee_assigned",
-            student_id=str(student_id),
+            student_id=str(student.id),
             head_id=str(head.id),
             mode=payload.mode.value,
         )
-        return await self.get_student_fee_profile(student_id, payload.academic_year)
 
     async def remove_student_assignment(
         self, student_id: UUID, head_id: UUID, academic_year: str, *, actor_id: UUID
@@ -908,24 +939,33 @@ class FeeService:
         if assignment is None:
             raise NotFoundError("This student has no arrangement for that fee head.")
 
+        await self.drop_assignment(assignment, actor_id=actor_id)
+        return await self.get_student_fee_profile(student_id, academic_year)
+
+    async def drop_assignment(self, assignment: StudentFeeAssignment, *, actor_id: UUID) -> None:
+        """Soft-delete one arrangement and audit it. Shared with the sibling review."""
         before = {
-            "head_id": str(head_id),
+            "head_id": str(assignment.head_id),
             "mode": assignment.mode.value,
             "amount": str(assignment.amount),
-            "academic_year": academic_year,
+            "concession_id": (str(assignment.concession_id) if assignment.concession_id else None),
+            "academic_year": assignment.academic_year,
         }
         await self.assignments.soft_delete(assignment)
 
         await self._audit(
             AuditAction.STUDENT_FEE_UNASSIGNED,
             entity_type="student",
-            entity_id=student_id,
+            entity_id=assignment.student_id,
             actor_id=actor_id,
             before=before,
             after=None,
         )
-        logger.info("student_fee_unassigned", student_id=str(student_id), head_id=str(head_id))
-        return await self.get_student_fee_profile(student_id, academic_year)
+        logger.info(
+            "student_fee_unassigned",
+            student_id=str(assignment.student_id),
+            head_id=str(assignment.head_id),
+        )
 
     async def get_student_fee_profile(
         self, student_id: UUID, academic_year: str
@@ -2032,6 +2072,10 @@ class FeeService:
             raise ConflictError(
                 f"{on_students} student arrangement(s) use this concession. "
                 "Deactivate it instead, or move those students off it first."
+            )
+        if await self.sibling_rules.concession_usage_count(concession_id):
+            raise ConflictError(
+                "The sibling rule uses this concession. Choose another scheme there first."
             )
 
         await self.concessions.soft_delete(concession)

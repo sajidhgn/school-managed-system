@@ -15,7 +15,10 @@ The printed challan was rebuilt 2026-09-25 to the ruled bank-counter layout scho
 in this market already use, with the payment accounts and the copy list moved onto
 the campus row (`schools.challan_design`) and a combined print that puts a term of
 months on one page (§9, §9.1).
-Last updated: 2026-09-25
+
+Sibling remission shipped 2026-10-28 on top of the guardian registry: a campus rule
+proposes a scheme for each younger child in a family, and staff apply it (§5.2d).
+Last updated: 2026-10-28
 
 `IMPLEMENTATION_ROADMAP.md` ("Guidance for every future school module") requires an
 agreed module specification before any academic module is built, and lists the
@@ -62,12 +65,17 @@ existing column changed meaning. The table below is the running record.
 | Automatic late fees / fines | `fee_late_fee_policies` holds the rule; the run mints each fine as its OWN challan rather than rewriting the overdue one, which is the only way to add a penalty without breaking Rule 1 (§5.6). |
 | Arrears carry-forward and a running ledger | `student_ledger_entries`, append-only, plus `fee_vouchers.arrears_brought_forward` to snapshot what a challan was printed with. The carried balance is PRINTED and deliberately NOT billed (§5.7). |
 
+### Closed since slice 2
+
+| Was excluded | How it landed |
+| --- | --- |
+| Sibling / family grouping | Built on the guardian registry, not a surname match: children who share a father, mother or legal guardian are one family. A campus rule (`fee_sibling_rules`) proposes a scheme per position and staff apply it as ordinary DISCOUNT arrangements (§5.2d). No existing table changed. |
+
 ### Still open
 
 | Excluded | Why, and what unblocks it |
 | --- | --- |
 | Online payment by parents | Blocked on the same open product decision as SaaS billing (JazzCash / Easypaisa / Stripe). Nothing in this module blocks it: `PaymentMethod.ONLINE` and the `reference` column exist, and a gateway callback records a payment through the same `record_payment` staff use — which now also writes the ledger entry, so the parent-facing balance follows for free. |
-| Sibling / family grouping | Needs a guardian aggregate. `students/models.py` defers it until parent logins arrive, and a `guardians` module is in flight; sibling remission should be built on it rather than on a surname match, which is what every school's first attempt does and what breaks on the first blended family. |
 
 ### Excluded by design, not deferred
 
@@ -83,7 +91,7 @@ existing column changed meaning. The table below is the running record.
 | Principal | `principal` (org-level) | Everything, including voiding vouchers and reversing payments. |
 | Accountant | `accountant` (school-scoped) | Defines heads and structures, generates and issues vouchers, records payments, prints challans. **Cannot** void or reverse. |
 | Teacher | `teacher` | Nothing. Fees are deliberately absent from the teacher default set. |
-| Parent / student | — | No access. There is no portal in this slice; the challan reaches them on paper. |
+| Parent | Parent portal | Reads their own children's issued, part-paid, paid and overdue challans and downloads the challan PDF (`guardians/portal_service.py`). Never writes. |
 
 **Separation of duties is the reason `fee:void` is its own permission.** The person
 who records money coming in must not be the person who can make a record of money
@@ -319,6 +327,65 @@ and the second is the one that matters:
 2. A remission the family cannot see is one they were not told about. Quietly
    lowering the line is indistinguishable from a repricing, and the scholarship stops
    being something the school gets credit for.
+
+### 5.2d Sibling remission — `fee_sibling_rules`
+
+A family's younger children get a discount: second child 10% off tuition, third
+child 15%, and so on.
+
+**Who is a family.** Children who share a **father, mother or legal guardian** in
+the guardian registry. A shared grandparent, uncle or the neighbour who does the
+school run links children too, but not as a family paying one set of fees, so those
+links are ignored. Families join transitively: half-brothers who each share one
+parent with a third child are one household. Only **active** students placed in a
+section count.
+
+**Who pays in full.** The child in the family's **highest class** (`classes.level`).
+Class rather than date of birth, because every placed student has a class and a
+birth date is optional. Ties go to the earlier admission (`enrolled_on`, then record
+creation). The rest are the 2nd, 3rd, 4th child in that order.
+
+**The rule.** One row per campus: the head the discount comes off (one head, usually
+Tuition) and a concession scheme for the 2nd child, the 3rd child, and the 4th and
+later. A blank position takes the one before it, so a flat "every later child 10%"
+is just the 2nd-child scheme. The rate stays on the scheme (§5.2c), so revising it is
+one edit, and the concession list's `student_count` still answers what the sibling
+discount costs.
+
+**The rule proposes; staff apply.** Saving the rule changes no child's fees. A
+mistyped guardian link would otherwise discount a stranger without anyone looking.
+`GET /fees/siblings` lists every family with a child at this campus and what the
+rule would do for each child:
+
+| Action | Meaning |
+| --- | --- |
+| `full_fee` | The highest class; nothing to do |
+| `apply` | Qualifies, no arrangement on the head yet |
+| `change` | On a different sibling scheme than their position now gives (an elder child left) |
+| `ok` | Already on the right scheme |
+| `remove` | On a sibling scheme but now pays in full, or has no brother or sister enrolled (listed under `no_longer_eligible`) |
+| `conflict` | Another arrangement holds the head (a staff-child remission, an agreed rate, an exclusion), or the scheme is retired. Never overwritten; a person decides on the student's page |
+| `other_campus` | A sibling at another campus: counted for positions, discounted by that campus's own rule |
+
+`POST /fees/siblings/apply` takes student ids, **recomputes** each proposal (the
+client never names a scheme), and writes it through the same arrangement path as the
+student page, so the audit trail reads `student_fee.assigned` /
+`student_fee.unassigned` like any other discount, with the note "Sibling discount:
+2nd child". Skips come back with their reason. From the next generated challan;
+issued challans are never restated.
+
+**Across campuses.** The guardian record belongs to the organization, so a son at
+the boys' campus and a daughter at the girls' campus are one family. The review shows
+a sibling at another campus by name, class and campus only, which is why the review
+and apply are `fee:manage` rather than `fee:read`.
+
+**Guards.** The head and the schemes the rule names cannot be deleted while it names
+them (§5.1, §5.2c). Turning the rule off (`DELETE /fees/sibling-rule`) leaves children
+on their sibling schemes; take them off from their own page.
+
+**Fixed alongside.** `uq_student_fee_assignments_student_year_head` covers removed
+rows too, so taking an arrangement off and putting the same head back returned a
+409. Re-adding now restores the removed row.
 
 ### 5.3 Voucher (challan) — `fee_vouchers` + `fee_voucher_items`
 
@@ -617,7 +684,8 @@ is payable and `arrears_brought_forward` keeps only what could not be absorbed. 
 | `fee_structures` | `class_id`, `academic_year`, `name`, `status` | `(school_id, class_id, academic_year)` |
 | `stationery_items` | `code`, `name`, `category`, `unit`, `unit_price ≥ 0`, `is_active` | `(school_id, code)` |
 | `fee_structure_items` | `structure_id`, `line_type`, `quantity > 0`, `unit_price ≥ 0`, `amount ≥ 0` | `(structure_id, head_id)` where not null; `(structure_id, stationery_item_id)` where not null |
-| `student_fee_assignments` | `student_id`, `head_id`, `academic_year`, `mode` | `(student_id, academic_year, head_id)` |
+| `student_fee_assignments` | `student_id`, `head_id`, `academic_year`, `mode` | `(student_id, academic_year, head_id)`, removed rows included (a re-add restores the row) |
+| `fee_sibling_rules` | `head_id`, `second_concession_id` | `(school_id)` |
 | `fee_vouchers` | `student_id`, `voucher_number`, `academic_year`, `period_label`, `issue_date`, `due_date`, `status`, `currency`, totals | `(school_id, voucher_number)`; `(school_id, student_id, academic_year, period_label)` where not void |
 | `fee_voucher_items` | `voucher_id`, `line_type`, `line_name`, `quantity > 0`, `unit_price ≥ 0`, `amount ≥ 0`, `discount_amount ≥ 0` | `(voucher_id, head_id)` where not null; `(voucher_id, stationery_item_id)` where not null |
 | `fee_payments` | `voucher_id`, `receipt_number`, `amount > 0`, `currency`, `method`, `received_on`, `status` | `(school_id, receipt_number)` |
@@ -785,6 +853,7 @@ Every mutation writes an `audit_logs` row in the same transaction as the change.
 | `fee_payment.recorded` | `fee_payment` | receipt number, amount, method |
 | `fee_payment.reversed` | `fee_payment` | reason, amount |
 | `fee_concession.created` / `.updated` / `.deleted` | `fee_concession` | both sides of a rate change |
+| `fee_sibling_rule.set` / `.deleted` | `fee_sibling_rule` | head and the scheme per position, before and after. Applying the rule writes one `student_fee.assigned` / `.unassigned` per child |
 | `fee_billing_schedule.set` | `fee_billing_schedule` | day, due offset, and both dangerous switches — drafts-or-issued and carry-forward |
 | `fee_billing_run.completed` | `fee_billing_schedule` | period, structures billed, created, skipped, whether it was forced from the screen. **`actor_user_id` is NULL** on the nightly pass, for the same reason the late-fee run's is: *"who billed us?"* is answered by *"the schedule did"* |
 | `fee_late_fee_policy.set` / `.deleted` | `fee_late_fee_policy` | kind, value, grace, recurrence, cap |

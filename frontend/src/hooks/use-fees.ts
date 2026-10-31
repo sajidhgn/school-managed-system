@@ -13,13 +13,17 @@ import {
 } from "@/lib/api/resources/fees";
 import type {
   FeeBillingScheduleInput,
+  FeeConcessionCreate,
+  FeeConcessionUpdate,
   FeeHeadCreate,
   FeeHeadUpdate,
   FeePaymentCreate,
+  FeeSiblingRuleInput,
   FeeStructureCreate,
   FeeStructureItemInput,
   FeeStructureStationeryInput,
   PageParams,
+  SiblingApplyRequest,
   StationeryItemCreate,
   StationeryItemUpdate,
   StudentFeeAssignmentInput,
@@ -107,6 +111,36 @@ export function useBillingSchedule(academicYear: string) {
     queryKey: queryKeys.fees.billingSchedule(academicYear),
     queryFn: () => feesApi.billingSchedule.get(academicYear),
     enabled: Boolean(academicYear),
+  });
+}
+
+export function useConcessions(params: PageParams & { is_active?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.fees.concessions(params),
+    queryFn: () => feesApi.concessions.list(params),
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** `null` until the campus sets a rule up — an empty form, not an error. */
+export function useSiblingRule() {
+  return useQuery({
+    queryKey: queryKeys.fees.siblingRule,
+    queryFn: () => feesApi.siblings.rule(),
+  });
+}
+
+/**
+ * Families with a child at this campus and what the rule proposes for each.
+ *
+ * Only enabled once a rule exists: without one the API answers 422, and the screen
+ * shows the rule form instead of an error.
+ */
+export function useSiblingReview(academicYear: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.fees.siblings(academicYear),
+    queryFn: () => feesApi.siblings.review(academicYear),
+    enabled: enabled && Boolean(academicYear),
   });
 }
 
@@ -330,6 +364,88 @@ export function useRunBillingSchedule() {
           ]
         : ["Nothing to generate", result.reason ?? undefined],
     failure: "Couldn't run the billing",
+  });
+}
+
+export function useCreateConcession() {
+  return useFeeMutation((body: FeeConcessionCreate) => feesApi.concessions.create(body), {
+    success: (concession) => ["Concession created", concession.name],
+    failure: "Couldn't create that concession",
+  });
+}
+
+/**
+ * Edit, re-rate, retire or restore a scheme.
+ *
+ * The success copy says who the new rate reaches, because the person changing
+ * "Staff child" from 40% to 50% needs to know it moves every child on it — and
+ * that challans already issued do not move.
+ */
+export function useUpdateConcession() {
+  return useFeeMutation(
+    ({ id, body }: { id: string; body: FeeConcessionUpdate }) =>
+      feesApi.concessions.update(id, body),
+    {
+      success: (concession) => [
+        "Concession updated",
+        `Every child on ${concession.name} gets this from the next challan. Issued challans are unchanged.`,
+      ],
+      failure: "Couldn't update that concession",
+    },
+  );
+}
+
+export function useDeleteConcession() {
+  return useFeeMutation((id: string) => feesApi.concessions.remove(id), {
+    success: () => ["Concession deleted"],
+    failure: "Couldn't delete that concession",
+  });
+}
+
+export function useSetSiblingRule() {
+  return useFeeMutation((body: FeeSiblingRuleInput) => feesApi.siblings.setRule(body), {
+    success: () => [
+      "Sibling rule saved",
+      "No child's fees changed. Review the families below and apply what you agree with.",
+    ],
+    failure: "Couldn't save the sibling rule",
+  });
+}
+
+export function useDeleteSiblingRule() {
+  return useFeeMutation<void, void>(() => feesApi.siblings.removeRule(), {
+    success: () => [
+      "Sibling rule turned off",
+      "Children already on a sibling scheme keep it until you take them off.",
+    ],
+    failure: "Couldn't turn the sibling rule off",
+  });
+}
+
+/**
+ * Apply the chosen proposals.
+ *
+ * Reports skips in the toast, because a child left alone (another discount already
+ * on the head, a retired scheme) looks exactly like one that was applied otherwise.
+ */
+export function useApplySiblings() {
+  return useFeeMutation((body: SiblingApplyRequest) => feesApi.siblings.apply(body), {
+    success: (result) => {
+      const done = result.applied + result.changed + result.removed;
+      const parts = [
+        result.applied ? `${result.applied} put on a sibling discount` : "",
+        result.changed ? `${result.changed} moved to a new position` : "",
+        result.removed ? `${result.removed} taken off` : "",
+        result.skipped.length
+          ? `${result.skipped.length} left alone — ${result.skipped[0]?.reason ?? ""}`
+          : "",
+      ].filter(Boolean);
+      return [
+        done ? `Sibling discounts updated for ${done} child${done === 1 ? "" : "ren"}` : "Nothing changed",
+        `${parts.join(". ")}. Applies from the next challan generated.`,
+      ];
+    },
+    failure: "Couldn't apply the sibling discounts",
   });
 }
 

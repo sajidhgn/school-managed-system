@@ -147,6 +147,9 @@ export const queryKeys = {
     vouchers: (params: VoucherListParams) => ["fees", "vouchers", params] as const,
     voucher: (id: string) => ["fees", "vouchers", "detail", id] as const,
     billingSchedule: (year: string) => ["fees", "billing-schedule", year] as const,
+    concessions: (params: PageParams) => ["fees", "concessions", params] as const,
+    siblingRule: ["fees", "sibling-rule"] as const,
+    siblings: (year: string) => ["fees", "siblings", year] as const,
   },
 
   search: {

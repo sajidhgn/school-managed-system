@@ -83,6 +83,11 @@ const Tabs = TabsPrimitive.Root;
  *
  * The tabs and the pill take the control radius; the track adds its 4px padding
  * to that, so the corners stay concentric.
+ *
+ * On a phone a row of five or six tabs is wider than the screen. The track is held
+ * to its container and scrolls sideways itself, so the page never does; the pill
+ * lives inside the scrolling track and moves with it. Start-aligned because a
+ * centred flex row that overflows clips its first tabs out of reach.
  */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
@@ -123,7 +128,7 @@ const TabsList = React.forwardRef<
       ref={setRefs}
       data-ready={pill ? "true" : undefined}
       className={cn(
-        "group/tabs relative inline-flex h-10 items-center justify-center rounded-[calc(var(--control-radius)+4px)] bg-[var(--default)] p-1 text-muted-foreground",
+        "group/tabs relative inline-flex h-10 max-w-full items-center justify-start overflow-x-auto rounded-[calc(var(--control-radius)+4px)] bg-[var(--default)] p-1 text-muted-foreground [scrollbar-width:none]",
         className,
       )}
       {...props}

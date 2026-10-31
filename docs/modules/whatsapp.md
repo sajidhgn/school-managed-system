@@ -63,10 +63,14 @@ is sent to them directly (not through the outbox), from the WAHA session of a
 campus where they have a child they may view. The number is checked first
 (`GET /api/contacts/check-exists`): a number with no WhatsApp gets no WhatsApp
 message, and a campus whose session is not working is skipped for the next one.
-When WhatsApp cannot deliver, the code falls back to `SMS_BACKEND` (the console in
-development; `null` in production until an SMS provider exists). The send runs
-after the HTTP response, so response timing does not reveal whether a number is
-registered. Code: `backend/app/modules/guardians/delivery.py`.
+The send runs after the HTTP response, so response timing does not reveal whether a
+number is registered. Code: `backend/app/modules/guardians/delivery.py`.
+
+**WhatsApp only, by decision (2026-10-28).** No SMS provider will be added. When
+WhatsApp cannot deliver, the code goes to `SMS_BACKEND`, which is `null` in
+production, so nothing is sent: a parent whose number has no WhatsApp gives the
+school a number that does. In development `SMS_BACKEND=console` prints the code to
+the log, which is how codes are read while testing.
 
 A parent can sign in only once staff turn access on from the student's page
 (**Parent portal** card): `POST /guardians/students/{id}/portal-access`, which

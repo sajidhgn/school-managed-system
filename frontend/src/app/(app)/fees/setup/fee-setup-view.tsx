@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 
 import { BillingAutomationPanel } from "@/components/fees/billing-automation-panel";
+import { ConcessionsPanel } from "@/components/fees/concessions-panel";
+import { SiblingDiscountsPanel } from "@/components/fees/sibling-discounts-panel";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState, TableCardSkeleton } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
@@ -83,6 +85,9 @@ import {
  *   half-priced structure that then gets activated bills the wrong money.
  */
 export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
+  // Controlled so the Siblings tab can send someone to Concessions when no scheme
+  // exists yet to pick.
+  const [tab, setTab] = React.useState("heads");
   return (
     <div className="mx-auto w-full max-w-5xl">
       <Link
@@ -98,11 +103,15 @@ export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
         description="Define what this campus charges and sells, then price it per class and year."
       />
 
-      <Tabs defaultValue="heads">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="heads">Fee heads</TabsTrigger>
           <TabsTrigger value="stationery">Stationery</TabsTrigger>
           <TabsTrigger value="structures">Structures</TabsTrigger>
+          {/* What comes off a structure's price: the schemes, then the rule that
+              proposes the sibling ones per family. */}
+          <TabsTrigger value="concessions">Concessions</TabsTrigger>
+          <TabsTrigger value="siblings">Siblings</TabsTrigger>
           {/* LAST, because it is the only tab that depends on all three: automation
               bills the structures, which price the two catalogs. A school that opens
               it first has nothing for it to run. */}
@@ -117,6 +126,15 @@ export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
         </TabsContent>
         <TabsContent value="structures" className="mt-5">
           <StructuresPanel />
+        </TabsContent>
+        <TabsContent value="concessions" className="mt-5">
+          <ConcessionsPanel />
+        </TabsContent>
+        <TabsContent value="siblings" className="mt-5">
+          <SiblingDiscountsPanel
+            academicYear={currentAcademicYear()}
+            onOpenConcessions={() => setTab("concessions")}
+          />
         </TabsContent>
         <TabsContent value="automation" className="mt-5">
           <BillingAutomationPanel academicYear={currentAcademicYear()} canIssue={canIssue} />

@@ -17,6 +17,8 @@ RESPONSIBILITY
         fee_structures       what one class is charged for one academic year
           fee_structure_items    head -> amount, or stationery item -> qty x price
         student_fee_assignments  where ONE student departs from their class
+          fee_sibling_rules      which scheme a family's 2nd, 3rd, later child is
+                                 PROPOSED for (staff apply it as an assignment)
           |
         fee_vouchers         one student's bill for one period (the challan)
           fee_voucher_items      snapshotted line -> amount, discount
@@ -886,6 +888,107 @@ class StudentFeeAssignment(
             name="amount_matches_mode",
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# 2c. Sibling rule -- which scheme a family's second, third and later child get
+# ---------------------------------------------------------------------------
+
+
+class FeeSiblingRule(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin):
+    """The campus's sibling remission: on which head, and which scheme per position.
+
+    =========================================================================
+    A RULE THAT PROPOSES, NOT ONE THAT BILLS
+    =========================================================================
+        Families are found through the guardian registry: children who share a
+        father, mother or legal guardian are siblings. That is a better test than a
+        surname, which every school's first attempt uses and which breaks on the
+        first blended family -- but it is still only as good as the links staff
+        typed. A father linked to the wrong child would quietly halve a stranger's
+        tuition if this rule billed directly.
+
+        So nothing here reaches a challan by itself. `fees/siblings.py` reads the
+        rule and the registry and LISTS who qualifies; a person applies it, and what
+        they apply is an ordinary DISCOUNT arrangement pointing at the scheme. The
+        billing run never learns that siblings exist.
+
+    THE CHILD IN THE HIGHEST CLASS PAYS IN FULL. Class level rather than date of
+    birth, because every placed student has a class and a birth date is optional on
+    the admission form. Ties go to the earlier admission.
+
+    THE RATE STAYS ON THE SCHEME. Each position names a `fee_concessions` row, so
+    "second child goes from 10% to 15%" is one edit to the scheme, and the concession
+    list's `student_count` still answers what the sibling discount costs the school.
+    A position left blank takes the one before it: setting only the second child's
+    scheme gives every later child the same rate.
+    """
+
+    __tablename__ = "fee_sibling_rules"
+
+    head_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        # RESTRICT, like every other configuration that bills under a head.
+        ForeignKey("fee_heads.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    """The head the remission is taken off -- almost always Tuition. One head, because
+    the arrangement table holds one row per head per child, and a sibling discount on
+    transport is a different policy that nobody has asked for."""
+
+    second_concession_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("fee_concessions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    third_concession_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("fee_concessions.id", ondelete="RESTRICT"),
+        index=True,
+    )
+    """Blank = the second child's scheme."""
+    later_concession_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("fee_concessions.id", ondelete="RESTRICT"),
+        index=True,
+    )
+    """The fourth child and every one after. Blank = the third child's scheme."""
+
+    head: Mapped[FeeHead] = relationship()
+    second_concession: Mapped[FeeConcession] = relationship(foreign_keys=[second_concession_id])
+    third_concession: Mapped[FeeConcession | None] = relationship(
+        foreign_keys=[third_concession_id]
+    )
+    later_concession: Mapped[FeeConcession | None] = relationship(
+        foreign_keys=[later_concession_id]
+    )
+
+    __table_args__ = (UniqueConstraint("school_id", name="uq_fee_sibling_rules_school_id"),)
+
+    def concession_for(self, position: int) -> FeeConcession | None:
+        """The scheme the child at `position` (1 = pays in full) is put on."""
+        if position < 2:
+            return None
+        if position == 2:
+            return self.second_concession
+        if position == 3:
+            return self.third_concession or self.second_concession
+        return self.later_concession or self.third_concession or self.second_concession
+
+    @property
+    def concession_ids(self) -> frozenset[UUID]:
+        """Every scheme this rule awards -- how an arrangement is recognised as its own."""
+        return frozenset(
+            cid
+            for cid in (
+                self.second_concession_id,
+                self.third_concession_id,
+                self.later_concession_id,
+            )
+            if cid is not None
+        )
 
 
 # ---------------------------------------------------------------------------

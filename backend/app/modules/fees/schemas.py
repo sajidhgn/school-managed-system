@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
@@ -39,6 +40,7 @@ from app.modules.fees.models import (
     VoucherOrigin,
     VoucherStatus,
 )
+from app.modules.guardians.models import GuardianRelationship
 
 # `2026-2027`. Validated here rather than by a CHECK constraint so the error names
 # the field and reaches the form that produced it.
@@ -952,6 +954,137 @@ class LateFeeRunResult(BaseSchema):
             "remainder is picked up by the next run, oldest first."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Sibling remission -- the campus rule, and the review staff apply it from
+# ---------------------------------------------------------------------------
+
+
+class FeeSiblingRuleInput(BaseSchema):
+    """Which head the sibling discount comes off, and the scheme for each position.
+
+    A blank position takes the one before it, so a flat "every later child 10%" is
+    just `second_concession_id`.
+    """
+
+    head_id: UUID = Field(description="Usually Tuition.")
+    second_concession_id: UUID
+    third_concession_id: UUID | None = None
+    later_concession_id: UUID | None = Field(
+        default=None, description="The fourth child and every one after."
+    )
+
+
+class SiblingSchemeRead(BaseSchema):
+    id: UUID
+    name: str
+    kind: ConcessionKind
+    value: Decimal
+    is_active: bool
+
+
+class FeeSiblingRuleRead(BaseSchema):
+    id: UUID
+    head_id: UUID
+    head_name: str
+    second: SiblingSchemeRead
+    third: SiblingSchemeRead | None
+    """As configured: null means the third child gets the second child's scheme."""
+    later: SiblingSchemeRead | None
+    updated_at: datetime
+
+
+class SiblingAction(StrEnum):
+    """What the review proposes for one child."""
+
+    FULL_FEE = "full_fee"
+    """The child in the family's highest class. Nothing to do."""
+    APPLY = "apply"
+    """Qualifies and has no arrangement on the head yet."""
+    CHANGE = "change"
+    """On a different sibling scheme than their position now gives -- an elder
+    brother left, so the third child became the second."""
+    OK = "ok"
+    REMOVE = "remove"
+    """On a sibling scheme but pays in full now, or has no brother or sister left."""
+    CONFLICT = "conflict"
+    """Something else already occupies the head (a staff-child remission, an agreed
+    rate), or the scheme is inactive. Left for a person to decide."""
+    OTHER_CAMPUS = "other_campus"
+    """A sibling at another campus. Shown so the positions make sense; that campus
+    applies its own rule."""
+
+
+class SiblingGuardian(BaseSchema):
+    guardian_id: UUID
+    full_name: str
+    relationships: list[GuardianRelationship]
+
+
+class SiblingMember(BaseSchema):
+    student_id: UUID
+    student_name: str
+    admission_number: str
+    class_name: str | None
+    class_level: int | None
+    section_name: str | None
+    campus_name: str
+    at_this_campus: bool
+    position: int | None
+    """1 pays in full. Null for a child listed as no longer eligible."""
+    action: SiblingAction
+    proposed_concession_id: UUID | None = None
+    proposed_concession_name: str | None = None
+    current: str | None = None
+    """What the child has on the head now, in words: "Sibling - 2nd child",
+    "Agreed rate 4000.00". Null when nothing."""
+    reason: str | None = None
+
+
+class SiblingFamily(BaseSchema):
+    guardians: list[SiblingGuardian]
+    """The father, mother or legal guardian who makes these children a family."""
+    members: list[SiblingMember]
+    """In position order."""
+
+
+class SiblingReview(BaseSchema):
+    academic_year: str
+    rule: FeeSiblingRuleRead
+    families: list[SiblingFamily]
+    """Families with at least one child at this campus, those needing action first."""
+    no_longer_eligible: list[SiblingMember]
+    """Children here on a sibling scheme with no brother or sister enrolled now."""
+    to_apply: int
+    to_remove: int
+    conflicts: int
+
+
+class SiblingApplyRequest(BaseSchema):
+    """Apply what the review proposes for these children. The server works the
+    proposal out again; the client never says which scheme."""
+
+    academic_year: str = Field(min_length=9, max_length=9, examples=["2026-2027"])
+    student_ids: list[UUID] = Field(min_length=1, max_length=500)
+
+    @field_validator("academic_year")
+    @classmethod
+    def _check_year(cls, value: str) -> str:
+        return _validate_academic_year(value)
+
+
+class SiblingSkip(BaseSchema):
+    student_id: UUID
+    reason: str
+
+
+class SiblingApplyResult(BaseSchema):
+    applied: int
+    changed: int
+    removed: int
+    skipped: list[SiblingSkip]
+    review: SiblingReview
 
 
 # ---------------------------------------------------------------------------

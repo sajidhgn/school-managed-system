@@ -59,6 +59,8 @@ from app.modules.fees.schemas import (
     FeeHeadUpdate,
     FeePaymentCreate,
     FeePaymentRead,
+    FeeSiblingRuleInput,
+    FeeSiblingRuleRead,
     FeeStructureCreate,
     FeeStructureDetail,
     FeeStructureItemInput,
@@ -73,6 +75,9 @@ from app.modules.fees.schemas import (
     LateFeeRunResult,
     LedgerAdjustmentInput,
     PaymentReverseRequest,
+    SiblingApplyRequest,
+    SiblingApplyResult,
+    SiblingReview,
     StationeryItemCreate,
     StationeryItemRead,
     StationeryItemUpdate,
@@ -86,6 +91,7 @@ from app.modules.fees.schemas import (
     VoucherVoidRequest,
 )
 from app.modules.fees.service import FeeService
+from app.modules.fees.siblings import SiblingService
 
 router = APIRouter()
 
@@ -503,6 +509,76 @@ async def run_late_fees(
     who clicks it twice is safe, which is exactly why it can be exposed at all.
     """
     return await FeeService(db).apply_late_fees(academic_year, actor_id=ctx.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Sibling remission -- the rule, the family review, and applying it
+# ---------------------------------------------------------------------------
+#
+# `fee:manage` throughout. The rule is a pricing decision, and applying it puts
+# children on schemes -- the same act as the arrangement route. The review is
+# `fee:manage` too rather than `fee:read`: it names siblings at other campuses, and
+# the person who sees that should be the person deciding the discount.
+
+
+@router.get(
+    "/sibling-rule",
+    response_model=FeeSiblingRuleRead | None,
+    summary="This campus's sibling rule",
+)
+async def get_sibling_rule(db: DbSession, _ctx: ReadCtx) -> FeeSiblingRuleRead | None:
+    """Null until the campus sets one up."""
+    return await SiblingService(db).get_rule()
+
+
+@router.put(
+    "/sibling-rule",
+    response_model=FeeSiblingRuleRead,
+    summary="Create or replace the sibling rule",
+)
+async def set_sibling_rule(
+    payload: FeeSiblingRuleInput, db: DbSession, ctx: ManageCtx
+) -> FeeSiblingRuleRead:
+    """Changes no child's fees. The review then shows who the rule proposes to move."""
+    return await SiblingService(db).set_rule(payload, actor_id=ctx.user_id)
+
+
+@router.delete(
+    "/sibling-rule",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Stop proposing sibling discounts",
+)
+async def delete_sibling_rule(db: DbSession, ctx: ManageCtx) -> None:
+    """Children already on a sibling scheme keep it."""
+    await SiblingService(db).delete_rule(actor_id=ctx.user_id)
+
+
+@router.get(
+    "/siblings",
+    response_model=SiblingReview,
+    summary="Families with a child at this campus, and what the rule proposes",
+)
+async def review_siblings(
+    db: DbSession,
+    _ctx: ManageCtx,
+    academic_year: Annotated[str, Query(examples=["2026-2027"])],
+) -> SiblingReview:
+    """Children who share a father, mother or legal guardian are one family. 422
+    with `SIBLING_RULE_MISSING` until the rule exists."""
+    return await SiblingService(db).review(academic_year)
+
+
+@router.post(
+    "/siblings/apply",
+    response_model=SiblingApplyResult,
+    summary="Apply the sibling proposals for chosen children",
+)
+async def apply_siblings(
+    payload: SiblingApplyRequest, db: DbSession, ctx: ManageCtx
+) -> SiblingApplyResult:
+    """Recomputes each proposal and writes it as an ordinary DISCOUNT arrangement,
+    from the next billing run. Issued challans are never restated."""
+    return await SiblingService(db).apply(payload, actor_id=ctx.user_id)
 
 
 # ---------------------------------------------------------------------------

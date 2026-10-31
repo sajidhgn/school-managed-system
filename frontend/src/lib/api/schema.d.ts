@@ -3896,6 +3896,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fees/sibling-rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This campus's sibling rule
+         * @description Null until the campus sets one up.
+         */
+        get: operations["get_sibling_rule_api_v1_fees_sibling_rule_get"];
+        /**
+         * Create or replace the sibling rule
+         * @description Changes no child's fees. The review then shows who the rule proposes to move.
+         */
+        put: operations["set_sibling_rule_api_v1_fees_sibling_rule_put"];
+        post?: never;
+        /**
+         * Stop proposing sibling discounts
+         * @description Children already on a sibling scheme keep it.
+         */
+        delete: operations["delete_sibling_rule_api_v1_fees_sibling_rule_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/siblings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Families with a child at this campus, and what the rule proposes
+         * @description Children who share a father, mother or legal guardian are one family. 422
+         *     with `SIBLING_RULE_MISSING` until the rule exists.
+         */
+        get: operations["review_siblings_api_v1_fees_siblings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fees/siblings/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply the sibling proposals for chosen children
+         * @description Recomputes each proposal and writes it as an ordinary DISCOUNT arrangement,
+         *     from the next billing run. Issued challans are never restated.
+         */
+        post: operations["apply_siblings_api_v1_fees_siblings_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fees/billing-schedule": {
         parameters: {
             query?: never;
@@ -6772,6 +6842,56 @@ export interface components {
          * @enum {string}
          */
         FeeRecurrence: "monthly" | "term" | "annual" | "one_time";
+        /**
+         * FeeSiblingRuleInput
+         * @description Which head the sibling discount comes off, and the scheme for each position.
+         *
+         *     A blank position takes the one before it, so a flat "every later child 10%" is
+         *     just `second_concession_id`.
+         */
+        FeeSiblingRuleInput: {
+            /**
+             * Head Id
+             * Format: uuid
+             * @description Usually Tuition.
+             */
+            head_id: string;
+            /**
+             * Second Concession Id
+             * Format: uuid
+             */
+            second_concession_id: string;
+            /** Third Concession Id */
+            third_concession_id?: string | null;
+            /**
+             * Later Concession Id
+             * @description The fourth child and every one after.
+             */
+            later_concession_id?: string | null;
+        };
+        /** FeeSiblingRuleRead */
+        FeeSiblingRuleRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Head Id
+             * Format: uuid
+             */
+            head_id: string;
+            /** Head Name */
+            head_name: string;
+            second: components["schemas"]["SiblingSchemeRead"];
+            third: components["schemas"]["SiblingSchemeRead"] | null;
+            later: components["schemas"]["SiblingSchemeRead"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * FeeStandingFilter
          * @description How the students list may be narrowed by what a family owes.
@@ -10626,6 +10746,131 @@ export interface components {
             class_id: string;
             /** Subject Id */
             subject_id?: string | null;
+        };
+        /**
+         * SiblingAction
+         * @description What the review proposes for one child.
+         * @enum {string}
+         */
+        SiblingAction: "full_fee" | "apply" | "change" | "ok" | "remove" | "conflict" | "other_campus";
+        /**
+         * SiblingApplyRequest
+         * @description Apply what the review proposes for these children. The server works the
+         *     proposal out again; the client never says which scheme.
+         */
+        SiblingApplyRequest: {
+            /**
+             * Academic Year
+             * @example 2026-2027
+             */
+            academic_year: string;
+            /** Student Ids */
+            student_ids: string[];
+        };
+        /** SiblingApplyResult */
+        SiblingApplyResult: {
+            /** Applied */
+            applied: number;
+            /** Changed */
+            changed: number;
+            /** Removed */
+            removed: number;
+            /** Skipped */
+            skipped: components["schemas"]["SiblingSkip"][];
+            review: components["schemas"]["SiblingReview"];
+        };
+        /** SiblingFamily */
+        SiblingFamily: {
+            /** Guardians */
+            guardians: components["schemas"]["SiblingGuardian"][];
+            /** Members */
+            members: components["schemas"]["SiblingMember"][];
+        };
+        /** SiblingGuardian */
+        SiblingGuardian: {
+            /**
+             * Guardian Id
+             * Format: uuid
+             */
+            guardian_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Relationships */
+            relationships: components["schemas"]["GuardianRelationship"][];
+        };
+        /** SiblingMember */
+        SiblingMember: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Admission Number */
+            admission_number: string;
+            /** Class Name */
+            class_name: string | null;
+            /** Class Level */
+            class_level: number | null;
+            /** Section Name */
+            section_name: string | null;
+            /** Campus Name */
+            campus_name: string;
+            /** At This Campus */
+            at_this_campus: boolean;
+            /** Position */
+            position: number | null;
+            action: components["schemas"]["SiblingAction"];
+            /** Proposed Concession Id */
+            proposed_concession_id?: string | null;
+            /** Proposed Concession Name */
+            proposed_concession_name?: string | null;
+            /** Current */
+            current?: string | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** SiblingReview */
+        SiblingReview: {
+            /** Academic Year */
+            academic_year: string;
+            rule: components["schemas"]["FeeSiblingRuleRead"];
+            /** Families */
+            families: components["schemas"]["SiblingFamily"][];
+            /** No Longer Eligible */
+            no_longer_eligible: components["schemas"]["SiblingMember"][];
+            /** To Apply */
+            to_apply: number;
+            /** To Remove */
+            to_remove: number;
+            /** Conflicts */
+            conflicts: number;
+        };
+        /** SiblingSchemeRead */
+        SiblingSchemeRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            kind: components["schemas"]["ConcessionKind"];
+            /** Value */
+            value: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** SiblingSkip */
+        SiblingSkip: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Reason */
+            reason: string;
         };
         /**
          * SortDirection
@@ -25074,6 +25319,254 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LateFeeRunResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_sibling_rule_api_v1_fees_sibling_rule_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeSiblingRuleRead"] | null;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_sibling_rule_api_v1_fees_sibling_rule_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeSiblingRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeSiblingRuleRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_sibling_rule_api_v1_fees_sibling_rule_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    review_siblings_api_v1_fees_siblings_get: {
+        parameters: {
+            query: {
+                academic_year: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiblingReview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apply_siblings_api_v1_fees_siblings_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiblingApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiblingApplyResult"];
                 };
             };
             /** @description Bad Request */

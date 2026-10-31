@@ -472,6 +472,20 @@ export type StudentFeeAssignmentInput = S["StudentFeeAssignmentInput"];
 export type StudentFeeAssignmentMode = S["StudentFeeAssignmentMode"];
 export type PaymentMethod = S["PaymentMethod"];
 
+// --- Concession schemes and the sibling rule ---------------------------------
+export type FeeConcessionRead = S["FeeConcessionRead"];
+export type FeeConcessionCreate = S["FeeConcessionCreate"];
+export type FeeConcessionUpdate = S["FeeConcessionUpdate"];
+export type ConcessionKind = S["ConcessionKind"];
+export type FeeSiblingRuleRead = S["FeeSiblingRuleRead"];
+export type FeeSiblingRuleInput = S["FeeSiblingRuleInput"];
+export type SiblingReview = S["SiblingReview"];
+export type SiblingFamily = S["SiblingFamily"];
+export type SiblingMember = S["SiblingMember"];
+export type SiblingAction = S["SiblingAction"];
+export type SiblingApplyRequest = S["SiblingApplyRequest"];
+export type SiblingApplyResult = S["SiblingApplyResult"];
+
 // ---------------------------------------------------------------------------
 // Display labels
 // ---------------------------------------------------------------------------

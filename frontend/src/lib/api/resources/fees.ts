@@ -3,11 +3,16 @@ import type {
   BillingRunResult,
   FeeBillingScheduleInput,
   FeeBillingScheduleRead,
+  FeeConcessionCreate,
+  FeeConcessionRead,
+  FeeConcessionUpdate,
   FeeHeadCreate,
   FeeHeadRead,
   FeeHeadUpdate,
   FeePaymentCreate,
   FeePaymentRead,
+  FeeSiblingRuleInput,
+  FeeSiblingRuleRead,
   FeeStructureCreate,
   FeeStructureDetail,
   FeeStructureItemInput,
@@ -18,6 +23,9 @@ import type {
   FeeStructureStationeryInput,
   Page,
   PageParams,
+  SiblingApplyRequest,
+  SiblingApplyResult,
+  SiblingReview,
   StationeryItemCreate,
   StationeryItemRead,
   StationeryItemUpdate,
@@ -159,6 +167,42 @@ export const feesApi = {
         undefined,
         { params: { academic_year: academicYear } },
       ),
+  },
+
+  /**
+   * Named remission schemes — Staff Child 50%, Merit 25%, Sibling 2nd child 10%.
+   *
+   * The rate lives on the scheme, so changing it changes it for every child on it
+   * from the next challan. Delete 409s while any child (or the sibling rule) uses it;
+   * retire it instead.
+   */
+  concessions: {
+    list: (params: PageParams & { is_active?: boolean } = {}) =>
+      api.get<Page<FeeConcessionRead>>("/fees/concessions", { params: { ...params } }),
+    create: (body: FeeConcessionCreate) =>
+      api.post<FeeConcessionRead>("/fees/concessions", body),
+    update: (id: string, body: FeeConcessionUpdate) =>
+      api.patch<FeeConcessionRead>(`/fees/concessions/${id}`, body),
+    remove: (id: string) => api.delete<void>(`/fees/concessions/${id}`),
+  },
+
+  /**
+   * The sibling rule and the family review.
+   *
+   * The rule only PROPOSES. `review` lists families found through shared parents and
+   * what the rule would do for each child; `apply` writes the chosen proposals as
+   * ordinary discount arrangements. The server recomputes every proposal on apply —
+   * the client sends student ids, never a scheme.
+   */
+  siblings: {
+    rule: () => api.get<FeeSiblingRuleRead | null>("/fees/sibling-rule"),
+    setRule: (body: FeeSiblingRuleInput) =>
+      api.put<FeeSiblingRuleRead>("/fees/sibling-rule", body),
+    removeRule: () => api.delete<void>("/fees/sibling-rule"),
+    review: (academicYear: string) =>
+      api.get<SiblingReview>("/fees/siblings", { params: { academic_year: academicYear } }),
+    apply: (body: SiblingApplyRequest) =>
+      api.post<SiblingApplyResult>("/fees/siblings/apply", body),
   },
 
   students: {

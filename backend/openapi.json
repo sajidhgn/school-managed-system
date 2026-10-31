@@ -13730,6 +13730,207 @@
         }
       }
     },
+    "/api/v1/fees/sibling-rule": {
+      "get": {
+        "tags": [
+          "Fees"
+        ],
+        "summary": "This campus's sibling rule",
+        "description": "Null until the campus sets one up.",
+        "operationId": "get_sibling_rule_api_v1_fees_sibling_rule_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FeeSiblingRuleRead"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Sibling Rule Api V1 Fees Sibling Rule Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Fees"
+        ],
+        "summary": "Create or replace the sibling rule",
+        "description": "Changes no child's fees. The review then shows who the rule proposes to move.",
+        "operationId": "set_sibling_rule_api_v1_fees_sibling_rule_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeeSiblingRuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeeSiblingRuleRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Fees"
+        ],
+        "summary": "Stop proposing sibling discounts",
+        "description": "Children already on a sibling scheme keep it.",
+        "operationId": "delete_sibling_rule_api_v1_fees_sibling_rule_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/fees/siblings": {
+      "get": {
+        "tags": [
+          "Fees"
+        ],
+        "summary": "Families with a child at this campus, and what the rule proposes",
+        "description": "Children who share a father, mother or legal guardian are one family. 422\nwith `SIBLING_RULE_MISSING` until the rule exists.",
+        "operationId": "review_siblings_api_v1_fees_siblings_get",
+        "parameters": [
+          {
+            "name": "academic_year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "2026-2027"
+              ],
+              "title": "Academic Year"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiblingReview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/api/v1/fees/siblings/apply": {
+      "post": {
+        "tags": [
+          "Fees"
+        ],
+        "summary": "Apply the sibling proposals for chosen children",
+        "description": "Recomputes each proposal and writes it as an ordinary DISCOUNT arrangement,\nfrom the next billing run. Issued challans are never restated.",
+        "operationId": "apply_siblings_api_v1_fees_siblings_apply_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiblingApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiblingApplyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/fees/billing-schedule": {
       "get": {
         "tags": [
@@ -20458,6 +20659,110 @@
         ],
         "title": "FeeRecurrence",
         "description": "How often a head is normally charged.\n\nDESCRIPTIVE, NOT EXECUTABLE. It informs the person assembling a structure; it\ndoes not drive generation. Real schools fold the annual admission fee into the\nAugust monthly challan rather than issuing it separately, so the operator picks\nthe period at generation time and this stays advisory."
+      },
+      "FeeSiblingRuleInput": {
+        "properties": {
+          "head_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Head Id",
+            "description": "Usually Tuition."
+          },
+          "second_concession_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Second Concession Id"
+          },
+          "third_concession_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Third Concession Id"
+          },
+          "later_concession_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Later Concession Id",
+            "description": "The fourth child and every one after."
+          }
+        },
+        "type": "object",
+        "required": [
+          "head_id",
+          "second_concession_id"
+        ],
+        "title": "FeeSiblingRuleInput",
+        "description": "Which head the sibling discount comes off, and the scheme for each position.\n\nA blank position takes the one before it, so a flat \"every later child 10%\" is\njust `second_concession_id`."
+      },
+      "FeeSiblingRuleRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "head_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Head Id"
+          },
+          "head_name": {
+            "type": "string",
+            "title": "Head Name"
+          },
+          "second": {
+            "$ref": "#/components/schemas/SiblingSchemeRead"
+          },
+          "third": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SiblingSchemeRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "later": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SiblingSchemeRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "head_id",
+          "head_name",
+          "second",
+          "third",
+          "later",
+          "updated_at"
+        ],
+        "title": "FeeSiblingRuleRead"
       },
       "FeeStandingFilter": {
         "type": "string",
@@ -30115,6 +30420,368 @@
         ],
         "title": "ShelfInput",
         "description": "Where a campus files a library book: one of its classes, optionally a subject."
+      },
+      "SiblingAction": {
+        "type": "string",
+        "enum": [
+          "full_fee",
+          "apply",
+          "change",
+          "ok",
+          "remove",
+          "conflict",
+          "other_campus"
+        ],
+        "title": "SiblingAction",
+        "description": "What the review proposes for one child."
+      },
+      "SiblingApplyRequest": {
+        "properties": {
+          "academic_year": {
+            "type": "string",
+            "maxLength": 9,
+            "minLength": 9,
+            "title": "Academic Year",
+            "examples": [
+              "2026-2027"
+            ]
+          },
+          "student_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Student Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "academic_year",
+          "student_ids"
+        ],
+        "title": "SiblingApplyRequest",
+        "description": "Apply what the review proposes for these children. The server works the\nproposal out again; the client never says which scheme."
+      },
+      "SiblingApplyResult": {
+        "properties": {
+          "applied": {
+            "type": "integer",
+            "title": "Applied"
+          },
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingSkip"
+            },
+            "type": "array",
+            "title": "Skipped"
+          },
+          "review": {
+            "$ref": "#/components/schemas/SiblingReview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "applied",
+          "changed",
+          "removed",
+          "skipped",
+          "review"
+        ],
+        "title": "SiblingApplyResult"
+      },
+      "SiblingFamily": {
+        "properties": {
+          "guardians": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingGuardian"
+            },
+            "type": "array",
+            "title": "Guardians"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingMember"
+            },
+            "type": "array",
+            "title": "Members"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guardians",
+          "members"
+        ],
+        "title": "SiblingFamily"
+      },
+      "SiblingGuardian": {
+        "properties": {
+          "guardian_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Guardian Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "relationships": {
+            "items": {
+              "$ref": "#/components/schemas/GuardianRelationship"
+            },
+            "type": "array",
+            "title": "Relationships"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guardian_id",
+          "full_name",
+          "relationships"
+        ],
+        "title": "SiblingGuardian"
+      },
+      "SiblingMember": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "student_name": {
+            "type": "string",
+            "title": "Student Name"
+          },
+          "admission_number": {
+            "type": "string",
+            "title": "Admission Number"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "class_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Level"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "campus_name": {
+            "type": "string",
+            "title": "Campus Name"
+          },
+          "at_this_campus": {
+            "type": "boolean",
+            "title": "At This Campus"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "action": {
+            "$ref": "#/components/schemas/SiblingAction"
+          },
+          "proposed_concession_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Concession Id"
+          },
+          "proposed_concession_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Concession Name"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "student_name",
+          "admission_number",
+          "class_name",
+          "class_level",
+          "section_name",
+          "campus_name",
+          "at_this_campus",
+          "position",
+          "action"
+        ],
+        "title": "SiblingMember"
+      },
+      "SiblingReview": {
+        "properties": {
+          "academic_year": {
+            "type": "string",
+            "title": "Academic Year"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/FeeSiblingRuleRead"
+          },
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingFamily"
+            },
+            "type": "array",
+            "title": "Families"
+          },
+          "no_longer_eligible": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingMember"
+            },
+            "type": "array",
+            "title": "No Longer Eligible"
+          },
+          "to_apply": {
+            "type": "integer",
+            "title": "To Apply"
+          },
+          "to_remove": {
+            "type": "integer",
+            "title": "To Remove"
+          },
+          "conflicts": {
+            "type": "integer",
+            "title": "Conflicts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "academic_year",
+          "rule",
+          "families",
+          "no_longer_eligible",
+          "to_apply",
+          "to_remove",
+          "conflicts"
+        ],
+        "title": "SiblingReview"
+      },
+      "SiblingSchemeRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ConcessionKind"
+          },
+          "value": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Value"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "value",
+          "is_active"
+        ],
+        "title": "SiblingSchemeRead"
+      },
+      "SiblingSkip": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "reason"
+        ],
+        "title": "SiblingSkip"
       },
       "SortDirection": {
         "type": "string",

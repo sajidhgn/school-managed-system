@@ -288,6 +288,10 @@ class AuditAction:
     FEE_LATE_FEE_POLICY_SET = "fee_late_fee_policy.set"
     FEE_LATE_FEE_POLICY_DELETED = "fee_late_fee_policy.deleted"
     FEE_LATE_FEE_APPLIED = "fee_late_fee.applied"
+    # The sibling rule. Applying it writes ordinary `student_fee.assigned` rows, one
+    # per child, so each child's trail reads the same however the discount arrived.
+    FEE_SIBLING_RULE_SET = "fee_sibling_rule.set"
+    FEE_SIBLING_RULE_DELETED = "fee_sibling_rule.deleted"
     # A manual balance movement with no voucher and no receipt behind it -- the one
     # fee action that can make money disappear, which is why it is `fee:void`.
     FEE_LEDGER_ADJUSTED = "fee_ledger.adjusted"

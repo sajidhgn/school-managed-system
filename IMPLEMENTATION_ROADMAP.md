@@ -303,8 +303,10 @@ feature:
 2. The expanded authenticated Playwright journey matrix in slice 10, now including the
    parent portal (staff grants access, parent signs in, reads a child's records).
 3. A recorded staging run of the checked-in 1,000-organization k6 profile.
-4. An SMS provider for parent sign-in codes when WhatsApp cannot deliver
-   (`SMS_BACKEND` has only `console` and `null`).
+
+Decided 2026-10-28, and no longer open: parent sign-in codes go by **WhatsApp
+only**. No SMS provider will be added; production keeps `SMS_BACKEND=null`, so a
+parent whose number has no WhatsApp gives the school one that does.
 
 ## Academic modules
 
@@ -376,17 +378,22 @@ class list price or the child's negotiated rate, the double-counting rule on arr
 late-fee idempotence and non-compounding, ledger RLS, and separation of duties on
 manual adjustments.
 
-**Still deferred, and both are blocked outside this module:**
+**Still deferred, blocked outside this module:**
 
 1. **Online payment by parents** — the same open product decision as SaaS billing
    (JazzCash / Easypaisa / Stripe). Nothing in fees blocks it: a gateway callback
    records a payment through the same `record_payment` staff use, which now also
    writes the ledger entry, so the parent-facing balance follows for free.
-2. **Sibling / family grouping** — needs the guardian aggregate. A `guardians` module
-   is in flight; sibling remission should be built on it rather than on a surname
-   match.
 
-Frontend pages for the slice 2 surfaces and the browser journey are the next slice.
+**Sibling remission — implemented 2026-10-28** on the guardian registry
+(`docs/modules/fees.md` §5.2d, `app/modules/fees/siblings.py`). Children who share a
+father, mother or legal guardian are one family, across campuses; the child in the
+highest class pays in full. A campus rule names a concession scheme for the 2nd, 3rd
+and 4th-and-later child, and only PROPOSES: staff review the families under Fees →
+Charges & structures → Siblings and apply, which writes ordinary DISCOUNT
+arrangements. 12 integration tests (`tests/integration/test_fee_siblings.py`). The
+same tab set gained **Concessions**, the first screen for creating and re-rating
+schemes. Fixed alongside: re-adding an arrangement that had been removed returned 409.
 
 ### Academic foundation — implemented
 
@@ -524,8 +531,9 @@ notifications and whether the parent may see the child's records.
   links it. The free-text `students.guardian_phone` never becomes a login by itself.
 - **Sign-in** at `/parent/login`: phone, then a six-digit code sent on WhatsApp from
   the child's campus number (`guardians/delivery.py`), checked for a WhatsApp account
-  first, with the SMS seam behind it. Sent after the HTTP response so timing does not
-  reveal which numbers are registered.
+  first. WhatsApp only, by decision; the SMS seam stays for the development console.
+  Sent after the HTTP response so timing does not reveal which numbers are
+  registered.
 - **What a parent sees** (`/parent`, `/parent/children/{id}`): attendance (the staff
   calendar), fees (issued, part-paid, paid and overdue challans, totals, and the
   challan PDF to pay at the bank), and results of **published** exams with rank. All
@@ -533,8 +541,9 @@ notifications and whether the parent may see the child's records.
 - **Absence alerts**: off per campus until enabled; today's whole-day register queues a
   one-to-one WhatsApp message to each absent child's guardians, once per day.
 
-Pending: a run against a real WAHA gateway, an SMS provider for parents without
-WhatsApp, and sibling fee remission (now unblocked by the registry).
+- **Sibling fee discounts** use this registry to find families (see Fees above).
+
+Pending: a run against a real WAHA gateway.
 
 ### Guidance for every future school module
 
