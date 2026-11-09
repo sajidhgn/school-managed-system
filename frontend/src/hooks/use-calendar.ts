@@ -5,6 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/use-toast";
 import { ApiError, errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
+import { fill } from "@/lib/i18n/format";
+import { calendarMessages } from "@/lib/i18n/modules/calendar";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { calendarApi } from "@/lib/api/resources/calendar";
 import type {
   AcademicYearCreate,
@@ -54,27 +57,29 @@ export function useTerms(yearId: string | null) {
 }
 
 export function useCreateAcademicYear() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: AcademicYearCreate) => calendarApi.years.create(body),
     onSuccess: (year) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Academic year created", year.name);
+      toast.success(m.yearCreated, year.name);
     },
-    onError: (error) => toast.error("Couldn't create the year", errorMessage(error)),
+    onError: (error) => toast.error(m.yearCreateFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateAcademicYear() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: AcademicYearUpdate }) =>
       calendarApi.years.update(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Academic year updated");
+      toast.success(m.yearUpdated);
     },
-    onError: (error) => toast.error("Couldn't update the year", errorMessage(error)),
+    onError: (error) => toast.error(m.yearUpdateFailed, errorMessage(error)),
   });
 }
 
@@ -84,65 +89,70 @@ export function useUpdateAcademicYear() {
  * of them is named.
  */
 export function useSetCurrentYear() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => calendarApi.years.setCurrent(id),
     onSuccess: (year) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Current year set", `New work now defaults to ${year.name}.`);
+      toast.success(m.currentSet, fill(m.currentSetBody, { name: year.name }));
     },
-    onError: (error) => toast.error("Couldn't set the current year", errorMessage(error)),
+    onError: (error) => toast.error(m.currentSetFailed, errorMessage(error)),
   });
 }
 
 /** The backend 409s while terms or enrollments remain; the message is surfaced as-is. */
 export function useDeleteAcademicYear() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => calendarApi.years.remove(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Academic year deleted");
+      toast.success(m.yearDeleted);
     },
-    onError: (error) => toast.error("Couldn't delete the year", errorMessage(error)),
+    onError: (error) => toast.error(m.yearDeleteFailed, errorMessage(error)),
   });
 }
 
 export function useCreateTerm() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ yearId, body }: { yearId: string; body: TermCreate }) =>
       calendarApi.terms.create(yearId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Term added");
+      toast.success(m.termAdded);
     },
-    onError: (error) => toast.error("Couldn't add the term", errorMessage(error)),
+    onError: (error) => toast.error(m.termAddFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateTerm() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ termId, body }: { termId: string; body: TermUpdate }) =>
       calendarApi.terms.update(termId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Term updated");
+      toast.success(m.termUpdated);
     },
-    onError: (error) => toast.error("Couldn't update the term", errorMessage(error)),
+    onError: (error) => toast.error(m.termUpdateFailed, errorMessage(error)),
   });
 }
 
 export function useDeleteTerm() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (termId: string) => calendarApi.terms.remove(termId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.calendar.all });
-      toast.success("Term deleted");
+      toast.success(m.termDeleted);
     },
-    onError: (error) => toast.error("Couldn't delete the term", errorMessage(error)),
+    onError: (error) => toast.error(m.termDeleteFailed, errorMessage(error)),
   });
 }
 
@@ -154,6 +164,7 @@ export function useDeleteTerm() {
  * act on and would otherwise go unnoticed.
  */
 export function useBackfillEnrollments() {
+  const m = useCatalog(calendarMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (yearId: string) => calendarApi.years.backfillEnrollments(yearId),
@@ -161,11 +172,14 @@ export function useBackfillEnrollments() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.all });
       toast.success(
-        "Enrollment history opened",
-        `${result.opened} opened, ${result.already_enrolled} already on file, ` +
-          `${result.unplaced} still need a section.`,
+        m.historyOpened,
+        fill(m.historyOpenedBody, {
+          opened: result.opened,
+          already: result.already_enrolled,
+          unplaced: result.unplaced,
+        }),
       );
     },
-    onError: (error) => toast.error("Couldn't open enrollment history", errorMessage(error)),
+    onError: (error) => toast.error(m.historyFailed, errorMessage(error)),
   });
 }

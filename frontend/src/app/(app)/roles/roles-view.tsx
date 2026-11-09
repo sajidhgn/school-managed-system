@@ -25,6 +25,10 @@ import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { roles as rolesApi } from "@/lib/api/resources";
 import { PERMISSIONS, type PermissionCategory, type RoleRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useRbacText } from "@/lib/i18n/modules/permissions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -58,6 +62,8 @@ export function RolesView({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const m = useCatalog(adminMessages).roles;
+  const rbac = useRbacText();
   const [selectedId, setSelectedId] = useState<string | null>(
     roles.find((r) => r.school_id === schoolId)?.id ?? roles[0]?.id ?? null,
   );
@@ -75,19 +81,19 @@ export function RolesView({
     setBusy(true);
     try {
       await rolesApi.remove(schoolId, role.id);
-      toast({ title: `${role.name} deleted.` });
+      toast({ title: fill(m.deleted, { name: role.name }) });
       setSelectedId(null);
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not delete this role",
+        title: m.deleteFailed,
         description:
           error instanceof ApiError
             ? // The server returns the blocking member count on 409 ROLE_IN_USE,
               // which is far more actionable than "delete failed".
               error.message
-            : "Please try again.",
+            : t.common.tryAgain,
       });
     } finally {
       setBusy(false);
@@ -109,13 +115,13 @@ export function RolesView({
         name: editName.trim(),
         description: editDescription.trim() || null,
       });
-      toast({ title: `${editName.trim()} updated.` });
+      toast({ title: fill(m.updated, { name: editName.trim() }) });
       setEditing(null);
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not update this role",
+        title: m.updateFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -153,7 +159,7 @@ export function RolesView({
                 )}
               >
                 <Shield className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1 truncate">{role.name}</span>
+                <span className="min-w-0 flex-1 truncate">{rbac.roleName(role.code, role.name)}</span>
                 {!role.is_editable ? (
                   <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                 ) : null}
@@ -167,12 +173,14 @@ export function RolesView({
             <header className="mb-5 flex flex-wrap items-start gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="flex items-center gap-2 text-lg font-medium">
-                  {selected.name}
+                  {rbac.roleName(selected.code, selected.name)}
                   {selected.is_system ? <Badge variant="neutral">{t.roles.systemBadge}</Badge> : null}
                   {isOrgLevel ? <Badge variant="outline">{t.roles.organizationBadge}</Badge> : null}
                 </h2>
                 {selected.description ? (
-                  <p className="mt-1 text-sm text-muted-foreground">{selected.description}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {rbac.roleDescription(selected.code, selected.description)}
+                  </p>
                 ) : null}
               </div>
 
@@ -181,7 +189,7 @@ export function RolesView({
                   <Can permission={PERMISSIONS.roleUpdate}>
                     <Button variant="ghost" size="sm" disabled={busy} onClick={() => beginEdit(selected)}>
                       <Pencil className="size-4" aria-hidden />
-                      Edit details
+                      {m.editDetails}
                     </Button>
                   </Can>
                   <Can permission={PERMISSIONS.roleDelete}>
@@ -238,9 +246,9 @@ export function RolesView({
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title={deleting ? `${t.common.delete} ${deleting.name}?` : t.roles.deleteTitle}
+        title={deleting ? fill(m.deleteNamed, { name: deleting.name }) : t.roles.deleteTitle}
         description={t.roles.deleteBody}
-        confirmLabel="Delete role"
+        confirmLabel={m.deleteRole}
         variant="destructive"
         loading={busy}
         onConfirm={() => deleting && remove(deleting)}
@@ -249,18 +257,16 @@ export function RolesView({
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit role details</DialogTitle>
-            <DialogDescription>
-              Renaming is cosmetic. Permissions remain in the separate matrix and are audited separately.
-            </DialogDescription>
+            <DialogTitle>{m.editTitle}</DialogTitle>
+            <DialogDescription>{m.editDescription}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-1.5">
-              <label htmlFor="role-edit-name" className="text-sm font-medium">Display name</label>
+              <label htmlFor="role-edit-name" className="text-sm font-medium">{t.roles.displayName}</label>
               <Input id="role-edit-name" value={editName} onChange={(event) => setEditName(event.target.value)} />
             </div>
             <div className="grid gap-1.5">
-              <label htmlFor="role-edit-description" className="text-sm font-medium">Description</label>
+              <label htmlFor="role-edit-description" className="text-sm font-medium">{t.roles.description}</label>
               <Input
                 id="role-edit-description"
                 value={editDescription}
@@ -269,9 +275,9 @@ export function RolesView({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>{t.common.cancel}</Button>
             <Button onClick={saveMetadata} loading={busy} disabled={editName.trim().length < 2}>
-              Save details
+              {m.saveDetails}
             </Button>
           </DialogFooter>
         </DialogContent>

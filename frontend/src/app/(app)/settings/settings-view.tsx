@@ -17,13 +17,15 @@ import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { organization as orgApi } from "@/lib/api/resources";
 import {
-  ORG_STATUS_LABELS,
   label,
   type MeResponse,
   type MemberRead,
   type OrganizationRead,
 } from "@/lib/api/types";
 import type { CurrencyCatalog } from "@/lib/currency-timezones";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 import { ProfilePhoto } from "./profile-photo";
 
@@ -59,6 +61,8 @@ export function SettingsView({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const { settings: m, schoolDetail } = useCatalog(adminMessages);
+  const L = useLabels();
   const [name, setName] = useState(organization?.name ?? "");
   const [billingEmail, setBillingEmail] = useState(organization?.billing_email ?? "");
   const [logoUrl, setLogoUrl] = useState(organization?.logo_url ?? "");
@@ -88,7 +92,7 @@ export function SettingsView({
     if (themeColors.some((color) => !THEME_COLOR_PATTERN.test(color))) {
       toast({
         variant: "destructive",
-        title: "Each theme colour must be a 6-digit hex value, like #1D4ED8.",
+        title: schoolDetail.themeColourError,
       });
       return;
     }
@@ -110,7 +114,7 @@ export function SettingsView({
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not save",
+        title: m.saveFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -123,12 +127,12 @@ export function SettingsView({
     setSaving(true);
     try {
       await orgApi.transferOwnership(newOwnerMembershipId);
-      toast({ title: "Ownership transferred", description: "Your organization-owner session has ended." });
+      toast({ title: m.transferred, description: m.transferredBody });
       window.location.assign("/select-school");
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not transfer ownership",
+        title: m.transferFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -162,7 +166,7 @@ export function SettingsView({
           <div className="mb-4 flex items-center gap-3">
             <h2 className="font-medium">{t.settings.organization}</h2>
             <Badge variant={organization.status === "active" ? "success" : "warning"}>
-              {label(ORG_STATUS_LABELS, organization.status)}
+              {label(L.orgStatus, organization.status)}
             </Badge>
           </div>
 
@@ -198,10 +202,10 @@ export function SettingsView({
               "single or individual" story — there is no mode switch to forget.
             */}
             <div className="grid gap-4 border-t border-border pt-4">
-              <h3 className="text-sm font-medium">Branding</h3>
+              <h3 className="text-sm font-medium">{m.branding}</h3>
 
               <div className="grid gap-1.5">
-                <Label htmlFor="org-logo">Logo</Label>
+                <Label htmlFor="org-logo">{m.logo}</Label>
                 <LogoInput
                   id="org-logo"
                   value={logoUrl}
@@ -211,7 +215,7 @@ export function SettingsView({
               </div>
 
               <div className="grid gap-1.5">
-                <Label>Theme colours</Label>
+                <Label>{m.themeColours}</Label>
                 <ColorListInput
                   values={themeColors}
                   disabled={!canEditOrg}
@@ -219,11 +223,7 @@ export function SettingsView({
                 />
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                Used on student cards and printed headers. Every branch uses this
-                branding unless it sets its own — a branch overrides it from its page
-                under Schools.
-              </p>
+              <p className="text-xs text-muted-foreground">{m.brandingHint}</p>
             </div>
 
             <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
@@ -285,19 +285,17 @@ export function SettingsView({
 
       {canTransferOwnership ? (
         <section className="mt-8 rounded-xl border border-destructive/30 bg-card p-5">
-          <h2 className="font-medium">Transfer ownership</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Promote an active member to organization owner. Your org-level owner access is removed atomically.
-          </p>
+          <h2 className="font-medium">{m.transferTitle}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{m.transferBody}</p>
           {ownershipCandidates.length > 0 ? (
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <select
                 className="h-9 flex-1 rounded-control border border-border bg-background px-3 text-sm"
                 value={newOwnerMembershipId}
                 onChange={(event) => setNewOwnerMembershipId(event.target.value)}
-                aria-label="New owner"
+                aria-label={m.newOwner}
               >
-                <option value="">Choose an active member</option>
+                <option value="">{m.chooseMember}</option>
                 {ownershipCandidates.map((member) => (
                   <option key={member.membership_id} value={member.membership_id}>
                     {member.full_name} ({member.email})
@@ -309,13 +307,11 @@ export function SettingsView({
                 disabled={!newOwnerMembershipId}
                 onClick={() => setConfirmTransfer(true)}
               >
-                Transfer ownership
+                {m.transfer}
               </Button>
             </div>
           ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              Invite an active member before transferring ownership.
-            </p>
+            <p className="mt-3 text-sm text-muted-foreground">{m.noCandidates}</p>
           )}
         </section>
       ) : null}
@@ -323,9 +319,9 @@ export function SettingsView({
       <ConfirmDialog
         open={confirmTransfer}
         onOpenChange={setConfirmTransfer}
-        title="Transfer organization ownership?"
-        description="The selected member receives billing and organization-wide authority immediately. Your organization-owner membership is removed."
-        confirmLabel="Transfer ownership"
+        title={m.confirmTitle}
+        description={m.confirmBody}
+        confirmLabel={m.transfer}
         variant="destructive"
         loading={saving}
         onConfirm={transferOwnership}

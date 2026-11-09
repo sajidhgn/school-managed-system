@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { FileText, Receipt, Settings2, Wallet } from "lucide-react";
+import { Download, FileText, Receipt, Settings2, Wallet } from "lucide-react";
 
 import { ChallanDesignDialog, type ChallanSchool } from "./challan-design-dialog";
 import { GenerateChallansDialog } from "./generate-challans-dialog";
@@ -29,8 +29,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useFeeSummary, useVouchers } from "@/hooks/use-fees";
+import { feesApi } from "@/lib/api/resources/fees";
 import { currentAcademicYear } from "@/lib/academic-year";
-import { VOUCHER_STATUS_LABELS, label } from "@/lib/api/types";
+import { label } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -64,6 +69,8 @@ export function FeesView({
   canDesignChallan: boolean;
   school: ChallanSchool | null;
 }) {
+  const m = useCatalog(feesMessages).register;
+  const L = useLabels();
   const [academicYear, setAcademicYear] = React.useState(currentAcademicYear);
   const [period, setPeriod] = React.useState("");
   const [status, setStatus] = React.useState<string>("all");
@@ -103,28 +110,28 @@ export function FeesView({
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
-        title="Fees"
-        description="Challans issued, money collected, and what is still owed at this campus."
+        title={m.title}
+        description={m.description}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {canManage ? (
               <Button variant="outline" asChild>
                 <Link href="/fees/setup">
                   <Settings2 className="size-4" aria-hidden />
-                  Heads &amp; structures
+                  {m.headsAndStructures}
                 </Link>
               </Button>
             ) : null}
             {canDesignChallan && school ? (
               <Button variant="outline" onClick={() => setDesigning(true)}>
                 <FileText className="size-4" aria-hidden />
-                Challan design
+                {m.challanDesign}
               </Button>
             ) : null}
             {canIssue ? (
               <Button onClick={() => setGenerating(true)}>
                 <Receipt className="size-4" aria-hidden />
-                Generate challans
+                {m.generateChallans}
               </Button>
             ) : null}
           </div>
@@ -134,7 +141,7 @@ export function FeesView({
       {/* --- What the figures below are about ------------------------------ */}
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className="grid gap-1.5 text-sm">
-          <span className="font-medium">Academic year</span>
+          <span className="font-medium">{m.academicYear}</span>
           <Input
             value={academicYear}
             onChange={(event) => reframe(() => setAcademicYear(event.target.value))}
@@ -147,11 +154,11 @@ export function FeesView({
             dialog asks for. Named the same here as there, because a filter whose
             label disagrees with the field it filters is a filter nobody trusts. */}
         <label className="grid gap-1.5 text-sm">
-          <span className="font-medium">Description</span>
+          <span className="font-medium">{m.descriptionLabel}</span>
           <Input
             value={period}
             onChange={(event) => reframe(() => setPeriod(event.target.value))}
-            placeholder="All challans"
+            placeholder={m.descriptionPlaceholder}
             className="w-52"
           />
         </label>
@@ -165,14 +172,18 @@ export function FeesView({
             when something was actually sold — otherwise it reads as a zero worth
             worrying about. */}
         <Figure
-          label="Billed"
+          label={m.billed}
           value={summary.data ? money.format(Number(summary.data.billed)) : "—"}
           hint={
             summary.data
               ? [
-                  `${summary.data.voucher_count} challan${summary.data.voucher_count === 1 ? "" : "s"}`,
+                  fill(summary.data.voucher_count === 1 ? m.challansOne : m.challansMany, {
+                    count: summary.data.voucher_count,
+                  }),
                   Number(summary.data.stationery_billed) > 0
-                    ? `${money.format(Number(summary.data.stationery_billed))} stationery`
+                    ? fill(m.stationeryBilled, {
+                        amount: money.format(Number(summary.data.stationery_billed)),
+                      })
                     : null,
                 ]
                   .filter(Boolean)
@@ -182,21 +193,21 @@ export function FeesView({
           loading={summary.isPending}
         />
         <Figure
-          label="Collected"
+          label={m.collected}
           value={summary.data ? money.format(Number(summary.data.collected)) : "—"}
           tone="success"
           loading={summary.isPending}
         />
         <Figure
-          label="Outstanding"
+          label={m.outstanding}
           value={summary.data ? money.format(Number(summary.data.outstanding)) : "—"}
           tone={summary.data && Number(summary.data.outstanding) > 0 ? "warning" : undefined}
           loading={summary.isPending}
         />
         <Figure
-          label="Overdue"
+          label={m.overdue}
           value={summary.data ? money.format(Number(summary.data.overdue)) : "—"}
-          hint="Past the due date and unpaid"
+          hint={m.overdueHint}
           tone={summary.data && Number(summary.data.overdue) > 0 ? "destructive" : undefined}
           loading={summary.isPending}
         />
@@ -204,20 +215,37 @@ export function FeesView({
 
       {/* --- The register -------------------------------------------------- */}
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Challans</h2>
-        <Select value={status} onValueChange={(value) => reframe(() => setStatus(value))}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {Object.keys(VOUCHER_STATUS_LABELS).map((value) => (
-              <SelectItem key={value} value={value}>
-                {label(VOUCHER_STATUS_LABELS, value)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <h2 className="text-sm font-medium text-muted-foreground">{m.challans}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Exports what the register shows — same year, description and status —
+              across every page, not only the one in view. */}
+          <Button variant="outline" asChild>
+            <a
+              href={feesApi.vouchers.exportUrl({
+                academic_year: academicYear.trim(),
+                period_label: trimmedPeriod,
+                status: status !== "all" ? status : undefined,
+              })}
+              download
+            >
+              <Download className="size-4" aria-hidden />
+              {m.exportCsv}
+            </a>
+          </Button>
+          <Select value={status} onValueChange={(value) => reframe(() => setStatus(value))}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder={m.allStatuses} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{m.allStatuses}</SelectItem>
+              {Object.keys(L.voucherStatus).map((value) => (
+                <SelectItem key={value} value={value}>
+                  {label(L.voucherStatus, value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="mt-3 overflow-hidden p-0">
@@ -228,15 +256,11 @@ export function FeesView({
         ) : vouchers.data.items.length === 0 ? (
           <EmptyState
             icon={Wallet}
-            title="No challans for this period"
-            description={
-              canIssue
-                ? "Generate challans for a class once its fee structure is active."
-                : "Nothing has been billed for the year and period above."
-            }
+            title={m.emptyTitle}
+            description={canIssue ? m.emptyCanIssue : m.emptyReadOnly}
             action={
               canIssue ? (
-                <Button onClick={() => setGenerating(true)}>Generate challans</Button>
+                <Button onClick={() => setGenerating(true)}>{m.generateChallans}</Button>
               ) : undefined
             }
           />
@@ -245,12 +269,12 @@ export function FeesView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Challan</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead className="text-end">Total</TableHead>
-                  <TableHead className="text-end">Outstanding</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{m.colStudent}</TableHead>
+                  <TableHead>{m.colChallan}</TableHead>
+                  <TableHead>{m.colDue}</TableHead>
+                  <TableHead className="text-end">{m.colTotal}</TableHead>
+                  <TableHead className="text-end">{m.colOutstanding}</TableHead>
+                  <TableHead>{m.colStatus}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

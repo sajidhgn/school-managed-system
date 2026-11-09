@@ -19,7 +19,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { useCreateSection, useUpdateSection } from "@/hooks/use-classes";
 import { ApiError, errorMessage } from "@/lib/api/errors";
-import { sectionFormSchema, toSectionPayload, type SectionFormValues } from "@/lib/validation/classes";
+import { fill } from "@/lib/i18n/format";
+import { classesMessages } from "@/lib/i18n/modules/classes";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import {
+  createSectionFormSchema,
+  toSectionPayload,
+  type SectionFormValues,
+} from "@/lib/validation/classes";
 
 /** Both SectionRead and SectionSummary satisfy this, so either can be edited. */
 export type EditableSection = {
@@ -78,6 +85,8 @@ export function SectionFormDialog({
   /** The campus this class belongs to -- scopes the class-teacher list to its staff. */
   schoolId: string | null;
 }) {
+  const { sectionForm: m, validation } = useCatalog(classesMessages);
+  const schema = React.useMemo(() => createSectionFormSchema(validation), [validation]);
   const isEdit = Boolean(section);
   const [formError, setFormError] = React.useState<string | null>(null);
 
@@ -85,7 +94,7 @@ export function SectionFormDialog({
   const updateSection = useUpdateSection();
 
   const form = useForm<SectionFormValues>({
-    resolver: zodResolver(sectionFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: EMPTY,
   });
 
@@ -152,9 +161,9 @@ export function SectionFormDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit section" : "Add section"}</DialogTitle>
+          <DialogTitle>{isEdit ? m.editTitle : m.addTitle}</DialogTitle>
           <DialogDescription>
-            {isEdit ? `Update this section of ${classLabel}.` : `Add a section to ${classLabel}.`}
+            {fill(isEdit ? m.editDescription : m.addDescription, { class: classLabel })}
           </DialogDescription>
         </DialogHeader>
 
@@ -163,29 +172,29 @@ export function SectionFormDialog({
 
           <div className="grid gap-4">
             <Field
-              label="Section name"
+              label={m.name}
               htmlFor="name"
               error={form.formState.errors.name}
-              hint="For example, A or Blue."
+              hint={m.nameHint}
               required
             >
               <Input autoFocus {...form.register("name")} />
             </Field>
 
             <Field
-              label="Capacity"
+              label={m.capacity}
               htmlFor="capacity"
               error={form.formState.errors.capacity}
-              hint="Leave blank for no seat limit."
+              hint={m.capacityHint}
             >
               <Input type="number" min={1} step={1} {...form.register("capacity")} />
             </Field>
 
             <Field
-              label="Class teacher"
+              label={m.classTeacher}
               htmlFor="class_teacher_id"
               error={form.formState.errors.class_teacher_id}
-              hint="Optional. Teaching staff at this campus."
+              hint={m.classTeacherHint}
             >
               {/*
                 `Controller`, not `register`: react-select is a custom listbox, not an
@@ -227,10 +236,10 @@ export function SectionFormDialog({
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              Cancel
+              {m.cancel}
             </Button>
             <Button type="submit" loading={saving}>
-              {isEdit ? "Save changes" : "Add section"}
+              {isEdit ? m.saveChanges : m.add}
             </Button>
           </DialogFooter>
         </form>

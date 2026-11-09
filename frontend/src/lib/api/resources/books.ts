@@ -1,5 +1,6 @@
 import { api } from "@/lib/api/client";
 import type {
+  AskRequest,
   BookCreate,
   BookDetail,
   BookPageRead,
@@ -11,7 +12,9 @@ import type {
   ChapterInput,
   ChapterRead,
   ChapterUpdate,
+  LibraryAnswer,
   LibraryBook,
+  LibraryHit,
   Page,
   ShelfInput,
 } from "@/lib/api/types";
@@ -42,6 +45,14 @@ export interface LibraryParams {
  * agent (`app.cli process-books`, or the API itself with inline processing) reads,
  * orders, verifies and indexes it, and the chapter's `status` reports where it is.
  */
+/** Narrows library search and questions. Every field is optional. */
+export interface LibraryScopeParams {
+  class_id?: string | null;
+  subject_id?: string | null;
+  book_id?: string | null;
+  chapter_id?: string | null;
+}
+
 export const booksApi = {
   list: (params: BookListParams = {}) =>
     api.get<Page<BookRead>>("/books", { params: { ...params } }),
@@ -96,6 +107,21 @@ export const booksApi = {
     api.get<BookSearchHit[]>(`/books/${bookId}/search`, {
       params: { q, chapter_id: chapterId },
     }),
+
+  /**
+   * Hybrid (meaning + keyword) search across every book the caller can see.
+   * Narrowed by class, subject, book or chapter; a teacher is bounded to their
+   * own classes by the server.
+   */
+  searchLibrary: (params: LibraryScopeParams & { q: string; limit?: number }) =>
+    api.get<LibraryHit[]>("/books/search", { params: { ...params } }),
+
+  /**
+   * An answer written ONLY from the books, citing passages as [1], [2]. `found` is
+   * false when the books do not cover the question — the model may not answer from
+   * its own knowledge. 503 AI_NOT_CONFIGURED when no model is set up.
+   */
+  ask: (body: AskRequest) => api.post<LibraryAnswer>("/books/ask", body),
 };
 
 /** Same-origin URLs the BFF serves with the session attached -- usable in <img>/<a>. */

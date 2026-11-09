@@ -1,15 +1,8 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
-import {
-  ATTENDANCE_REGISTER_STATUS_LABELS,
-  INVITATION_STATUS_LABELS,
-  MEMBER_STATUS_LABELS,
-  ORG_STATUS_LABELS,
-  SCHOOL_STATUS_LABELS,
-  STUDENT_STATUS_LABELS,
-  SUBSCRIPTION_STATUS_LABELS,
-  VOUCHER_STATUS_LABELS,
-  label,
-} from "@/lib/api/types";
+import { label } from "@/lib/api/types";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /**
  * Status pills.
@@ -73,38 +66,58 @@ function toneFor(status: string | null | undefined): Tone {
   return TONES[status] ?? "neutral";
 }
 
-function StatusBadge({
-  status,
-  labels,
-}: {
-  status: string | null | undefined;
-  labels: Record<string, string>;
-}) {
+type Domain =
+  | "studentStatus"
+  | "schoolStatus"
+  | "orgStatus"
+  | "subscriptionStatus"
+  | "memberStatus"
+  | "invitationStatus"
+  | "voucherStatus"
+  | "any";
+
+const ANY_DOMAINS = [
+  "studentStatus",
+  "schoolStatus",
+  "orgStatus",
+  "subscriptionStatus",
+  "memberStatus",
+  "invitationStatus",
+  "voucherStatus",
+  "registerStatus",
+] as const;
+
+function StatusBadge({ status, domain }: { status: string | null | undefined; domain: Domain }) {
+  const L = useLabels();
+  const labels: Record<string, string> =
+    domain === "any"
+      ? Object.assign({}, ...ANY_DOMAINS.map((key) => L[key]))
+      : L[domain];
   return <Badge variant={toneFor(status)}>{label(labels, status)}</Badge>;
 }
 
 export function StudentStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={STUDENT_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="studentStatus" />;
 }
 
 export function SchoolStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={SCHOOL_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="schoolStatus" />;
 }
 
 export function OrganizationStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={ORG_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="orgStatus" />;
 }
 
 export function SubscriptionStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={SUBSCRIPTION_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="subscriptionStatus" />;
 }
 
 export function MemberStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={MEMBER_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="memberStatus" />;
 }
 
 export function InvitationStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={INVITATION_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="invitationStatus" />;
 }
 
 /**
@@ -113,14 +126,15 @@ export function InvitationStatusBadge({ status }: { status: string | null | unde
  * in this module — a voided challan is a neutral outcome, not a failure.
  */
 export function VoucherStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={VOUCHER_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="voucherStatus" />;
 }
 
 /**
  * A status pill for a value whose domain is not known at the call site.
  *
  * Global search returns students, vouchers, invitations and memberships in one
- * list, so it cannot pick a domain-specific label map per row. Merging them is
+ * list, so it cannot pick a domain-specific label map per row. Merging them (see
+ * `ANY_DOMAINS`) is
  * safe because the collisions are all synonyms — `active` means the same thing for
  * a student, a campus and a membership, and the pill says "Active" for each. A
  * value in none of the maps renders as its raw string, which is the same honest
@@ -129,17 +143,6 @@ export function VoucherStatusBadge({ status }: { status: string | null | undefin
  * Prefer the specific badges above wherever the domain IS known: they are exact,
  * and this one is a deliberate compromise for the one screen that is generic.
  */
-const ANY_STATUS_LABELS: Record<string, string> = {
-  ...STUDENT_STATUS_LABELS,
-  ...SCHOOL_STATUS_LABELS,
-  ...ORG_STATUS_LABELS,
-  ...SUBSCRIPTION_STATUS_LABELS,
-  ...MEMBER_STATUS_LABELS,
-  ...INVITATION_STATUS_LABELS,
-  ...VOUCHER_STATUS_LABELS,
-  ...ATTENDANCE_REGISTER_STATUS_LABELS,
-};
-
 export function AnyStatusBadge({ status }: { status: string | null | undefined }) {
-  return <StatusBadge status={status} labels={ANY_STATUS_LABELS} />;
+  return <StatusBadge status={status} domain="any" />;
 }

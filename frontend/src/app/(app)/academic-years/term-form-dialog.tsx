@@ -15,6 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateTerm, useTerms } from "@/hooks/use-calendar";
 import type { AcademicYearRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { calendarMessages } from "@/lib/i18n/modules/calendar";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 export function TermFormDialog({
   open,
@@ -25,6 +28,8 @@ export function TermFormDialog({
   onOpenChange: (open: boolean) => void;
   year: AcademicYearRead;
 }) {
+  const m = useCatalog(calendarMessages).termForm;
+  const defaultName = m.defaultName;
   const create = useCreateTerm();
   const existing = useTerms(open ? year.id : null);
 
@@ -38,11 +43,11 @@ export function TermFormDialog({
     // Default to the next slot rather than 1. A registrar adding "Term 2" should not
     // have to discover that 1 is taken by submitting and reading a 409.
     const next = (existing.data?.length ?? 0) + 1;
-    setName(`Term ${next}`);
+    setName(fill(defaultName, { n: next }));
     setSequence(next);
     setStart("");
     setEnd("");
-  }, [open, existing.data]);
+  }, [open, existing.data, defaultName]);
 
   const invalidRange = Boolean(start && end && end <= start);
   const outsideYear = Boolean(
@@ -64,17 +69,16 @@ export function TermFormDialog({
       <DialogContent>
         <form onSubmit={(event) => void handleSubmit(event)}>
           <DialogHeader>
-            <DialogTitle>Add a term to {year.name}</DialogTitle>
+            <DialogTitle>{fill(m.title, { year: year.name })}</DialogTitle>
             <DialogDescription>
-              Terms may not overlap each other, and must fall inside {year.start_date} to{" "}
-              {year.end_date}.
+              {fill(m.description, { start: year.start_date, end: year.end_date })}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-[1fr_6rem] gap-3">
               <div className="space-y-1">
-                <Label htmlFor="term-name">Name</Label>
+                <Label htmlFor="term-name">{m.name}</Label>
                 <Input
                   id="term-name"
                   required
@@ -84,7 +88,7 @@ export function TermFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="term-sequence">Order</Label>
+                <Label htmlFor="term-sequence">{m.order}</Label>
                 <Input
                   id="term-sequence"
                   type="number"
@@ -98,7 +102,7 @@ export function TermFormDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="term-start">Starts</Label>
+                <Label htmlFor="term-start">{m.starts}</Label>
                 <Input
                   id="term-start"
                   type="date"
@@ -110,7 +114,7 @@ export function TermFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="term-end">Ends</Label>
+                <Label htmlFor="term-end">{m.ends}</Label>
                 <Input
                   id="term-end"
                   type="date"
@@ -123,24 +127,24 @@ export function TermFormDialog({
               </div>
             </div>
             {invalidRange && (
-              <p className="text-sm text-destructive">The term must end after it starts.</p>
+              <p className="text-sm text-destructive">{m.invalidRange}</p>
             )}
             {outsideYear && (
               <p className="text-sm text-destructive">
-                The term must fall inside {year.name}.
+                {fill(m.outsideYear, { year: year.name })}
               </p>
             )}
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {m.cancel}
             </Button>
             <Button
               type="submit"
               disabled={invalidRange || outsideYear || create.isPending}
             >
-              Add term
+              {m.add}
             </Button>
           </DialogFooter>
         </form>

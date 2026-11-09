@@ -22,14 +22,20 @@ import type {
   FeeStructureCreate,
   FeeStructureItemInput,
   FeeStructureStationeryInput,
+  LateFeePolicyCreate,
+  LedgerAdjustmentInput,
   PageParams,
   SiblingApplyRequest,
   StationeryItemCreate,
   StationeryItemUpdate,
   StudentFeeAssignmentInput,
+  VoucherFeeChargeInput,
   VoucherGenerateRequest,
   VoucherStationeryInput,
 } from "@/lib/api/types";
+import { fill, ltr } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /**
  * Fees data layer.
@@ -114,6 +120,25 @@ export function useBillingSchedule(academicYear: string) {
   });
 }
 
+/** The late-fee rules for one year. An empty list is "not set up", not an error. */
+export function useLateFeePolicies(academicYear: string) {
+  return useQuery({
+    queryKey: queryKeys.fees.lateFees(academicYear),
+    queryFn: () => feesApi.lateFees.list(academicYear),
+    enabled: Boolean(academicYear),
+  });
+}
+
+/** A student's running account — balance first, then every movement, newest first. */
+export function useStudentLedger(studentId: string, params: PageParams = {}, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.fees.ledger(studentId, params),
+    queryFn: () => feesApi.students.ledger(studentId, params),
+    enabled: enabled && Boolean(studentId),
+    placeholderData: (previous) => previous,
+  });
+}
+
 export function useConcessions(params: PageParams & { is_active?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.fees.concessions(params),
@@ -180,31 +205,45 @@ function useFeeMutation<TArgs, TResult>(
   });
 }
 
+/** The toast strings, in the viewer's language. Read at the top of each hook. */
+function useFeeToasts() {
+  return useCatalog(feesMessages).toast;
+}
+
+/** "1 challan" / "3 challans" — the one- and many- forms are separate catalog keys. */
+function counted(count: number, one: string, many: string): string {
+  return fill(count === 1 ? one : many, { count });
+}
+
 export function useCreateFeeHead() {
+  const m = useFeeToasts();
   return useFeeMutation((body: FeeHeadCreate) => feesApi.heads.create(body), {
-    success: (head) => ["Fee head created", head.name],
-    failure: "Couldn't create fee head",
+    success: (head) => [m.feeHeadCreated, head.name],
+    failure: m.feeHeadCreateFailed,
   });
 }
 
 export function useUpdateFeeHead() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: FeeHeadUpdate }) => feesApi.heads.update(id, body),
-    { success: () => ["Fee head updated"], failure: "Couldn't update fee head" },
+    { success: () => [m.feeHeadUpdated], failure: m.feeHeadUpdateFailed },
   );
 }
 
 export function useDeleteFeeHead() {
+  const m = useFeeToasts();
   return useFeeMutation((id: string) => feesApi.heads.remove(id), {
-    success: () => ["Fee head deleted"],
-    failure: "Couldn't delete fee head",
+    success: () => [m.feeHeadDeleted],
+    failure: m.feeHeadDeleteFailed,
   });
 }
 
 export function useCreateStationeryItem() {
+  const m = useFeeToasts();
   return useFeeMutation((body: StationeryItemCreate) => feesApi.stationery.create(body), {
-    success: (item) => ["Stationery item added", item.name],
-    failure: "Couldn't add that item",
+    success: (item) => [m.stationeryAdded, item.name],
+    failure: m.itemAddFailed,
   });
 }
 
@@ -215,39 +254,40 @@ export function useCreateStationeryItem() {
  * thing a bursar needs to be sure of before changing a number that appears on bills.
  */
 export function useUpdateStationeryItem() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: StationeryItemUpdate }) =>
       feesApi.stationery.update(id, body),
     {
-      success: (item) => [
-        "Stationery item updated",
-        `Challans already issued keep charging what ${item.name} cost when they were generated.`,
-      ],
-      failure: "Couldn't update that item",
+      success: (item) => [m.stationeryUpdated, fill(m.stationeryUpdatedBody, { name: item.name })],
+      failure: m.itemUpdateFailed,
     },
   );
 }
 
 export function useDeleteStationeryItem() {
+  const m = useFeeToasts();
   return useFeeMutation((id: string) => feesApi.stationery.remove(id), {
-    success: () => ["Stationery item deleted"],
-    failure: "Couldn't delete that item",
+    success: () => [m.stationeryDeleted],
+    failure: m.itemDeleteFailed,
   });
 }
 
 export function useSetStructureStationery() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: FeeStructureStationeryInput }) =>
       feesApi.structures.setStationery(id, body),
-    { success: () => ["Structure updated"], failure: "Couldn't add that item" },
+    { success: () => [m.structureUpdated], failure: m.itemAddFailed },
   );
 }
 
 export function useRemoveStructureStationery() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, stationeryItemId }: { id: string; stationeryItemId: string }) =>
       feesApi.structures.removeStationery(id, stationeryItemId),
-    { success: () => ["Item removed"], failure: "Couldn't remove that line" },
+    { success: () => [m.itemRemoved], failure: m.lineRemoveFailed },
   );
 }
 
@@ -259,18 +299,20 @@ export function useRemoveStructureStationery() {
  * put the charge on next month's bill, which is what they actually need to do.
  */
 export function useAddVoucherStationery() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: VoucherStationeryInput }) =>
       feesApi.vouchers.addStationery(id, body),
-    { success: () => ["Charge added"], failure: "Couldn't add that charge" },
+    { success: () => [m.chargeAdded], failure: m.chargeAddFailed },
   );
 }
 
 export function useRemoveVoucherStationery() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, stationeryItemId }: { id: string; stationeryItemId: string }) =>
       feesApi.vouchers.removeStationery(id, stationeryItemId),
-    { success: () => ["Charge removed"], failure: "Couldn't remove that charge" },
+    { success: () => [m.chargeRemoved], failure: m.chargeRemoveFailed },
   );
 }
 
@@ -282,20 +324,19 @@ export function useRemoveVoucherStationery() {
  * this morning just changed. It did not — issued challans snapshot their lines.
  */
 export function useSetStudentFeeAssignment() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ studentId, body }: { studentId: string; body: StudentFeeAssignmentInput }) =>
       feesApi.students.setAssignment(studentId, body),
     {
-      success: () => [
-        "Fee arrangement saved",
-        "Applies from the next challan generated. Challans already issued are unchanged.",
-      ],
-      failure: "Couldn't save that arrangement",
+      success: () => [m.arrangementSaved, m.arrangementSavedBody],
+      failure: m.arrangementSaveFailed,
     },
   );
 }
 
 export function useRemoveStudentFeeAssignment() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({
       studentId,
@@ -307,8 +348,8 @@ export function useRemoveStudentFeeAssignment() {
       academicYear: string;
     }) => feesApi.students.removeAssignment(studentId, headId, academicYear),
     {
-      success: () => ["Back on the class default"],
-      failure: "Couldn't remove that arrangement",
+      success: () => [m.backOnClassDefault],
+      failure: m.arrangementRemoveFailed,
     },
   );
 }
@@ -321,16 +362,17 @@ export function useRemoveStudentFeeAssignment() {
  * screen that says "saved" leaves them to work that out from a day number.
  */
 export function useSetBillingSchedule() {
+  const m = useFeeToasts();
   return useFeeMutation(
     (body: FeeBillingScheduleInput) => feesApi.billingSchedule.set(body),
     {
       success: (schedule) => [
-        schedule.is_active ? "Automatic billing on" : "Automatic billing paused",
+        schedule.is_active ? m.billingOn : m.billingPaused,
         schedule.is_active && schedule.next_run_on
-          ? `Next run ${schedule.next_run_on}. Challans already issued are never restated.`
-          : "Nothing will be generated until you turn it back on.",
+          ? fill(m.billingNextRun, { date: schedule.next_run_on })
+          : m.billingPausedBody,
       ],
-      failure: "Couldn't save the billing schedule",
+      failure: m.billingSaveFailed,
     },
   );
 }
@@ -344,33 +386,38 @@ export function useSetBillingSchedule() {
  * move is to click it again.
  */
 export function useRunBillingSchedule() {
+  const m = useFeeToasts();
   return useFeeMutation((academicYear: string) => feesApi.billingSchedule.run(academicYear), {
     success: (result) =>
       result.ran
         ? [
-            `${result.created} challan${result.created === 1 ? "" : "s"} generated`,
+            counted(result.created ?? 0, m.challansGeneratedOne, m.challansGeneratedMany),
             [
-              `${result.structures} class structure${result.structures === 1 ? "" : "s"} billed for ${result.period_label}.`,
+              fill(result.structures === 1 ? m.structuresBilledOne : m.structuresBilledMany, {
+                count: result.structures ?? 0,
+                period: result.period_label ?? "",
+              }),
               result.skipped
-                ? `${result.skipped} student${result.skipped === 1 ? " was" : "s were"} skipped — already billed.`
+                ? counted(result.skipped, m.skippedBilledOne, m.skippedBilledMany)
                 : "",
               result.absorbed_vouchers
-                ? `${result.absorbed_vouchers} earlier challan${result.absorbed_vouchers === 1 ? "" : "s"} carried forward.`
+                ? counted(result.absorbed_vouchers, m.carriedForwardOne, m.carriedForwardMany)
                 : "",
-              result.truncated ? "A class was too large for one run — bill the rest by section." : "",
+              result.truncated ? m.runTruncated : "",
             ]
               .filter(Boolean)
               .join(" "),
           ]
-        : ["Nothing to generate", result.reason ?? undefined],
-    failure: "Couldn't run the billing",
+        : [m.nothingToGenerate, result.reason ?? undefined],
+    failure: m.billingRunFailed,
   });
 }
 
 export function useCreateConcession() {
+  const m = useFeeToasts();
   return useFeeMutation((body: FeeConcessionCreate) => feesApi.concessions.create(body), {
-    success: (concession) => ["Concession created", concession.name],
-    failure: "Couldn't create that concession",
+    success: (concession) => [m.concessionCreated, concession.name],
+    failure: m.concessionCreateFailed,
   });
 }
 
@@ -382,43 +429,41 @@ export function useCreateConcession() {
  * that challans already issued do not move.
  */
 export function useUpdateConcession() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: FeeConcessionUpdate }) =>
       feesApi.concessions.update(id, body),
     {
       success: (concession) => [
-        "Concession updated",
-        `Every child on ${concession.name} gets this from the next challan. Issued challans are unchanged.`,
+        m.concessionUpdated,
+        fill(m.concessionUpdatedBody, { name: concession.name }),
       ],
-      failure: "Couldn't update that concession",
+      failure: m.concessionUpdateFailed,
     },
   );
 }
 
 export function useDeleteConcession() {
+  const m = useFeeToasts();
   return useFeeMutation((id: string) => feesApi.concessions.remove(id), {
-    success: () => ["Concession deleted"],
-    failure: "Couldn't delete that concession",
+    success: () => [m.concessionDeleted],
+    failure: m.concessionDeleteFailed,
   });
 }
 
 export function useSetSiblingRule() {
+  const m = useFeeToasts();
   return useFeeMutation((body: FeeSiblingRuleInput) => feesApi.siblings.setRule(body), {
-    success: () => [
-      "Sibling rule saved",
-      "No child's fees changed. Review the families below and apply what you agree with.",
-    ],
-    failure: "Couldn't save the sibling rule",
+    success: () => [m.siblingRuleSaved, m.siblingRuleSavedBody],
+    failure: m.siblingRuleSaveFailed,
   });
 }
 
 export function useDeleteSiblingRule() {
+  const m = useFeeToasts();
   return useFeeMutation<void, void>(() => feesApi.siblings.removeRule(), {
-    success: () => [
-      "Sibling rule turned off",
-      "Children already on a sibling scheme keep it until you take them off.",
-    ],
-    failure: "Couldn't turn the sibling rule off",
+    success: () => [m.siblingRuleOff, m.siblingRuleOffBody],
+    failure: m.siblingRuleOffFailed,
   });
 }
 
@@ -429,60 +474,69 @@ export function useDeleteSiblingRule() {
  * on the head, a retired scheme) looks exactly like one that was applied otherwise.
  */
 export function useApplySiblings() {
+  const m = useFeeToasts();
   return useFeeMutation((body: SiblingApplyRequest) => feesApi.siblings.apply(body), {
     success: (result) => {
       const done = result.applied + result.changed + result.removed;
       const parts = [
-        result.applied ? `${result.applied} put on a sibling discount` : "",
-        result.changed ? `${result.changed} moved to a new position` : "",
-        result.removed ? `${result.removed} taken off` : "",
+        result.applied ? fill(m.siblingsApplied, { count: result.applied }) : "",
+        result.changed ? fill(m.siblingsChanged, { count: result.changed }) : "",
+        result.removed ? fill(m.siblingsRemoved, { count: result.removed }) : "",
         result.skipped.length
-          ? `${result.skipped.length} left alone — ${result.skipped[0]?.reason ?? ""}`
+          ? fill(m.siblingsSkipped, {
+              count: result.skipped.length,
+              reason: result.skipped[0]?.reason ?? "",
+            })
           : "",
       ].filter(Boolean);
       return [
-        done ? `Sibling discounts updated for ${done} child${done === 1 ? "" : "ren"}` : "Nothing changed",
-        `${parts.join(". ")}. Applies from the next challan generated.`,
+        done ? counted(done, m.siblingsUpdatedOne, m.siblingsUpdatedMany) : m.nothingChanged,
+        fill(m.siblingsAppliesFrom, { parts: parts.join(m.sentenceSeparator) }),
       ];
     },
-    failure: "Couldn't apply the sibling discounts",
+    failure: m.siblingsApplyFailed,
   });
 }
 
 export function useCreateStructure() {
+  const m = useFeeToasts();
   return useFeeMutation((body: FeeStructureCreate) => feesApi.structures.create(body), {
-    success: (structure) => ["Fee structure created", structure.name],
-    failure: "Couldn't create fee structure",
+    success: (structure) => [m.structureCreated, structure.name],
+    failure: m.structureCreateFailed,
   });
 }
 
 export function useSetStructureItem() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: FeeStructureItemInput }) =>
       feesApi.structures.setItem(id, body),
-    { success: () => ["Structure updated"], failure: "Couldn't price that fee head" },
+    { success: () => [m.structureUpdated], failure: m.structureItemFailed },
   );
 }
 
 export function useRemoveStructureItem() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, headId }: { id: string; headId: string }) =>
       feesApi.structures.removeItem(id, headId),
-    { success: () => ["Fee head removed"], failure: "Couldn't remove that line" },
+    { success: () => [m.feeHeadRemoved], failure: m.lineRemoveFailed },
   );
 }
 
 export function useActivateStructure() {
+  const m = useFeeToasts();
   return useFeeMutation((id: string) => feesApi.structures.activate(id), {
-    success: () => ["Structure activated", "It can now be used to bill."],
-    failure: "Couldn't activate",
+    success: () => [m.structureActivated, m.structureActivatedBody],
+    failure: m.structureActivateFailed,
   });
 }
 
 export function useArchiveStructure() {
+  const m = useFeeToasts();
   return useFeeMutation((id: string) => feesApi.structures.archive(id), {
-    success: () => ["Structure archived"],
-    failure: "Couldn't archive",
+    success: () => [m.structureArchived],
+    failure: m.structureArchiveFailed,
   });
 }
 
@@ -493,46 +547,168 @@ export function useArchiveStructure() {
  * students looks identical to a complete one otherwise.
  */
 export function useGenerateVouchers() {
+  const m = useFeeToasts();
   return useFeeMutation((body: VoucherGenerateRequest) => feesApi.vouchers.generate(body), {
     success: (result) => [
-      `${result.created} challan${result.created === 1 ? "" : "s"} generated`,
+      counted(result.created, m.challansGeneratedOne, m.challansGeneratedMany),
       result.skipped.length
-        ? `${result.skipped.length} student${result.skipped.length === 1 ? " was" : "s were"} skipped — already billed for this period.`
+        ? counted(result.skipped.length, m.skippedPeriodOne, m.skippedPeriodMany)
         : undefined,
     ],
-    failure: "Couldn't generate challans",
+    failure: m.generateFailed,
   });
 }
 
 export function useIssueVoucher() {
+  const m = useFeeToasts();
   return useFeeMutation((id: string) => feesApi.vouchers.issue(id), {
-    success: (voucher) => ["Challan issued", voucher.voucher_number],
-    failure: "Couldn't issue this challan",
+    success: (voucher) => [m.challanIssued, voucher.voucher_number],
+    failure: m.issueFailed,
   });
 }
 
 export function useVoidVoucher() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, reason }: { id: string; reason: string }) => feesApi.vouchers.void(id, reason),
-    { success: () => ["Challan voided"], failure: "Couldn't void this challan" },
+    { success: () => [m.challanVoided], failure: m.voidFailed },
   );
 }
 
 export function useRecordPayment() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ id, body }: { id: string; body: FeePaymentCreate }) =>
       feesApi.vouchers.recordPayment(id, body),
     {
-      success: (payment) => ["Payment recorded", `Receipt ${payment.receipt_number}`],
-      failure: "Couldn't record this payment",
+      success: (payment) => [
+        m.paymentRecorded,
+        fill(m.receiptNumber, { number: ltr(payment.receipt_number) }),
+      ],
+      failure: m.paymentFailed,
     },
   );
 }
 
 export function useReversePayment() {
+  const m = useFeeToasts();
   return useFeeMutation(
     ({ paymentId, reason }: { paymentId: string; reason: string }) =>
       feesApi.payments.reverse(paymentId, reason),
-    { success: () => ["Payment reversed"], failure: "Couldn't reverse this payment" },
+    { success: () => [m.paymentReversed], failure: m.reverseFailed },
+  );
+}
+
+// --- One-off charges on a draft challan -----------------------------------
+
+export function useAddVoucherFeeCharge() {
+  const m = useFeeToasts();
+  return useFeeMutation(
+    ({ id, body }: { id: string; body: VoucherFeeChargeInput }) =>
+      feesApi.vouchers.addCharge(id, body),
+    { success: () => [m.chargeAdded], failure: m.chargeAddFailed },
+  );
+}
+
+export function useRemoveVoucherFeeCharge() {
+  const m = useFeeToasts();
+  return useFeeMutation(
+    ({ id, headId }: { id: string; headId: string }) => feesApi.vouchers.removeCharge(id, headId),
+    { success: () => [m.lineRemoved], failure: m.lineRemoveFailed },
+  );
+}
+
+// --- Late fees --------------------------------------------------------------
+
+/**
+ * Save the year's late-fee rule. The success copy says when it bites, because the
+ * owner's real question is "will this fine anyone tonight?"
+ */
+export function useSetLateFeePolicy() {
+  const m = useFeeToasts();
+  return useFeeMutation((body: LateFeePolicyCreate) => feesApi.lateFees.set(body), {
+    success: (policy) => [
+      policy.is_active ? m.lateFeeSaved : m.lateFeePaused,
+      policy.is_active
+        ? fill(policy.grace_days === 1 ? m.lateFeeActiveBodyOne : m.lateFeeActiveBodyMany, {
+            days: policy.grace_days,
+          })
+        : m.lateFeePausedBody,
+    ],
+    failure: m.lateFeeSaveFailed,
+  });
+}
+
+export function useDeleteLateFeePolicy() {
+  const m = useFeeToasts();
+  return useFeeMutation((id: string) => feesApi.lateFees.remove(id), {
+    success: () => [m.lateFeeRemoved, m.lateFeeRemovedBody],
+    failure: m.lateFeeRemoveFailed,
+  });
+}
+
+/**
+ * Apply late fees now. A run that fines nobody is the normal case on most days, so
+ * it is reported with its reasons rather than as "0" — which reads like a failure.
+ *
+ * The reasons are the codes `apply_late_fees` reports, worded in the catalog's
+ * `skipReason`; a code it does not know is shown as the code itself.
+ */
+export function useRunLateFees() {
+  const m = useFeeToasts();
+  return useFeeMutation((academicYear: string) => feesApi.lateFees.run(academicYear), {
+    success: (result) => {
+      if (result.assessed > 0) {
+        return [
+          counted(result.assessed, m.lateFeesRaisedOne, m.lateFeesRaisedMany),
+          [
+            counted(result.considered, m.overdueCheckedOne, m.overdueCheckedMany),
+            result.truncated ? m.lateFeesMoreWaiting : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        ];
+      }
+      const reasons = Object.entries(result.skipped_reasons)
+        .map(([reason, count]) => {
+          const known = (m.skipReason as Record<string, string>)[reason];
+          return known
+            ? fill(known, { count })
+            : fill(m.skipReasonUnknown, { count, reason: reason.replaceAll("_", " ") });
+        })
+        .join(m.listSeparator);
+      return [
+        m.noOneToFine,
+        result.considered === 0
+          ? m.noneOverdue
+          : fill(m.overdueSkipped, { count: result.considered, reasons: reasons || m.allSkipped }),
+      ];
+    },
+    failure: m.lateFeesFailed,
+  });
+}
+
+// --- The ledger ------------------------------------------------------------
+
+/** `fee:void`. A write-off or a correction with no voucher behind it. */
+export function useAdjustLedger(studentId: string) {
+  const m = useFeeToasts();
+  return useFeeMutation(
+    (body: LedgerAdjustmentInput) => feesApi.students.adjustLedger(studentId, body),
+    {
+      success: (statement) => {
+        const balance = Number(statement.balance);
+        const money = new Intl.NumberFormat("en-PK", {
+          style: "currency",
+          currency: "PKR",
+          maximumFractionDigits: 0,
+        }).format(Math.abs(balance));
+        return [
+          m.balanceAdjusted,
+          fill(balance < 0 ? m.balanceInCredit : m.balanceOwed, { amount: money }),
+        ];
+      },
+      failure: m.balanceAdjustFailed,
+    },
   );
 }

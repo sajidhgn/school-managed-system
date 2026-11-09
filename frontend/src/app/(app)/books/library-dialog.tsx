@@ -25,6 +25,9 @@ import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useCurriculum } from "@/hooks/use-subjects";
 import type { LibraryBook } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 const PAGE_SIZE = 10;
 
@@ -47,6 +50,7 @@ export function LibraryDialog({
   /** Closes the library and opens "Add a book" -- for a book nobody has uploaded. */
   onUploadInstead: () => void;
 }) {
+  const m = useCatalog(booksMessages).library;
   const classes = useClassSummary();
   const [classId, setClassId] = React.useState("");
   const [subject, setSubject] = React.useState("");
@@ -92,11 +96,8 @@ export function LibraryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Book library</DialogTitle>
-          <DialogDescription>
-            Books uploaded by schools on the platform. Add one to your class and use its chapters,
-            pages and search at once: nothing is uploaded or read again.
-          </DialogDescription>
+          <DialogTitle>{m.title}</DialogTitle>
+          <DialogDescription>{m.description}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-2 sm:grid-cols-[1fr_10rem_11rem]">
@@ -106,8 +107,8 @@ export function LibraryDialog({
               aria-hidden
             />
             <Input
-              aria-label="Search the library by title or publisher"
-              placeholder="Title or publisher…"
+              aria-label={m.searchAria}
+              placeholder={m.searchPlaceholder}
               value={q}
               maxLength={200}
               className="ps-9"
@@ -115,14 +116,14 @@ export function LibraryDialog({
             />
           </div>
           <NativeSelect
-            aria-label="Class"
+            aria-label={m.classAria}
             value={classId}
             onChange={(event) => {
               setClassId(event.target.value);
               setSubject("");
             }}
           >
-            <option value="">Any class</option>
+            <option value="">{m.anyClass}</option>
             {classes.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -130,11 +131,11 @@ export function LibraryDialog({
             ))}
           </NativeSelect>
           <NativeSelect
-            aria-label="Subject"
+            aria-label={m.subjectAria}
             value={subject}
             onChange={(event) => setSubject(event.target.value)}
           >
-            <option value="">Any subject</option>
+            <option value="">{m.anySubject}</option>
             {subjects.data?.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -146,7 +147,7 @@ export function LibraryDialog({
         <div className="min-h-48">
           {library.isLoading ? (
             <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading the library…
+              <Loader2 className="size-4 animate-spin" /> {m.loading}
             </p>
           ) : library.isError ? (
             <ErrorState
@@ -159,14 +160,14 @@ export function LibraryDialog({
               <Library className="size-8 text-muted-foreground" aria-hidden />
               <div className="space-y-1">
                 <p className="font-medium">
-                  {filtered ? "Not in the library yet" : "The library is empty"}
+                  {filtered ? m.notInLibrary : m.empty}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Upload it once and every school using the same book can add it from here.
+                  {m.emptyHint}
                 </p>
               </div>
               <Button variant="outline" onClick={onUploadInstead}>
-                <Upload /> Upload a new book
+                <Upload /> {m.uploadNew}
               </Button>
             </div>
           ) : (
@@ -190,13 +191,13 @@ export function LibraryDialog({
                 disabled={library.isFetching}
               />
               <p className="pt-2 text-center text-sm text-muted-foreground">
-                Not here?{" "}
+                {m.notHere}{" "}
                 <button
                   type="button"
                   className="font-medium text-primary underline-offset-4 hover:underline"
                   onClick={onUploadInstead}
                 >
-                  Upload a new book
+                  {m.uploadNew}
                 </button>
               </p>
             </>
@@ -223,6 +224,7 @@ function LibraryRow({
   classId: string;
   onAdded: () => void;
 }) {
+  const m = useCatalog(booksMessages).library;
   const done = book.chapter_count > 0 && book.ready_chapter_count === book.chapter_count;
   const schools = book.school_count;
 
@@ -238,11 +240,16 @@ function LibraryRow({
             <Badge variant="outline">{book.grade}</Badge>
             {book.subject ? <Badge variant="neutral">{book.subject}</Badge> : null}
             <Badge variant={done ? "success" : "neutral"}>
-              {book.ready_chapter_count} / {book.chapter_count} chapters ready
+              {fill(m.chaptersReady, {
+                ready: book.ready_chapter_count,
+                total: book.chapter_count,
+              })}
             </Badge>
             {schools > 0 ? (
               <span className="text-muted-foreground">
-                used by {schools} school{schools === 1 ? "" : "s"}
+                {fill(schools === 1 ? m.usedBySchools.one : m.usedBySchools.other, {
+                  count: schools,
+                })}
               </span>
             ) : null}
           </div>
@@ -253,12 +260,12 @@ function LibraryRow({
             className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Badge variant="success" className="gap-1">
-              <Check className="size-3" /> In your books
+              <Check className="size-3" /> {m.inYourBooks}
             </Badge>
           </Link>
         ) : !open ? (
           <Button size="sm" variant="outline" className="shrink-0" onClick={onOpen}>
-            <Plus /> Add
+            <Plus /> {m.add}
           </Button>
         ) : null}
       </div>
@@ -286,6 +293,7 @@ function AddToClassForm({
   onCancel: () => void;
   onAdded: () => void;
 }) {
+  const m = useCatalog(booksMessages).library;
   const router = useRouter();
   const classes = useClassSummary();
   const add = useAddFromLibrary();
@@ -319,7 +327,7 @@ function AddToClassForm({
       }}
     >
       <div className="grid gap-1.5">
-        <Label htmlFor={`library-class-${book.id}`}>Add to class</Label>
+        <Label htmlFor={`library-class-${book.id}`}>{m.addToClass}</Label>
         <NativeSelect
           id={`library-class-${book.id}`}
           required
@@ -330,7 +338,7 @@ function AddToClassForm({
           }}
         >
           <option value="" disabled>
-            Choose a class
+            {m.chooseClass}
           </option>
           {classes.data?.map((c) => (
             <option key={c.id} value={c.id}>
@@ -341,7 +349,7 @@ function AddToClassForm({
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor={`library-subject-${book.id}`}>
-          Subject <span className="font-normal text-muted-foreground">(optional)</span>
+          {m.subject} <span className="font-normal text-muted-foreground">{m.optional}</span>
         </Label>
         <NativeSelect
           id={`library-subject-${book.id}`}
@@ -349,7 +357,7 @@ function AddToClassForm({
           disabled={!classId}
           onChange={(event) => setSubjectId(event.target.value)}
         >
-          <option value="">No subject</option>
+          <option value="">{m.noSubject}</option>
           {curriculum.data?.map((s) => (
             <option key={s.subject_id} value={s.subject_id}>
               {s.subject_name}
@@ -359,10 +367,10 @@ function AddToClassForm({
       </div>
       <div className="flex gap-2">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={add.isPending}>
-          Cancel
+          {m.cancel}
         </Button>
         <Button type="submit" loading={add.isPending} disabled={!classId}>
-          Add book
+          {m.addBook}
         </Button>
       </div>
     </form>

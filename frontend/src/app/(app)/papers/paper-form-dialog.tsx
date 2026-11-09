@@ -1,5 +1,6 @@
 "use client";
 
+import { fillNodes } from "@/lib/i18n/format";
 import * as React from "react";
 import { AlertTriangle, Loader2, Plus, X } from "lucide-react";
 
@@ -27,6 +28,9 @@ import type {
   PaperType,
   QuestionType,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { ChoiceGroup } from "./choice-group";
 import {
@@ -36,11 +40,8 @@ import {
   MAX_QUESTIONS,
   MAX_SECTION_COUNT,
   MAX_MARKS,
-  PAPER_DIFFICULTY_LABELS,
-  PAPER_TYPE_HINTS,
-  PAPER_TYPE_LABELS,
+  PAPER_DIFFICULTIES,
   QUESTION_TYPE_ORDER,
-  SECTION_LABELS,
   SECTION_PRESETS,
   TYPES_FOR_PAPER,
   sectionProblems,
@@ -53,13 +54,6 @@ function usable(chapter: ChapterRead): boolean {
     (chapter.status === "ready" || chapter.status === "needs_review") && chapter.page_count > 0
   );
 }
-
-const DIFFICULTY_HINTS: Record<PaperDifficulty, string> = {
-  easy: "Every question easy.",
-  medium: "Every question medium.",
-  hard: "Every question hard.",
-  mixed: "30% easy, 50% medium and 20% hard, in every section.",
-};
 
 /**
  * Ask the agent for a test paper: a book's chapters, the paper's language, level and
@@ -76,6 +70,8 @@ export function PaperFormDialog({
   onOpenChange: (open: boolean) => void;
   onCreated?: (paper: PaperDetail) => void;
 }) {
+  const t = useCatalog(papersMessages);
+  const m = t.form;
   // A picker, not a browsing list: one page of the API's largest size. The list
   // page itself pages and searches in the database.
   const books = useBooks({ size: 100 });
@@ -147,19 +143,19 @@ export function PaperFormDialog({
     0,
   );
 
-  const sectionIssues = sectionProblems(paperType, rows);
+  const sectionIssues = sectionProblems(paperType, rows, t);
   const problems: string[] = [];
-  if (!bookId) problems.push("Choose a book.");
-  else if (!chapterIds.size) problems.push("Choose at least one chapter.");
+  if (!bookId) problems.push(m.problems.chooseBook);
+  else if (!chapterIds.size) problems.push(m.problems.chooseChapter);
   else if (chapterIds.size > MAX_CHAPTERS) {
-    problems.push(`A paper can cover at most ${MAX_CHAPTERS} chapters.`);
+    problems.push(fill(m.problems.tooManyChapters, { max: MAX_CHAPTERS }));
   }
-  if (!title.trim()) problems.push("Give the paper a title.");
+  if (!title.trim()) problems.push(m.problems.needTitle);
   problems.push(...sectionIssues);
   if (duration.trim()) {
     const minutes = Number(duration);
     if (!Number.isInteger(minutes) || minutes < 5 || minutes > 600) {
-      problems.push("Time allowed must be 5–600 minutes.");
+      problems.push(m.problems.badDuration);
     }
   }
 
@@ -194,12 +190,8 @@ export function PaperFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New test paper</DialogTitle>
-          <DialogDescription>
-            The agent writes the questions from the chapters you pick and checks each one against
-            the book. It works in the background; you review and edit every question on the
-            paper&apos;s page before printing.
-          </DialogDescription>
+          <DialogTitle>{m.title}</DialogTitle>
+          <DialogDescription>{m.description}</DialogDescription>
         </DialogHeader>
         <form
           id="paper-form"
@@ -235,7 +227,7 @@ export function PaperFormDialog({
           }}
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="paper-book">Book</Label>
+            <Label htmlFor="paper-book">{m.book}</Label>
             <NativeSelect
               id="paper-book"
               value={bookId}
@@ -245,23 +237,25 @@ export function PaperFormDialog({
               }}
             >
               <option value="" disabled>
-                {books.isLoading ? "Loading books…" : "Choose a book"}
+                {books.isLoading ? m.loadingBooks : m.chooseBook}
               </option>
-              {groupByClass(bookList ?? []).map(([className, list]) => (
+              {groupByClass(bookList ?? [], m.otherClass).map(([className, list]) => (
                 <optgroup key={className} label={className}>
                   {list.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {`${b.title}${b.subject_name ? ` — ${b.subject_name}` : ""} (${b.ready_chapter_count}/${b.chapter_count} chapters ready)`}
+                      {fill(b.subject_name ? m.bookOptionWithSubject : m.bookOption, {
+                        title: b.title,
+                        subject: b.subject_name ?? "",
+                        ready: b.ready_chapter_count,
+                        total: b.chapter_count,
+                      })}
                     </option>
                   ))}
                 </optgroup>
               ))}
             </NativeSelect>
             {bookList && !bookList.length ? (
-              <p className="text-xs text-muted-foreground">
-                The library has no books yet. Add one under Books and let the agent read its
-                chapters first.
-              </p>
+              <p className="text-xs text-muted-foreground">{m.noBooks}</p>
             ) : null}
           </div>
 
@@ -276,12 +270,12 @@ export function PaperFormDialog({
           )}
 
           <div className="grid gap-1.5">
-            <Label htmlFor="paper-title">Title</Label>
+            <Label htmlFor="paper-title">{m.titleLabel}</Label>
             <Input
               id="paper-title"
               maxLength={200}
               value={title}
-              placeholder="Science — Chapter 3 test"
+              placeholder={m.titlePlaceholder}
               onChange={(event) => {
                 setTitleTouched(true);
                 setTitle(event.target.value);
@@ -291,7 +285,7 @@ export function PaperFormDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <ChoiceGroup
-              label="Language"
+              label={m.language}
               value={language}
               onChange={setLanguage}
               options={(["en", "ur", "ar"] as const).map((v) => ({
@@ -301,34 +295,34 @@ export function PaperFormDialog({
               }))}
             />
             <ChoiceGroup
-              label="Difficulty"
+              label={m.difficulty}
               value={difficulty}
               onChange={setDifficulty}
-              hint={DIFFICULTY_HINTS[difficulty]}
-              options={(["easy", "medium", "hard", "mixed"] as const).map((v) => ({
+              hint={t.difficultyHint[difficulty]}
+              options={PAPER_DIFFICULTIES.map((v) => ({
                 value: v,
-                label: PAPER_DIFFICULTY_LABELS[v],
+                label: t.paperDifficulty[v],
               }))}
             />
           </div>
 
           <ChoiceGroup
-            label="Paper type"
+            label={m.paperType}
             value={paperType}
             onChange={(type) => {
               setPaperType(type);
               setRows(presetRows(type));
             }}
-            hint={PAPER_TYPE_HINTS[paperType]}
+            hint={t.paperTypeHint[paperType]}
             options={(["objective", "subjective", "mix"] as const).map((v) => ({
               value: v,
-              label: PAPER_TYPE_LABELS[v],
+              label: t.paperType[v],
             }))}
           />
 
           <fieldset className="space-y-2">
             <div className="flex items-center justify-between">
-              <legend className="text-sm font-medium">Sections</legend>
+              <legend className="text-sm font-medium">{m.sections}</legend>
               <Button
                 type="button"
                 variant="ghost"
@@ -336,27 +330,28 @@ export function PaperFormDialog({
                 onClick={addRow}
                 disabled={!freeTypes.length}
               >
-                <Plus /> Add section
+                <Plus /> {m.addSection}
               </Button>
             </div>
             <div className="overflow-hidden rounded-lg border border-border">
               <div className="hidden grid-cols-[1fr_6rem_6rem_4rem_2.25rem] gap-2 border-b border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground sm:grid">
-                <span>Question type</span>
-                <span>Questions</span>
-                <span>Marks each</span>
-                <span className="text-end">Total</span>
+                <span>{m.colQuestionType}</span>
+                <span>{m.colQuestions}</span>
+                <span>{m.colMarksEach}</span>
+                <span className="text-end">{m.colTotal}</span>
                 <span />
               </div>
               {rows.map((row) => {
                 const options = allowed.filter((t) => t === row.type || !usedTypes.has(t));
                 const each = Number(row.marks) || DEFAULT_MARKS[row.type];
+                const section = t.section[row.type];
                 return (
                   <div
                     key={row.key}
                     className="grid grid-cols-[1fr_5rem_5rem_2.25rem] items-center gap-2 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[1fr_6rem_6rem_4rem_2.25rem]"
                   >
                     <NativeSelect
-                      aria-label="Question type"
+                      aria-label={m.questionTypeAria}
                       value={row.type}
                       className="col-span-4 sm:col-span-1"
                       onChange={(event) => {
@@ -370,14 +365,14 @@ export function PaperFormDialog({
                         });
                       }}
                     >
-                      {options.map((t) => (
-                        <option key={t} value={t}>
-                          {SECTION_LABELS[t]}
+                      {options.map((option) => (
+                        <option key={option} value={option}>
+                          {t.section[option]}
                         </option>
                       ))}
                     </NativeSelect>
                     <Input
-                      aria-label={`${SECTION_LABELS[row.type]}: number of questions`}
+                      aria-label={fill(m.countAria, { section })}
                       type="number"
                       min={1}
                       max={MAX_SECTION_COUNT}
@@ -385,7 +380,7 @@ export function PaperFormDialog({
                       onChange={(event) => updateRow(row.key, { count: event.target.value })}
                     />
                     <Input
-                      aria-label={`${SECTION_LABELS[row.type]}: marks per question`}
+                      aria-label={fill(m.marksAria, { section })}
                       type="number"
                       min={1}
                       max={MAX_MARKS}
@@ -400,7 +395,7 @@ export function PaperFormDialog({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={`Remove ${SECTION_LABELS[row.type]} section`}
+                      aria-label={fill(m.removeSectionAria, { section })}
                       onClick={() => setRows((current) => current.filter((r) => r.key !== row.key))}
                     >
                       <X />
@@ -410,7 +405,7 @@ export function PaperFormDialog({
               })}
               {!rows.length && (
                 <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-                  No sections. Add one to say what the paper asks.
+                  {m.noSections}
                 </p>
               )}
             </div>
@@ -420,11 +415,16 @@ export function PaperFormDialog({
                 totalQuestions > MAX_QUESTIONS ? "text-destructive" : "text-muted-foreground",
               )}
             >
-              <span className="font-medium text-foreground">{totalQuestions}</span> question
-              {totalQuestions === 1 ? "" : "s"} ·{" "}
-              <span className="font-medium text-foreground">{totalMarks}</span> mark
-              {totalMarks === 1 ? "" : "s"} in all{" "}
-              <span className="text-muted-foreground">(at most {MAX_QUESTIONS} questions)</span>
+              {fillNodes(m.totals, {
+                questions: fillNodes(
+                  totalQuestions === 1 ? m.questionCountOne : m.questionCountMany,
+                  { count: <span className="font-medium text-foreground">{totalQuestions}</span> },
+                ),
+                marks: fillNodes(totalMarks === 1 ? m.markCountOne : m.markCountMany, {
+                  count: <span className="font-medium text-foreground">{totalMarks}</span>,
+                }),
+              })}{" "}
+              <span className="text-muted-foreground">{fill(m.atMost, { max: MAX_QUESTIONS })}</span>
             </p>
             {sectionIssues.length > 0 && !attempted && (
               <ul className="space-y-0.5 text-sm text-destructive">
@@ -438,7 +438,8 @@ export function PaperFormDialog({
           <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
             <div className="grid content-start gap-1.5">
               <Label htmlFor="paper-duration">
-                Time allowed <span className="font-normal text-muted-foreground">(minutes)</span>
+                {m.timeAllowed}{" "}
+                <span className="font-normal text-muted-foreground">{m.minutesSuffix}</span>
               </Label>
               <Input
                 id="paper-duration"
@@ -446,13 +447,14 @@ export function PaperFormDialog({
                 min={5}
                 max={600}
                 value={duration}
-                placeholder="Optional"
+                placeholder={m.optionalPlaceholder}
                 onChange={(event) => setDuration(event.target.value)}
               />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="paper-instructions">
-                Instructions <span className="font-normal text-muted-foreground">(optional)</span>
+                {m.instructions}{" "}
+                <span className="font-normal text-muted-foreground">{m.optionalSuffix}</span>
               </Label>
               <Textarea
                 id="paper-instructions"
@@ -460,7 +462,7 @@ export function PaperFormDialog({
                 maxLength={2000}
                 rows={3}
                 value={instructions}
-                placeholder="Attempt all questions. Write neatly."
+                placeholder={m.instructionsPlaceholder}
                 onChange={(event) => setInstructions(event.target.value)}
               />
             </div>
@@ -482,10 +484,10 @@ export function PaperFormDialog({
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button type="submit" form="paper-form" loading={create.isPending}>
-            Create paper
+            {m.create}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -506,10 +508,11 @@ function ChapterPicker({
   onToggle: (id: string) => void;
   onSelect: (ids: Set<string>) => void;
 }) {
+  const m = useCatalog(papersMessages).chapters;
   if (loading || !book) {
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Loading chapters…
+        <Loader2 className="size-4 animate-spin" /> {m.loading}
       </p>
     );
   }
@@ -519,7 +522,7 @@ function ChapterPicker({
   return (
     <fieldset className="space-y-2">
       <div className="flex items-center justify-between">
-        <legend className="text-sm font-medium">Chapters</legend>
+        <legend className="text-sm font-medium">{m.legend}</legend>
         {ready.length > 1 && (
           <Button
             type="button"
@@ -531,12 +534,12 @@ function ChapterPicker({
               )
             }
           >
-            {allChosen ? "Clear" : "Select all ready"}
+            {allChosen ? m.clear : m.selectAllReady}
           </Button>
         )}
       </div>
       {!book.chapters.length ? (
-        <p className="text-sm text-muted-foreground">This book has no chapters yet.</p>
+        <p className="text-sm text-muted-foreground">{m.noChapters}</p>
       ) : (
         <ul className="max-h-52 divide-y divide-border overflow-y-auto rounded-lg border border-border">
           {book.chapters.map((chapter) => {
@@ -556,12 +559,14 @@ function ChapterPicker({
                     onChange={() => onToggle(chapter.id)}
                   />
                   <span className="min-w-0 flex-1 truncate">
-                    Chapter {chapter.number}: {chapter.title}
+                    {fill(m.chapterLine, { number: chapter.number, title: chapter.title })}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {ok
-                      ? `${chapter.page_count} page${chapter.page_count === 1 ? "" : "s"}`
-                      : "Not read yet"}
+                      ? fill(chapter.page_count === 1 ? m.pagesOne : m.pagesMany, {
+                          count: chapter.page_count,
+                        })
+                      : m.notRead}
                   </span>
                 </label>
               </li>
@@ -570,25 +575,27 @@ function ChapterPicker({
         </ul>
       )}
       {book.chapters.length > 0 && !ready.length && (
-        <p className="text-xs text-muted-foreground">
-          None of this book&apos;s chapters has been read by the agent yet. Upload and process them
-          on the book&apos;s page first.
-        </p>
+        <p className="text-xs text-muted-foreground">{m.noneRead}</p>
       )}
     </fieldset>
   );
 }
 
-function groupByClass(books: BookRead[]): [string, BookRead[]][] {
+/** `other` heads the books with no class, in the viewer's language. */
+function groupByClass(books: BookRead[], other: string): [string, BookRead[]][] {
   const groups = new Map<string, BookRead[]>();
   for (const book of books) {
-    const key = book.class_name ?? "Other";
+    const key = book.class_name ?? other;
     groups.set(key, [...(groups.get(key) ?? []), book]);
   }
   return [...groups.entries()];
 }
 
-/** "Science test — Chapters 3, 4", from the book and the chapters ticked so far. */
+/**
+ * "Science test — Chapters 3, 4", from the book and the chapters ticked so far.
+ * Not from the UI catalog: the title prints on the paper, whose language is the
+ * paper's own, not the viewer's.
+ */
 function suggestTitle(book: BookRead | null, chapterNumbers: string): string {
   if (!book) return "";
   const name = book.subject_name ?? book.title;

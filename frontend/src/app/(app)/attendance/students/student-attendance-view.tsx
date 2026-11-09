@@ -27,6 +27,9 @@ import { useStudentAttendanceList } from "@/hooks/use-attendance";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import type { AttendanceRate, SortDirection } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -59,6 +62,7 @@ export function StudentAttendanceView({
   initialSectionId: string | null;
   initialClassId: string | null;
 }) {
+  const m = useCatalog(attendanceMessages).students;
   const classes = useClassSummary();
   const [search, setSearch] = React.useState("");
   const debounced = useDebouncedValue(search.trim());
@@ -128,23 +132,20 @@ export function StudentAttendanceView({
 
   const overallLabel =
     data && range === "year"
-      ? `Overall (since ${data.overall.from_date})`
+      ? fill(m.overallSince, { date: data.overall.from_date })
       : range === "year"
-        ? "Overall"
-        : `Last ${range} days`;
+        ? m.overall
+        : fill(m.lastDays, { days: range });
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Student attendance"
-        description="Every child: today, this month, last month and overall. Lowest attendance first."
-      />
+      <PageHeader title={m.title} description={m.description} />
       <AttendanceTabs />
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-full space-y-1 sm:w-64">
           <Label htmlFor="student-search" className="text-xs">
-            Search
+            {m.search}
           </Label>
           <div className="relative">
             <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -152,7 +153,7 @@ export function StudentAttendanceView({
               id="student-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name, admission or roll no."
+              placeholder={m.searchPlaceholder}
               className="ps-8"
             />
           </div>
@@ -161,7 +162,7 @@ export function StudentAttendanceView({
           <>
             <div className="space-y-1">
               <Label htmlFor="class-filter" className="text-xs">
-                Class
+                {m.class}
               </Label>
               <NativeSelect
                 id="class-filter"
@@ -172,7 +173,7 @@ export function StudentAttendanceView({
                 }}
                 className="w-40"
               >
-                <option value="">All classes</option>
+                <option value="">{m.allClasses}</option>
                 {classes.data.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -182,7 +183,7 @@ export function StudentAttendanceView({
             </div>
             <div className="space-y-1">
               <Label htmlFor="section-filter" className="text-xs">
-                Section
+                {m.section}
               </Label>
               <NativeSelect
                 id="section-filter"
@@ -191,7 +192,7 @@ export function StudentAttendanceView({
                 disabled={sections.length === 0}
                 className="w-32"
               >
-                <option value="">All sections</option>
+                <option value="">{m.allSections}</option>
                 {sections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -203,7 +204,7 @@ export function StudentAttendanceView({
         ) : null}
         <div className="space-y-1">
           <Label htmlFor="overall-range" className="text-xs">
-            Overall covers
+            {m.overallCovers}
           </Label>
           <NativeSelect
             id="overall-range"
@@ -211,9 +212,9 @@ export function StudentAttendanceView({
             onChange={(e) => setRange(e.target.value as Range)}
             className="w-44"
           >
-            <option value="year">This academic year</option>
-            <option value="90">Last 90 days</option>
-            <option value="30">Last 30 days</option>
+            <option value="year">{m.thisYear}</option>
+            <option value="90">{m.last90}</option>
+            <option value="30">{m.last30}</option>
           </NativeSelect>
         </div>
       </div>
@@ -225,23 +226,19 @@ export function StudentAttendanceView({
           <CardContent className="px-0 pb-0">
             {data && data.items.length === 0 ? (
               <EmptyState
-                title={debounced ? "No students match" : "No students here"}
-                description={
-                  debounced
-                    ? "Try a different name, admission number or roll number."
-                    : "Students appear once they are enrolled in a section you can see."
-                }
+                title={debounced ? m.noMatch : m.noStudents}
+                description={debounced ? m.noMatchHint : m.noStudentsHint}
               />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {header("roll_number", "Roll", "w-16")}
-                    {header("name", "Student")}
-                    {header("class", "Class")}
-                    <TableHead>Today</TableHead>
-                    {header("this_month", "This month", "text-end")}
-                    {header("previous_month", "Last month", "text-end")}
+                    {header("roll_number", m.colRoll, "w-16")}
+                    {header("name", m.colStudent)}
+                    {header("class", m.colClass)}
+                    <TableHead>{m.colToday}</TableHead>
+                    {header("this_month", m.colThisMonth, "text-end")}
+                    {header("previous_month", m.colLastMonth, "text-end")}
                     {header("overall", overallLabel, "text-end")}
                     <TableHead className="w-24" />
                   </TableRow>
@@ -253,7 +250,7 @@ export function StudentAttendanceView({
                     data.items.map((row) => {
                       const placement = row.class_name
                         ? `${row.class_name} · ${row.section_name}`
-                        : "Unplaced";
+                        : m.unplaced;
                       return (
                         <TableRow key={row.student_id}>
                           <TableCell className="tabular-nums text-muted-foreground">
@@ -283,7 +280,7 @@ export function StudentAttendanceView({
                                 setDrill({ id: row.student_id, name: row.full_name, detail: placement })
                               }
                             >
-                              Calendar
+                              {m.calendar}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -300,10 +297,12 @@ export function StudentAttendanceView({
 
       {data ? (
         <p className="text-xs text-muted-foreground">
-          This month is {data.this_month.from_date} to {data.this_month.to_date}; last month{" "}
-          {data.previous_month.from_date} to {data.previous_month.to_date}. Rates count submitted
-          whole-day registers only, leave (excused) is left out of the percentage and a half day
-          counts as half. A dash means nothing was counted, not 0%.
+          {fill(m.footnote, {
+            from: data.this_month.from_date,
+            to: data.this_month.to_date,
+            prevFrom: data.previous_month.from_date,
+            prevTo: data.previous_month.to_date,
+          })}
         </p>
       ) : null}
 
@@ -313,16 +312,25 @@ export function StudentAttendanceView({
 }
 
 function RateCell({ rate, strong = false }: { rate: AttendanceRate; strong?: boolean }) {
+  const m = useCatalog(attendanceMessages).students;
   const { counts } = rate;
   const detail =
     rate.counted === 0 && counts.excused === 0
-      ? "No submitted registers"
-      : `${counts.present} present, ${counts.late} late, ${counts.half_day} half day, ${counts.absent} absent, ${counts.excused} leave`;
+      ? m.noRegisters
+      : fill(m.detail, {
+          present: counts.present,
+          late: counts.late,
+          half: counts.half_day,
+          absent: counts.absent,
+          leave: counts.excused,
+        });
   return (
     <TableCell className="text-end" title={detail}>
       <span className={cn("tabular-nums", strong && "font-medium")}>{formatPct(rate.percentage)}</span>
       {counts.absent > 0 ? (
-        <p className="text-xs text-muted-foreground tabular-nums">{counts.absent} absent</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {fill(m.absentCount, { count: counts.absent })}
+        </p>
       ) : null}
       <span className="sr-only">{detail}</span>
     </TableCell>

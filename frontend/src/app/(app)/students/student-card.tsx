@@ -5,7 +5,11 @@ import { Cake, GraduationCap, Hash, UserRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import type { CardDesignConfig, StudentListRow } from "@/lib/api/types";
+import { fill, ltr } from "@/lib/i18n/format";
+import { studentsCardMessages } from "@/lib/i18n/modules/students-card";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn, formatDate } from "@/lib/utils";
+import { fillNodes } from "@/lib/i18n/format";
 
 /** The API's `CardDesignConfig` with every knob present. */
 export type ResolvedCardDesign = Required<CardDesignConfig>;
@@ -27,6 +31,9 @@ export type CardSchool = {
   themeColors: string[] | null;
   cardDesign: CardDesignConfig | null;
 };
+
+/** The detail lines a card can print, keyed as in `studentsCardMessages.card`. */
+type CardField = "admissionNo" | "class" | "dateOfBirth" | "guardian";
 
 /**
  * Must mirror the backend defaults in `CardDesignConfig` (tenancy schemas):
@@ -51,39 +58,40 @@ export const DEFAULT_CARD_DESIGN: ResolvedCardDesign = {
   contact_line: "",
 };
 
-export const DESIGN_LABELS: Record<ResolvedCardDesign["design"], string> = {
-  classic: "Classic",
-  bold: "Bold",
-  gradient: "Gradient",
-  stripe: "Stripe",
-  minimal: "Minimal",
-  chevron: "Chevron",
-  panel: "Side panel",
-  wave: "Wave",
-  mosaic: "Mosaic",
-  duotone: "Duotone",
-  outline: "Outline",
-  ribbon: "Ribbon",
-  dots: "Dots",
-  blob: "Blob",
-  rings: "Rings",
-  tide: "Tide",
-  slate: "Slate",
-  banner: "Banner",
-  corner: "Corner",
-  grid: "Grid",
-  prism: "Prism",
-  crest: "Crest",
-  frame: "Frame",
-  sash: "Sash",
-  orbit: "Orbit",
-  aurora: "Aurora",
-  pillar: "Pillar",
-  halo: "Halo",
-  graphite: "Graphite",
-  breeze: "Breeze",
-  band: "Band",
-};
+/** Every design, in gallery order. The names are `designs` in `students-card.ts`. */
+export const CARD_DESIGNS: ResolvedCardDesign["design"][] = [
+  "classic",
+  "bold",
+  "gradient",
+  "stripe",
+  "minimal",
+  "chevron",
+  "panel",
+  "wave",
+  "mosaic",
+  "duotone",
+  "outline",
+  "ribbon",
+  "dots",
+  "blob",
+  "rings",
+  "tide",
+  "slate",
+  "banner",
+  "corner",
+  "grid",
+  "prism",
+  "crest",
+  "frame",
+  "sash",
+  "orbit",
+  "aurora",
+  "pillar",
+  "halo",
+  "graphite",
+  "breeze",
+  "band",
+];
 
 /**
  * When the school never picked theme colours, designs still need some to differ
@@ -734,6 +742,7 @@ export function StudentCardView({
   school: CardSchool | null;
   config: ResolvedCardDesign;
 }) {
+  const m = useCatalog(studentsCardMessages).card;
   const palette = resolvePalette(school);
   const tokens = designTokens(config.design, palette);
   const landscape = config.orientation === "landscape";
@@ -781,7 +790,7 @@ export function StudentCardView({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={student.photo_url}
-          alt={`Photo of ${student.full_name}`}
+          alt={fill(m.photoOf, { name: student.full_name })}
           className="h-full w-full object-cover"
         />
       ) : (
@@ -820,10 +829,10 @@ export function StudentCardView({
               schoolNameSize(school?.name),
             )}
           >
-            {school?.name ?? "Student identity card"}
+            {school?.name ?? m.fallbackTitle}
           </p>
           <p className={cn("text-[11px]", headerTinted ? "opacity-80" : "text-muted-foreground")}>
-            {school ? `${school.code} · Student identity card` : " "}
+            {school ? fill(m.codeLine, { code: ltr(school.code) }) : " "}
           </p>
         </div>
         {config.logo_position === "end" && logo ? <span className="ms-auto">{logo}</span> : null}
@@ -854,7 +863,9 @@ export function StudentCardView({
       style={tokens.footerStyle}
     >
       {config.contact_line.trim() ||
-        (contactPhone ? `If found, please call ${contactPhone}` : "Issued by the school office")}
+        (contactPhone
+          ? fillNodes(m.ifFoundCall, { phone: <bdi dir="ltr">{contactPhone}</bdi> })
+          : m.issuedByOffice)}
     </div>
   );
 
@@ -914,16 +925,18 @@ export function StudentCardView({
     quiet designs; for the print-shop designs (`tokens.chips`) the label
     becomes a little icon tag — pointed like the chevron sample cards or a
     round dot — and stays readable to screen readers via the sr-only label.
+    Keyed by field, not by label, so the icon survives translation.
   */
   const chips = tokens.chips;
-  const chipIcon: Record<string, React.ReactNode> = {
-    "Admission no.": <Hash className="size-2.5" aria-hidden />,
-    Class: <GraduationCap className="size-2.5" aria-hidden />,
-    "Date of birth": <Cake className="size-2.5" aria-hidden />,
-    Guardian: <UserRound className="size-2.5" aria-hidden />,
+  const chipIcon: Record<CardField, React.ReactNode> = {
+    admissionNo: <Hash className="size-2.5" aria-hidden />,
+    class: <GraduationCap className="size-2.5" aria-hidden />,
+    dateOfBirth: <Cake className="size-2.5" aria-hidden />,
+    guardian: <UserRound className="size-2.5" aria-hidden />,
   };
-  const field = (label: string, value: string) =>
-    chips ? (
+  const field = (key: CardField, value: string) => {
+    const label = m[key];
+    return chips ? (
       <div className="flex items-center gap-1.5">
         <dt
           className={cn(
@@ -934,7 +947,7 @@ export function StudentCardView({
           )}
           style={{ backgroundColor: chips.background, color: chips.color }}
         >
-          {chipIcon[label]}
+          {chipIcon[key]}
           <span className="sr-only">{label}</span>
         </dt>
         <dd className="min-w-0 truncate font-medium">{value}</dd>
@@ -945,16 +958,17 @@ export function StudentCardView({
         <dd className="truncate font-medium">{value}</dd>
       </div>
     );
+  };
   // Panel layouts print the class under the name (like the sample cards'
   // "Std.: 5th (B)"), so the list must not repeat it there.
   const classInList = !(landscape && tokens.panel);
   const detailFields = (
     <>
-      {config.show_class && classInList ? field("Class", classLabel) : null}
+      {config.show_class && classInList ? field("class", classLabel) : null}
       {config.show_date_of_birth
-        ? field("Date of birth", student.date_of_birth ? formatDate(student.date_of_birth) : "—")
+        ? field("dateOfBirth", student.date_of_birth ? formatDate(student.date_of_birth) : "—")
         : null}
-      {config.show_guardian_name ? field("Guardian", student.guardian_name ?? "—") : null}
+      {config.show_guardian_name ? field("guardian", student.guardian_name ?? "—") : null}
     </>
   );
 
@@ -985,7 +999,7 @@ export function StudentCardView({
 
               <dl className="mt-1.5 space-y-1 text-[10px] leading-tight">
                 {config.show_admission_number
-                  ? field("Admission no.", student.admission_number)
+                  ? field("admissionNo", student.admission_number)
                   : null}
                 {detailFields}
               </dl>
@@ -1029,15 +1043,15 @@ export function StudentCardView({
 
           <dl className="min-w-0 flex-1 space-y-1 text-[11px] leading-tight">
             <div>
-              <dt className="sr-only">Name</dt>
+              <dt className="sr-only">{m.name}</dt>
               <dd className="truncate text-sm font-bold">{student.full_name}</dd>
             </div>
             {config.show_admission_number ? (
               chips ? (
-                field("Admission no.", student.admission_number)
+                field("admissionNo", student.admission_number)
               ) : (
                 <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Admission no.</dt>
+                  <dt className="text-muted-foreground">{m.admissionNo}</dt>
                   <dd className="font-medium tabular-nums">{student.admission_number}</dd>
                 </div>
               )
@@ -1124,6 +1138,7 @@ export function StudentCardBackView({
   school: CardSchool | null;
   config: ResolvedCardDesign;
 }) {
+  const m = useCatalog(studentsCardMessages).card;
   const palette = resolvePalette(school);
   const tokens = designTokens(config.design, palette);
   const landscape = config.orientation === "landscape";
@@ -1170,7 +1185,9 @@ export function StudentCardBackView({
     carries the identification itself — name, roll number, class — not a link:
     any phone camera then identifies the card's owner offline, with no app, no
     account and no server. Nothing beyond what the card already prints goes
-    in, so the QR never leaks more than the card does.
+    in, so the QR never leaks more than the card does. Its field names stay
+    English whatever the viewer's language: the payload is machine-read, and
+    ASCII keeps it small enough to scan at card size.
   */
   const classLabel = student.class_name
     ? `${student.class_name}${student.section_name ? ` · ${student.section_name}` : ""}`
@@ -1216,7 +1233,7 @@ export function StudentCardBackView({
         {addressLine || school?.phone || school?.email ? (
           <div className="space-y-0.5">
             <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-              School office
+              {m.schoolOffice}
             </p>
             {addressLine ? <p>{addressLine}</p> : null}
             {school?.phone ? <p>{school.phone}</p> : null}
@@ -1228,7 +1245,12 @@ export function StudentCardBackView({
             standard line, composed fresh from the current name and number. */}
         <p className="whitespace-pre-line text-muted-foreground">
           {config.found_notice.trim() ||
-            `This card identifies a student of ${school?.name ?? "the school"} and remains school property. If found, please return it to the school office${contactPhone ? ` or call ${contactPhone}` : ""}.`}
+            (contactPhone
+              ? fillNodes(m.foundNoticeCall, {
+                  school: school?.name ?? m.theSchool,
+                  phone: <span dir="ltr">{contactPhone}</span>,
+                })
+              : fill(m.foundNotice, { school: school?.name ?? m.theSchool }))}
         </p>
 
         {/* QR and signature over the validity dates: the machine-readable
@@ -1240,14 +1262,14 @@ export function StudentCardBackView({
             {qr}
             {config.show_validity && student.enrolled_on ? (
               <div className="text-[9px] leading-tight text-muted-foreground">
-                <p>Issued {formatDate(student.enrolled_on)}</p>
-                <p>Expires {formatDate(addOneYear(student.enrolled_on))}</p>
+                <p>{fill(m.issued, { date: formatDate(student.enrolled_on) })}</p>
+                <p>{fill(m.expires, { date: formatDate(addOneYear(student.enrolled_on)) })}</p>
               </div>
             ) : null}
           </div>
           <div className="text-center">
             <div className="mb-0.5 w-24 border-b border-foreground/70" />
-            <p className="text-[9px] text-muted-foreground">Principal</p>
+            <p className="text-[9px] text-muted-foreground">{m.principal}</p>
           </div>
         </div>
       </div>
@@ -1259,7 +1281,9 @@ export function StudentCardBackView({
         )}
         style={tokens.footerStyle}
       >
-        {`Card ${student.admission_number}${school ? ` · ${school.code}` : ""}`}
+        {school
+          ? fill(m.footerWithCode, { number: ltr(student.admission_number), code: ltr(school.code) })
+          : fill(m.footer, { number: ltr(student.admission_number) })}
       </div>
     </div>
   );

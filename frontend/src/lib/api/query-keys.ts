@@ -29,7 +29,9 @@ export const queryKeys = {
 
   guardians: {
     /** The contact card on a student's page: who may sign in to the portal for them. */
+    all: ["guardians"] as const,
     forStudent: (studentId: string) => ["guardians", "student", studentId] as const,
+    detail: (guardianId: string) => ["guardians", "detail", guardianId] as const,
   },
 
   classes: {
@@ -73,6 +75,7 @@ export const queryKeys = {
     papers: (examId: string) => ["exams", examId, "papers"] as const,
     marks: (paperId: string) => ["exams", "papers", paperId, "marks"] as const,
     results: (examId: string, classId: string) => ["exams", examId, "results", classId] as const,
+    gradingScale: ["exams", "grading-scale"] as const,
   },
 
   books: {
@@ -88,6 +91,9 @@ export const queryKeys = {
     // Not under `detail`: polling the book while a chapter is processed must not
     // refetch every search the teacher already ran.
     search: (bookId: string, q: string) => ["books-search", bookId, q] as const,
+    // Library-wide, under the same un-polled prefix as the per-book search.
+    librarySearch: (q: string, scope: Record<string, string | null | undefined>) =>
+      ["books-search", "library", q, scope] as const,
     // Not under `all`: adding a book must not re-check the AI provider.
     scanStatus: ["books-scan-status"] as const,
   },
@@ -150,6 +156,9 @@ export const queryKeys = {
     concessions: (params: PageParams) => ["fees", "concessions", params] as const,
     siblingRule: ["fees", "sibling-rule"] as const,
     siblings: (year: string) => ["fees", "siblings", year] as const,
+    lateFees: (year: string) => ["fees", "late-fees", year] as const,
+    ledger: (studentId: string, params: PageParams) =>
+      ["fees", "ledger", studentId, params] as const,
   },
 
   search: {

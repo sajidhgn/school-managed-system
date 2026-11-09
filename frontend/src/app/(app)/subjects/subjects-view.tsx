@@ -31,15 +31,10 @@ import {
   useSubjects,
 } from "@/hooks/use-subjects";
 import type { SubjectKind, SubjectRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { subjectsMessages } from "@/lib/i18n/modules/subjects";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { SubjectFormDialog } from "./subject-form-dialog";
-
-const KIND_LABEL: Record<SubjectKind, string> = {
-  core: "Core",
-  elective: "Elective",
-  // Timetabled and attended, but not graded — which is why it is a third value
-  // rather than an `is_graded` flag bolted onto a two-value enum.
-  activity: "Activity",
-};
 
 const KIND_VARIANT: Record<SubjectKind, "neutral" | "outline" | "success"> = {
   core: "success",
@@ -49,6 +44,7 @@ const KIND_VARIANT: Record<SubjectKind, "neutral" | "outline" | "success"> = {
 
 /** Which subjects one class studies, and the controls to change that. */
 function CurriculumPanel({ canManage }: { canManage: boolean }) {
+  const { curriculum: m, kind: kindLabel } = useCatalog(subjectsMessages);
   const classes = useClassSummary();
   const [classId, setClassId] = React.useState<string>("");
 
@@ -67,15 +63,12 @@ function CurriculumPanel({ canManage }: { canManage: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Class curriculum</CardTitle>
-        <CardDescription>
-          What each grade studies. Keyed to the class, not the section — so Grade 10-A and
-          10-B cannot drift onto different syllabi.
-        </CardDescription>
+        <CardTitle>{m.title}</CardTitle>
+        <CardDescription>{m.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
-          <Label htmlFor="curriculum-class">Class</Label>
+          <Label htmlFor="curriculum-class">{m.classLabel}</Label>
           <NativeSelect
             id="curriculum-class"
             value={classId}
@@ -93,9 +86,7 @@ function CurriculumPanel({ canManage }: { canManage: boolean }) {
         {curriculum.isPending && classId && <Skeleton className="h-24 w-full" />}
 
         {curriculum.data && curriculum.data.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            This class has no subjects yet.
-          </p>
+          <p className="text-sm text-muted-foreground">{m.noSubjects}</p>
         )}
 
         {curriculum.data && curriculum.data.length > 0 && (
@@ -111,18 +102,18 @@ function CurriculumPanel({ canManage }: { canManage: boolean }) {
                   </span>
                   <span className="font-medium">{entry.subject_name}</span>
                   <Badge variant={KIND_VARIANT[entry.subject_kind]}>
-                    {KIND_LABEL[entry.subject_kind]}
+                    {kindLabel[entry.subject_kind]}
                   </Badge>
                   {entry.weekly_periods !== null && (
                     <span className="text-muted-foreground">
-                      {entry.weekly_periods}/week
+                      {fill(m.perWeek, { count: entry.weekly_periods })}
                     </span>
                   )}
                 </div>
                 {canManage && (
                   <Button size="sm" variant="ghost" onClick={() => remove.mutate(entry.id)}>
                     <Trash2 className="h-3 w-3" aria-hidden />
-                    <span className="sr-only">Remove {entry.subject_name}</span>
+                    <span className="sr-only">{fill(m.removeNamed, { name: entry.subject_name })}</span>
                   </Button>
                 )}
               </div>
@@ -133,10 +124,10 @@ function CurriculumPanel({ canManage }: { canManage: boolean }) {
         {canManage && classId && available.length > 0 && (
           <div className="flex items-end gap-2">
             <div className="space-y-1">
-              <Label htmlFor="curriculum-add">Add a subject</Label>
+              <Label htmlFor="curriculum-add">{m.addLabel}</Label>
               <NativeSelect id="curriculum-add" defaultValue="" className="max-w-xs">
                 <option value="" disabled>
-                  Choose…
+                  {m.choose}
                 </option>
                 {available.map((subject) => (
                   <option key={subject.id} value={subject.id}>
@@ -157,7 +148,7 @@ function CurriculumPanel({ canManage }: { canManage: boolean }) {
                 }
               }}
             >
-              Add
+              {m.add}
             </Button>
           </div>
         )}
@@ -167,6 +158,7 @@ function CurriculumPanel({ canManage }: { canManage: boolean }) {
 }
 
 export function SubjectsView({ canManage }: { canManage: boolean }) {
+  const { page: m, kind: kindLabel } = useCatalog(subjectsMessages);
   const [search, setSearch] = React.useState("");
   const debounced = useDebouncedValue(search, 300);
   const query = useSubjects({ q: debounced || null, size: 50 });
@@ -181,8 +173,8 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Subjects"
-        description="The curriculum the gradebook and the timetable are built from."
+        title={m.title}
+        description={m.description}
         actions={
           canManage && (
             <Button
@@ -191,8 +183,8 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-1 h-4 w-4" aria-hidden />
-              New subject
+              <Plus className="me-1 h-4 w-4" aria-hidden />
+              {m.newSubject}
             </Button>
           )
         }
@@ -200,9 +192,9 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>Subject catalog</CardTitle>
+          <CardTitle>{m.catalogTitle}</CardTitle>
           <Input
-            placeholder="Search subjects…"
+            placeholder={m.searchPlaceholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="max-w-xs"
@@ -217,12 +209,8 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
           {query.data && subjects.length === 0 && (
             <EmptyState
               icon={BookOpen}
-              title={debounced ? "No matching subjects" : "No subjects yet"}
-              description={
-                debounced
-                  ? "Try a different search."
-                  : "Add the subjects your school teaches. Codes are short handles for timetable grids and report-card columns."
-              }
+              title={debounced ? m.noMatches : m.noSubjects}
+              description={debounced ? m.tryDifferentSearch : m.emptyHint}
             />
           )}
 
@@ -230,9 +218,9 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-24">Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="w-28">Type</TableHead>
+                  <TableHead className="w-24">{m.colCode}</TableHead>
+                  <TableHead>{m.colName}</TableHead>
+                  <TableHead className="w-28">{m.colType}</TableHead>
                   <TableHead className="w-28" />
                 </TableRow>
               </TableHeader>
@@ -243,10 +231,10 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
                     <TableCell className="font-medium">{subject.name}</TableCell>
                     <TableCell>
                       <Badge variant={KIND_VARIANT[subject.kind]}>
-                        {KIND_LABEL[subject.kind]}
+                        {kindLabel[subject.kind]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-end">
                       {canManage && (
                         <>
                           <Button
@@ -257,7 +245,7 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
                               setFormOpen(true);
                             }}
                           >
-                            Edit
+                            {m.edit}
                           </Button>
                           <Button
                             size="sm"
@@ -265,7 +253,7 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
                             onClick={() => setConfirming(subject)}
                           >
                             <Trash2 className="h-3 w-3" aria-hidden />
-                            <span className="sr-only">Delete {subject.name}</span>
+                            <span className="sr-only">{fill(m.deleteNamed, { name: subject.name })}</span>
                           </Button>
                         </>
                       )}
@@ -284,9 +272,9 @@ export function SubjectsView({ canManage }: { canManage: boolean }) {
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete ${confirming?.name ?? "this subject"}?`}
-        description="This is refused while any class still studies it — remove it from their curriculum first."
-        confirmLabel="Delete"
+        title={fill(m.deleteTitle, { name: confirming?.name ?? m.deleteFallback })}
+        description={m.deleteDescription}
+        confirmLabel={m.delete}
         variant="destructive"
         onConfirm={() => {
           if (confirming) remove.mutate(confirming.id);

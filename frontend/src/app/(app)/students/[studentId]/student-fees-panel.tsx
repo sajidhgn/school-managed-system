@@ -18,8 +18,10 @@ import {
 import { GenerateChallansDialog } from "../../fees/generate-challans-dialog";
 import { EmptyState, ErrorState, TableCardSkeleton } from "@/components/data-states";
 import { AddChargeForm } from "@/components/fees/add-charge-form";
+import { fillNodes } from "@/lib/i18n/format";
 import { RecordPaymentDialog } from "@/components/fees/record-payment-dialog";
 import { StudentFeeArrangement } from "@/components/fees/student-fee-arrangement";
+import { StudentLedgerPanel } from "@/components/fees/student-ledger-panel";
 import { ReasonDialog } from "@/components/fees/reason-dialog";
 import { VoucherStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -41,13 +43,13 @@ import {
   useVouchers,
 } from "@/hooks/use-fees";
 import { feesApi } from "@/lib/api/resources/fees";
-import {
-  PAYMENT_METHOD_LABELS,
-  label,
-  unitLabel,
-  type FeeVoucherRead,
-} from "@/lib/api/types";
+import { label, type FeeVoucherRead } from "@/lib/api/types";
 import { currentAcademicYear } from "@/lib/academic-year";
+import { fill, ltr } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { feesStudentMessages } from "@/lib/i18n/modules/fees-student";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 import { formatDate } from "@/lib/utils";
 
 // Mirrors `MAX_CHALLAN_VOUCHERS` in the fees router. Stated twice on purpose: the
@@ -115,6 +117,9 @@ export function StudentFeesPanel({
   /** `fee:manage` — needed to change what this student is charged, not to see it. */
   canManageFees: boolean;
 }) {
+  const m = useCatalog(feesStudentMessages).panel;
+  // The void and reverse dialogs say what the challan screen says — same catalog.
+  const v = useCatalog(feesMessages).voucher;
   // Newest first: the challan someone is asking about is almost always the last one
   // issued. 100 is the API's ceiling and roughly eight years of monthly billing —
   // `meta.total` is checked below so a longer history says so rather than lying.
@@ -167,9 +172,9 @@ export function StudentFeesPanel({
     <section className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
         <div>
-          <h2 className="text-sm font-medium">Fees</h2>
+          <h2 className="text-sm font-medium">{m.title}</h2>
           <p className="text-xs text-muted-foreground">
-            Every challan billed to {studentName}, and what is still owed on each.
+            {fill(m.intro, { name: studentName })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -183,14 +188,14 @@ export function StudentFeesPanel({
                 rel="noreferrer"
               >
                 <Printer className="size-4" aria-hidden />
-                Print {chosen.length} on one challan
+                {fill(m.printCombined, { count: chosen.length })}
               </a>
             </Button>
           ) : null}
           {canIssue ? (
             <Button variant="outline" size="sm" onClick={() => setGenerating(true)}>
               <Receipt className="size-4" aria-hidden />
-              Generate a challan
+              {m.generateChallan}
             </Button>
           ) : null}
         </div>
@@ -199,31 +204,33 @@ export function StudentFeesPanel({
       {/* --- The four figures --------------------------------------------- */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Figure
-          label="Billed"
+          label={m.billed}
           value={money.format(totals.billed)}
           hint={
             totals.drafts > 0
-              ? `${totals.drafts} draft${totals.drafts === 1 ? "" : "s"} not counted`
-              : `${totals.counted} challan${totals.counted === 1 ? "" : "s"}`
+              ? fill(totals.drafts === 1 ? m.draftsOne : m.draftsMany, { count: totals.drafts })
+              : fill(totals.counted === 1 ? m.challansOne : m.challansMany, {
+                  count: totals.counted,
+                })
           }
           loading={vouchers.isPending}
         />
         <Figure
-          label="Paid"
+          label={m.paid}
           value={money.format(totals.paid)}
           tone="success"
           loading={vouchers.isPending}
         />
         <Figure
-          label="Outstanding"
+          label={m.outstanding}
           value={money.format(totals.outstanding)}
           tone={totals.outstanding > 0 ? "warning" : undefined}
           loading={vouchers.isPending}
         />
         <Figure
-          label="Overdue"
+          label={m.overdue}
           value={money.format(totals.overdue)}
-          hint="Past the due date and unpaid"
+          hint={m.overdueHint}
           tone={totals.overdue > 0 ? "destructive" : undefined}
           loading={vouchers.isPending}
         />
@@ -248,15 +255,11 @@ export function StudentFeesPanel({
         ) : items.length === 0 ? (
           <EmptyState
             icon={Wallet}
-            title="Nothing billed yet"
-            description={
-              canIssue
-                ? "This student has no challans. Generate one against an active fee structure for their class."
-                : "This student has no challans."
-            }
+            title={m.emptyTitle}
+            description={canIssue ? m.emptyCanIssue : m.emptyReadOnly}
             action={
               canIssue ? (
-                <Button onClick={() => setGenerating(true)}>Generate a challan</Button>
+                <Button onClick={() => setGenerating(true)}>{m.generateChallan}</Button>
               ) : undefined
             }
           />
@@ -266,16 +269,16 @@ export function StudentFeesPanel({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8">
-                    <span className="sr-only">Select for a combined challan</span>
+                    <span className="sr-only">{m.selectColumn}</span>
                   </TableHead>
                   <TableHead className="w-10" />
-                  <TableHead>Challan</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead className="text-end">Total</TableHead>
-                  <TableHead className="text-end">Paid</TableHead>
-                  <TableHead className="text-end">Outstanding</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-end">Actions</TableHead>
+                  <TableHead>{m.colChallan}</TableHead>
+                  <TableHead>{m.colDue}</TableHead>
+                  <TableHead className="text-end">{m.colTotal}</TableHead>
+                  <TableHead className="text-end">{m.colPaid}</TableHead>
+                  <TableHead className="text-end">{m.colOutstanding}</TableHead>
+                  <TableHead>{m.colStatus}</TableHead>
+                  <TableHead className="text-end">{m.colActions}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -300,7 +303,7 @@ export function StudentFeesPanel({
                             className="size-3.5 accent-primary disabled:opacity-40"
                             checked={ticked}
                             disabled={isVoid || (!ticked && selected.length >= MAX_COMBINED)}
-                            aria-label={`Include ${voucher.voucher_number} in a combined challan`}
+                            aria-label={fill(m.includeNamed, { number: ltr(voucher.voucher_number) })}
                             onChange={(event) =>
                               setSelected((current) =>
                                 event.target.checked
@@ -316,17 +319,15 @@ export function StudentFeesPanel({
                             size="icon"
                             className="size-7"
                             aria-expanded={open}
-                            aria-label={
-                              open
-                                ? `Hide ${voucher.voucher_number}`
-                                : `Show what ${voucher.voucher_number} charges`
-                            }
+                            aria-label={fill(open ? m.hideNamed : m.showNamed, {
+                              number: voucher.voucher_number,
+                            })}
                             onClick={() => setExpanded(open ? null : voucher.id)}
                           >
                             {open ? (
                               <ChevronDown className="size-4" aria-hidden />
                             ) : (
-                              <ChevronRight className="size-4" aria-hidden />
+                              <ChevronRight className="size-4 rtl:rotate-180" aria-hidden />
                             )}
                           </Button>
                         </TableCell>
@@ -382,14 +383,14 @@ export function StudentFeesPanel({
                                 onClick={() => issue.mutate(voucher.id)}
                               >
                                 <Send className="size-3.5" aria-hidden />
-                                Issue
+                                {m.issue}
                               </Button>
                             ) : null}
 
                             {!isDraft && !isVoid && outstanding > 0 && canCollect ? (
                               <Button size="sm" onClick={() => setCollecting(voucher)}>
                                 <Wallet className="size-3.5" aria-hidden />
-                                Pay
+                                {m.pay}
                               </Button>
                             ) : null}
 
@@ -398,7 +399,7 @@ export function StudentFeesPanel({
                               size="icon"
                               className="size-8"
                               asChild
-                              title="Print challan"
+                              title={m.printChallan}
                             >
                               <a
                                 href={feesApi.vouchers.pdfUrl(voucher.id)}
@@ -407,7 +408,7 @@ export function StudentFeesPanel({
                               >
                                 <Printer className="size-4" aria-hidden />
                                 <span className="sr-only">
-                                  Print challan {voucher.voucher_number}
+                                  {fill(m.printNamed, { number: ltr(voucher.voucher_number) })}
                                 </span>
                               </a>
                             </Button>
@@ -417,12 +418,12 @@ export function StudentFeesPanel({
                                 variant="ghost"
                                 size="icon"
                                 className="size-8"
-                                title="Void challan"
+                                title={m.voidChallan}
                                 onClick={() => setVoiding(voucher)}
                               >
                                 <Ban className="size-4" aria-hidden />
                                 <span className="sr-only">
-                                  Void challan {voucher.voucher_number}
+                                  {fill(m.voidNamed, { number: ltr(voucher.voucher_number) })}
                                 </span>
                               </Button>
                             ) : null}
@@ -432,12 +433,12 @@ export function StudentFeesPanel({
                               size="icon"
                               className="size-8"
                               asChild
-                              title="Open challan"
+                              title={m.openChallan}
                             >
                               <Link href={`/fees/${voucher.id}`}>
                                 <ExternalLink className="size-4" aria-hidden />
                                 <span className="sr-only">
-                                  Open challan {voucher.voucher_number}
+                                  {fill(m.openNamed, { number: ltr(voucher.voucher_number) })}
                                 </span>
                               </Link>
                             </Button>
@@ -471,11 +472,15 @@ export function StudentFeesPanel({
           between a complete history and one that merely looks complete. */}
       {vouchers.data && vouchers.data.meta.total > items.length ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Showing the {items.length} most recent of {vouchers.data.meta.total} challans.{" "}
-          <Link href="/fees" className="underline underline-offset-2">
-            The fees register
-          </Link>{" "}
-          holds the rest.
+          {fillNodes(m.showingRecent, {
+            shown: items.length,
+            total: vouchers.data.meta.total,
+            link: (
+              <Link href="/fees" className="underline underline-offset-2">
+                {m.feesRegister}
+              </Link>
+            ),
+          })}
         </p>
       ) : null}
 
@@ -493,9 +498,9 @@ export function StudentFeesPanel({
       <ReasonDialog
         open={voiding !== null}
         onOpenChange={(next) => !next && setVoiding(null)}
-        title={`Void challan ${voiding?.voucher_number ?? ""}?`}
-        description="It stops counting towards billed and outstanding, and the student can be billed again for this period. Receipts already recorded against it are kept."
-        confirmLabel="Void challan"
+        title={fill(m.voidTitle, { number: ltr(voiding?.voucher_number ?? "") })}
+        description={v.voidDescription}
+        confirmLabel={v.voidConfirm}
         reason={voidReason}
         onReasonChange={setVoidReason}
         busy={voidVoucher.isPending}
@@ -510,9 +515,9 @@ export function StudentFeesPanel({
       <ReasonDialog
         open={reversing !== null}
         onOpenChange={(next) => !next && setReversing(null)}
-        title={`Reverse receipt ${reversing?.receipt ?? ""}?`}
-        description="The receipt stays on the challan, struck through, and the amount goes back to outstanding. Both the original and this reversal keep the name of who recorded them."
-        confirmLabel="Reverse receipt"
+        title={fill(v.reverseTitle, { receipt: reversing?.receipt ?? "" })}
+        description={v.reverseDescription}
+        confirmLabel={v.reverseConfirm}
         reason={reverseReason}
         onReasonChange={setReverseReason}
         busy={reverse.isPending}
@@ -523,6 +528,11 @@ export function StudentFeesPanel({
           setReverseReason("");
         }}
       />
+
+      {/* --- The running account -------------------------------------------
+          Below the challans: those answer "what is owed on each bill", this answers
+          "how did the family get to this number". */}
+      <StudentLedgerPanel studentId={studentId} canAdjust={canVoid} />
 
       {canIssue ? (
         <GenerateChallansDialog
@@ -560,6 +570,8 @@ function VoucherBreakdown({
   canVoid: boolean;
   onReverse: (payment: { id: string; receipt: string }) => void;
 }) {
+  const m = useCatalog(feesStudentMessages).breakdown;
+  const L = useLabels();
   const voucher = useVoucher(voucherId);
   const removeCharge = useRemoveVoucherStationery();
 
@@ -574,7 +586,7 @@ function VoucherBreakdown({
   );
 
   if (voucher.isPending) {
-    return <p className="px-5 py-4 text-sm text-muted-foreground">Loading challan…</p>;
+    return <p className="px-5 py-4 text-sm text-muted-foreground">{m.loading}</p>;
   }
   if (voucher.isError) {
     return (
@@ -597,7 +609,7 @@ function VoucherBreakdown({
     <div className="grid gap-6 px-5 py-4 md:grid-cols-2">
       <div>
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Charges
+          {m.charges}
         </h3>
         <ul className="space-y-1.5 text-sm">
           {data.items.map((item) => (
@@ -606,9 +618,11 @@ function VoucherBreakdown({
                 {item.line_name}
                 {item.line_type === "stationery" ? (
                   <span className="ms-2 text-xs text-muted-foreground">
-                    {Number(item.quantity)}{" "}
-                    {unitLabel(item.unit_label, Number(item.quantity))} ×{" "}
-                    {money.format(Number(item.unit_price))}
+                    {fill(m.working, {
+                      qty: Number(item.quantity),
+                      unit: L.unit(item.unit_label, Number(item.quantity)),
+                      price: money.format(Number(item.unit_price)),
+                    })}
                   </span>
                 ) : null}
               </span>
@@ -619,7 +633,7 @@ function VoucherBreakdown({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    title="Remove charge"
+                    title={m.removeCharge}
                     disabled={removeCharge.isPending}
                     onClick={() =>
                       removeCharge.mutate({
@@ -629,7 +643,7 @@ function VoucherBreakdown({
                     }
                   >
                     <Trash2 className="size-3.5" aria-hidden />
-                    <span className="sr-only">Remove {item.line_name}</span>
+                    <span className="sr-only">{fill(m.removeNamed, { name: item.line_name })}</span>
                   </Button>
                 ) : null}
               </span>
@@ -649,17 +663,17 @@ function VoucherBreakdown({
         ) : null}
         {data.status === "void" && data.void_reason ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Voided — {data.void_reason}
+            {fill(m.voided, { reason: data.void_reason })}
           </p>
         ) : null}
       </div>
 
       <div>
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Receipts
+          {m.receipts}
         </h3>
         {data.payments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing received against this challan yet.</p>
+          <p className="text-sm text-muted-foreground">{m.noReceipts}</p>
         ) : (
           <ul className="space-y-1.5 text-sm">
             {/* Reversed receipts are struck through and KEPT. A reversal is a second
@@ -673,10 +687,10 @@ function VoucherBreakdown({
                     <span className="font-mono text-xs">{payment.receipt_number}</span>
                     <span className="ms-2 text-xs text-muted-foreground">
                       {formatDate(payment.received_on)} ·{" "}
-                      {label(PAYMENT_METHOD_LABELS, payment.method)}
+                      {label(L.paymentMethod, payment.method)}
                     </span>
                     {reversed ? (
-                      <span className="ms-2 text-xs text-destructive">Reversed</span>
+                      <span className="ms-2 text-xs text-destructive">{m.reversed}</span>
                     ) : null}
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
@@ -688,14 +702,14 @@ function VoucherBreakdown({
                         variant="ghost"
                         size="icon"
                         className="size-7"
-                        title="Reverse receipt"
+                        title={m.reverseReceipt}
                         onClick={() =>
                           onReverse({ id: payment.id, receipt: payment.receipt_number })
                         }
                       >
                         <Undo2 className="size-3.5" aria-hidden />
                         <span className="sr-only">
-                          Reverse receipt {payment.receipt_number}
+                          {fill(m.reverseNamed, { receipt: ltr(payment.receipt_number) })}
                         </span>
                       </Button>
                     ) : null}

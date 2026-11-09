@@ -5,11 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Can } from "@/components/auth/can";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { ApiError } from "@/lib/api/errors";
 import { roles as rolesApi } from "@/lib/api/resources";
 import { PERMISSIONS, type PermissionCategory, type RoleRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useRbacText } from "@/lib/i18n/modules/permissions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,6 +55,9 @@ export function PermissionMatrix({
   catalog: PermissionCategory[];
   actorPermissions: string[];
 }) {
+  const { t } = useTranslations();
+  const m = useCatalog(adminMessages).roles;
+  const rbac = useRbacText();
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [saving, setSaving] = useState(false);
@@ -84,7 +92,7 @@ export function PermissionMatrix({
   }, [schoolId, role.id]);
 
   if (selected === null) {
-    return <p className="text-sm text-muted-foreground">Loading permissions…</p>;
+    return <p className="text-sm text-muted-foreground">{m.loadingPermissions}</p>;
   }
 
   function toggle(code: string) {
@@ -102,15 +110,15 @@ export function PermissionMatrix({
     try {
       await rolesApi.setPermissions(schoolId, role.id, [...selected]);
       toast({
-        title: `${role.name} updated.`,
-        description: "Anyone with this role sees the change on their next request.",
+        title: fill(m.updated, { name: rbac.roleName(role.code, role.name) }),
+        description: t.roles.changeAppliesNext,
       });
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not save",
-        description: error instanceof ApiError ? error.message : "Please try again.",
+        title: m.saveFailed,
+        description: error instanceof ApiError ? error.message : t.common.tryAgain,
       });
     } finally {
       setSaving(false);
@@ -131,7 +139,7 @@ export function PermissionMatrix({
     <div className="grid gap-6">
       {categories.map((category) => (
         <fieldset key={category.category}>
-          <legend className="mb-2 text-sm font-medium">{category.category}</legend>
+          <legend className="mb-2 text-sm font-medium">{rbac.category(category.category)}</legend>
           <div className="grid gap-1.5 sm:grid-cols-2">
             {category.permissions.map((permission) => {
               const grantable = held.has(permission.code);
@@ -146,8 +154,8 @@ export function PermissionMatrix({
                   )}
                   title={
                     grantable
-                      ? permission.description
-                      : "You cannot grant a permission you do not hold yourself."
+                      ? rbac.permission(permission.code, permission.description)
+                      : t.roles.cannotGrant
                   }
                 >
                   <input
@@ -159,11 +167,11 @@ export function PermissionMatrix({
                   />
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5 font-medium">
-                      {permission.description}
+                      {rbac.permission(permission.code, permission.description)}
                       {permission.is_dangerous ? (
                         <AlertTriangle
                           className="size-3.5 text-warning"
-                          aria-label="Destructive or high-impact"
+                          aria-label={m.dangerous}
                         />
                       ) : null}
                     </span>
@@ -180,10 +188,12 @@ export function PermissionMatrix({
         <div className="flex items-center gap-3 border-t border-border pt-4">
           <Button onClick={save} disabled={saving}>
             <Save className="size-4" aria-hidden />
-            {saving ? "Saving…" : "Save permissions"}
+            {saving ? t.common.saving : t.roles.savePermissions}
           </Button>
           <p className="text-xs text-muted-foreground">
-            {selected.size} permission{selected.size === 1 ? "" : "s"} selected
+            {fill(selected.size === 1 ? m.selectedCount.one : m.selectedCount.other, {
+              count: selected.size,
+            })}
           </p>
         </div>
       </Can>

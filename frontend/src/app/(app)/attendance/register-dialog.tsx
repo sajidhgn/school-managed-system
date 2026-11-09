@@ -23,6 +23,9 @@ import {
   useSubmitRegister,
 } from "@/hooks/use-attendance";
 import type { AttendanceEntryRead, AttendanceStatus } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /**
  * The marking screen.
@@ -40,14 +43,6 @@ import type { AttendanceEntryRead, AttendanceStatus } from "@/lib/api/types";
  */
 
 const STATUS_ORDER: AttendanceStatus[] = ["present", "absent", "late", "excused", "half_day"];
-
-const STATUS_LABEL: Record<AttendanceStatus, string> = {
-  present: "Present",
-  absent: "Absent",
-  late: "Late",
-  excused: "Excused",
-  half_day: "Half day",
-};
 
 /**
  * Colour carries meaning here, so it is paired with a label rather than used alone:
@@ -77,6 +72,7 @@ export function RegisterDialog({
   canMark: boolean;
   canAmend: boolean;
 }) {
+  const m = useCatalog(attendanceMessages).register;
   const query = useAttendanceSession(sessionId);
   const mark = useMarkAttendance();
   const submit = useSubmitRegister();
@@ -157,24 +153,28 @@ export function RegisterDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Register
+            {m.title}
             {isSubmitted && (
               <Badge variant="success">
-                <CircleCheck className="mr-1 h-3 w-3" aria-hidden />
-                Submitted
+                <CircleCheck className="me-1 h-3 w-3" aria-hidden />
+                {m.submitted}
               </Badge>
             )}
             {isLocked && (
               <Badge variant="outline">
-                <Lock className="mr-1 h-3 w-3" aria-hidden />
-                Locked
+                <Lock className="me-1 h-3 w-3" aria-hidden />
+                {m.locked}
               </Badge>
             )}
           </DialogTitle>
           <DialogDescription>
             {session
-              ? `${session.session_date} · ${counts.present} present, ${counts.absent} absent`
-              : "Loading the roster…"}
+              ? fill(m.summary, {
+                  date: session.session_date,
+                  present: counts.present,
+                  absent: counts.absent,
+                })
+              : m.loading}
           </DialogDescription>
         </DialogHeader>
 
@@ -187,7 +187,7 @@ export function RegisterDialog({
         )}
 
         {session && (
-          <div className="max-h-[50vh] space-y-1 overflow-y-auto pr-1">
+          <div className="max-h-[50vh] space-y-1 overflow-y-auto pe-1">
             {session.entries.map((entry) => {
               const current = statusOf(entry);
               return (
@@ -211,7 +211,7 @@ export function RegisterDialog({
                         type="button"
                         disabled={!editable}
                         aria-pressed={current === status}
-                        aria-label={`${STATUS_LABEL[status]} — ${entry.full_name}`}
+                        aria-label={fill(m.markAs, { status: m.status[status], name: entry.full_name })}
                         onClick={() =>
                           setPending((prev) => ({ ...prev, [entry.student_id]: status }))
                         }
@@ -222,7 +222,7 @@ export function RegisterDialog({
                             : "bg-background text-muted-foreground hover:bg-muted",
                         ].join(" ")}
                       >
-                        {STATUS_LABEL[status]}
+                        {m.status[status]}
                       </button>
                     ))}
                   </div>
@@ -234,38 +234,27 @@ export function RegisterDialog({
 
         {isSubmitted && canAmend && changed.length > 0 && (
           <div className="space-y-1">
-            <Label htmlFor="amend-reason">Reason for the correction</Label>
+            <Label htmlFor="amend-reason">{m.reasonLabel}</Label>
             <Input
               id="amend-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Note from mother received after submission"
+              placeholder={m.reasonPlaceholder}
             />
-            <p className="text-xs text-muted-foreground">
-              Required. Recorded in the audit log alongside what changed.
-            </p>
+            <p className="text-xs text-muted-foreground">{m.reasonHint}</p>
           </div>
         )}
 
         {isLocked && !canAmend ? (
-          <p className="text-xs text-muted-foreground">
-            Attendance for this date is locked. Registers can be changed until the end
-            of the following day; correcting it now needs the &ldquo;amend
-            attendance&rdquo; permission.
-          </p>
+          <p className="text-xs text-muted-foreground">{m.lockedHint}</p>
         ) : (
           isSubmitted &&
-          !canAmend && (
-            <p className="text-xs text-muted-foreground">
-              This register has been submitted. Correcting it needs the
-              &ldquo;amend attendance&rdquo; permission.
-            </p>
-          )
+          !canAmend && <p className="text-xs text-muted-foreground">{m.submittedHint}</p>
         )}
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>
-            Close
+            {m.close}
           </Button>
 
           {isSubmitted && canAmend && (
@@ -276,7 +265,7 @@ export function RegisterDialog({
                 sessionId && void reopen.mutateAsync({ sessionId, reason: reason.trim() })
               }
             >
-              Reopen
+              {m.reopen}
             </Button>
           )}
 
@@ -289,13 +278,13 @@ export function RegisterDialog({
               }
               onClick={() => void handleSave()}
             >
-              Save {changed.length > 0 ? `(${changed.length})` : ""}
+              {changed.length > 0 ? fill(m.saveCount, { count: changed.length }) : m.save}
             </Button>
           )}
 
           {!isSubmitted && canMark && (!isLocked || canAmend) && (
             <Button disabled={submit.isPending} onClick={() => void handleSubmit()}>
-              Submit register
+              {m.submit}
             </Button>
           )}
         </DialogFooter>

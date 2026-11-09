@@ -8,7 +8,9 @@ import type { SchoolRead } from "@/lib/api/types";
 import { getActiveSchoolId, requireUser } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Choose a school" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).selectSchool.title };
+}
 
 /**
  * Where `requireSchoolContext()` sends a user with no active campus.

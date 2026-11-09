@@ -11,29 +11,44 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Wrap a left-to-right run (a date, "14 Mar 2015") in a Unicode LTR isolate.
+ *
+ * In an Urdu (right-to-left) sentence the bidi algorithm otherwise splits
+ * "14 Mar 2015" around the month and shows "Mar 2015 14". The isolate marks are
+ * invisible, and make the run read as one unit in either direction.
+ */
+function isolateLtr(text: string): string {
+  return `\u2066${text}\u2069`;
+}
+
 /** Format an ISO date/datetime for display. Returns "—" for null. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return isolateLtr(
+    new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date),
+  );
 }
 
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return isolateLtr(
+    new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date),
+  );
 }
 
 /** Initials for an avatar fallback, e.g. "Aisha Khan" → "AK". */

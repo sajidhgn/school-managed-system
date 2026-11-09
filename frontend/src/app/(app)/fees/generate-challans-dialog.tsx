@@ -21,6 +21,9 @@ import {
   useGenerateVouchers,
 } from "@/hooks/use-fees";
 import type { VoucherGenerateResult } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /**
  * Bill a whole class for one period.
@@ -84,6 +87,7 @@ export function GenerateChallansDialog({
   /** Names the class in the copy when the structure was resolved from it. */
   className?: string;
 }) {
+  const m = useCatalog(feesMessages).generate;
   // Narrowed server-side when the class is known, so a campus with forty structures
   // does not ship thirty-nine irrelevant ones to filter in the browser.
   const structures = useFeeStructures({
@@ -180,24 +184,25 @@ export function GenerateChallansDialog({
           <>
             <DialogHeader>
               <DialogTitle>
-                {result.created} challan{result.created === 1 ? "" : "s"} generated
+                {fill(result.created === 1 ? m.resultOne : m.resultMany, {
+                  count: result.created,
+                })}
               </DialogTitle>
               <DialogDescription>
                 {result.skipped.length === 0
                   ? single
-                    ? `${studentName ?? "The student"} was billed for this period.`
-                    : "Every student in the class was billed."
-                  : `${result.skipped.length} student${result.skipped.length === 1 ? " was" : "s were"} skipped.`}
+                    ? fill(m.singleBilled, { name: studentName ?? m.singleBilledFallback })
+                    : m.everyoneBilled
+                  : fill(result.skipped.length === 1 ? m.skippedOne : m.skippedMany, {
+                      count: result.skipped.length,
+                    })}
               </DialogDescription>
             </DialogHeader>
 
             {result.truncated ? (
               <p className="flex items-start gap-2 rounded-md bg-warning/15 px-3 py-2 text-sm">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>
-                  This run hit the 500-student cap and stopped there. Filter by section and
-                  run it again for the rest.
-                </span>
+                <span>{m.truncated}</span>
               </p>
             ) : null}
 
@@ -217,20 +222,22 @@ export function GenerateChallansDialog({
             <DialogFooter>
               {single ? null : (
                 <Button variant="outline" onClick={reset}>
-                  Generate more
+                  {m.generateMore}
                 </Button>
               )}
-              <Button onClick={close}>Done</Button>
+              <Button onClick={close}>{m.done}</Button>
             </DialogFooter>
           </>
         ) : (
           <form onSubmit={submit} className="grid gap-4" noValidate>
             <DialogHeader>
-              <DialogTitle>{single ? "Generate a challan" : "Generate challans"}</DialogTitle>
+              <DialogTitle>{single ? m.titleSingle : m.titleMany}</DialogTitle>
               <DialogDescription>
                 {single
-                  ? `Bills ${studentName ?? "this student"} alone for one period, against the structure you pick. If they are already billed for it they are skipped, not billed twice.`
-                  : "Bills every active student in the class for one period. Anyone already billed for it is skipped, not billed twice."}
+                  ? fill(m.descriptionSingle, {
+                      name: studentName ?? m.descriptionSingleFallback,
+                    })
+                  : m.descriptionMany}
               </DialogDescription>
             </DialogHeader>
 
@@ -242,19 +249,19 @@ export function GenerateChallansDialog({
                 <span className="font-medium">{resolved.name}</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   {className
-                    ? `The active structure for ${className}, ${academicYear}.`
-                    : `The active structure for this class, ${academicYear}.`}
+                    ? fill(m.resolvedForClass, { className, year: academicYear })
+                    : fill(m.resolvedForThisClass, { year: academicYear })}
                 </span>
               </div>
             ) : (
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Fee structure</span>
+                <span className="font-medium">{m.feeStructure}</span>
                 <NativeSelect
                   value={structureId}
                   onChange={(event) => setStructureId(event.target.value)}
                   required
                 >
-                  <option value="">Choose a structure…</option>
+                  <option value="">{m.chooseStructure}</option>
                   {sameYear.map((structure) => (
                     <option key={structure.id} value={structure.id}>
                       {structure.name}
@@ -263,19 +270,12 @@ export function GenerateChallansDialog({
                 </NativeSelect>
                 {structures.isSuccess && sameYear.length === 0 ? (
                   <span className="text-xs text-muted-foreground">
-                    {classId ? (
-                      <>
-                        {className ?? "This class"} has no active structure for{" "}
-                        {academicYear}. One has to be created for the class and activated
-                        before it can bill — do that under Heads &amp; structures.
-                      </>
-                    ) : (
-                      <>
-                        No active structure for {academicYear}. A structure has to be
-                        activated before it can bill — do that under Heads &amp;
-                        structures.
-                      </>
-                    )}
+                    {classId
+                      ? fill(m.noStructureForClass, {
+                          className: className ?? m.classFallback,
+                          year: academicYear,
+                        })
+                      : fill(m.noStructure, { year: academicYear })}
                   </span>
                 ) : null}
                 {/* An unassigned student cannot be resolved to a class, and the
@@ -285,17 +285,17 @@ export function GenerateChallansDialog({
                     it, because a skip report nobody expected reads as a bug. */}
                 {single && !classId ? (
                   <span className="text-xs text-warning-foreground dark:text-warning">
-                    {studentName ?? "This student"} is not assigned to a class, so no
-                    structure applies to them and this run would skip them. Assign a class
-                    and section first.
+                    {fill(m.unassigned, { name: studentName ?? m.unassignedFallback })}
                   </span>
                 ) : null}
                 {/* Two active structures for one class is a real choice, not an
                     oversight, so it is put to the operator rather than guessed. */}
                 {classId && sameYear.length > 1 ? (
                   <span className="text-xs text-muted-foreground">
-                    {className ?? "This class"} has more than one active structure for{" "}
-                    {academicYear}.
+                    {fill(m.multipleStructures, {
+                      className: className ?? m.classFallback,
+                      year: academicYear,
+                    })}
                   </span>
                 ) : null}
               </label>
@@ -317,23 +317,19 @@ export function GenerateChallansDialog({
                   people can read is far easier to keep consistent than a code they
                   have to remember the shape of. */}
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Description</span>
+              <span className="font-medium">{m.descriptionLabel}</span>
               <Input
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="August 2026 fees, Term 1 fees, Annual book set…"
+                placeholder={m.descriptionPlaceholder}
                 required
               />
-              <span className="text-xs text-muted-foreground">
-                Printed on the challan and shown in the register. Billing the same student
-                the same description twice is treated as a duplicate and skipped, so keep
-                the wording consistent from one month to the next.
-              </span>
+              <span className="text-xs text-muted-foreground">{m.descriptionHelp}</span>
             </label>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Issue date</span>
+                <span className="font-medium">{m.issueDate}</span>
                 <Input
                   type="date"
                   value={issueDate}
@@ -342,7 +338,7 @@ export function GenerateChallansDialog({
                 />
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Due date</span>
+                <span className="font-medium">{m.dueDate}</span>
                 <Input
                   type="date"
                   value={dueDate}
@@ -351,9 +347,7 @@ export function GenerateChallansDialog({
                   required
                 />
                 {dueBeforeIssue ? (
-                  <span className="text-xs text-destructive">
-                    The due date cannot be before the issue date.
-                  </span>
+                  <span className="text-xs text-destructive">{m.dueBeforeIssue}</span>
                 ) : null}
               </label>
             </div>
@@ -374,11 +368,9 @@ export function GenerateChallansDialog({
                   className="mt-0.5 size-4 rounded border-input"
                 />
                 <span>
-                  Include this structure&rsquo;s stationery
+                  {m.includeStationery}
                   <span className="block text-xs text-muted-foreground">
-                    Turn this off for the monthly runs of a structure whose books or
-                    uniform are meant to be billed once a year — otherwise every month
-                    charges them again.
+                    {m.includeStationeryHelp}
                   </span>
                 </span>
               </label>
@@ -402,22 +394,20 @@ export function GenerateChallansDialog({
                   className="mt-0.5 size-4 rounded border-input"
                 />
                 <span>
-                  Carry unpaid dues onto {single ? "this challan" : "these challans"}
+                  {single ? m.carryForwardOne : m.carryForwardMany}
                   <span className="block text-xs text-muted-foreground">
-                    Bills what is still owed as a line on the new challan and cancels
-                    the older ones it absorbs. A challan that has taken part payment is
-                    never absorbed — its receipt points at it.
+                    {m.carryForwardHelp}
                   </span>
                 </span>
               </label>
               {carryForward ? (
                 <label className="ms-6 grid gap-1.5 text-sm">
-                  <span className="text-xs font-medium">Bill those dues under</span>
+                  <span className="text-xs font-medium">{m.billDuesUnder}</span>
                   <NativeSelect
                     value={carryHeadId}
                     onChange={(event) => setCarryHeadId(event.target.value)}
                   >
-                    <option value="">Choose a fee head…</option>
+                    <option value="">{m.chooseHead}</option>
                     {(heads.data?.items ?? [])
                       .filter((head) => head.is_active)
                       .map((head) => (
@@ -439,18 +429,15 @@ export function GenerateChallansDialog({
                   className="mt-0.5 size-4 rounded border-input"
                 />
                 <span>
-                  Issue straight away
-                  <span className="block text-xs text-muted-foreground">
-                    Leave this off to generate drafts you can check before they count as
-                    billed. A draft collects no money.
-                  </span>
+                  {m.issueNow}
+                  <span className="block text-xs text-muted-foreground">{m.issueNowHelp}</span>
                 </span>
               </label>
             ) : null}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close}>
-                Cancel
+                {m.cancel}
               </Button>
               <Button
                 type="submit"
@@ -464,7 +451,7 @@ export function GenerateChallansDialog({
                   (carryForward && !carryHeadId)
                 }
               >
-                {generate.isPending ? "Generating…" : "Generate"}
+                {generate.isPending ? m.generating : m.generate}
               </Button>
             </DialogFooter>
           </form>

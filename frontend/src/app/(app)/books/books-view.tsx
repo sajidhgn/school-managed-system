@@ -4,7 +4,7 @@ import * as React from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Library, Plus, Search } from "lucide-react";
+import { Library, Plus, Search, Sparkles } from "lucide-react";
 
 import { EmptyState, ErrorState } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
@@ -18,6 +18,9 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useBooks } from "@/hooks/use-books";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { fill } from "@/lib/i18n/format";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { BookFormDialog } from "./book-form-dialog";
 import { LibraryDialog } from "./library-dialog";
 
@@ -25,6 +28,7 @@ import { LibraryDialog } from "./library-dialog";
 const PAGE_SIZE = 12;
 
 export function BooksView({ canWrite }: { canWrite: boolean }) {
+  const m = useCatalog(booksMessages).list;
   const router = useRouter();
   const classes = useClassSummary();
   const [classId, setClassId] = React.useState("");
@@ -54,19 +58,27 @@ export function BooksView({ canWrite }: { canWrite: boolean }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Books"
-        description="Textbooks for each class, uploaded chapter by chapter. An AI agent reads every page, puts the pages in order, checks each upload against the chapter list and indexes the text for search. Books are shared between schools: one already uploaded elsewhere is added from the library."
+        title={m.title}
+        description={m.description}
         actions={
-          canWrite ? (
-            <>
-              <Button variant="outline" onClick={() => setBrowsing(true)}>
-                <Library /> Browse library
-              </Button>
-              <Button onClick={() => setOpen(true)}>
-                <Plus /> Add book
-              </Button>
-            </>
-          ) : null
+          <>
+            {/* For every reader, not only writers: asking changes nothing. */}
+            <Button variant="outline" asChild>
+              <Link href="/books/ask">
+                <Sparkles /> {m.askLibrary}
+              </Link>
+            </Button>
+            {canWrite ? (
+              <>
+                <Button variant="outline" onClick={() => setBrowsing(true)}>
+                  <Library /> {m.browseLibrary}
+                </Button>
+                <Button onClick={() => setOpen(true)}>
+                  <Plus /> {m.addBook}
+                </Button>
+              </>
+            ) : null}
+          </>
         }
       />
 
@@ -79,15 +91,15 @@ export function BooksView({ canWrite }: { canWrite: boolean }) {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by title or publisher…"
-            aria-label="Search books by title or publisher"
+            placeholder={m.searchPlaceholder}
+            aria-label={m.searchAria}
             maxLength={200}
             className="ps-9"
           />
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="books-class" className="text-sm text-muted-foreground">
-            Class
+            {m.classLabel}
           </label>
           <NativeSelect
             id="books-class"
@@ -98,7 +110,7 @@ export function BooksView({ canWrite }: { canWrite: boolean }) {
               setPage(1);
             }}
           >
-            <option value="">All classes</option>
+            <option value="">{m.allClasses}</option>
             {classes.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -122,24 +134,24 @@ export function BooksView({ canWrite }: { canWrite: boolean }) {
             icon={Library}
             title={
               debouncedSearch
-                ? "No books match"
+                ? m.noMatch
                 : classId
-                  ? "No books for this class yet"
-                  : "No books yet"
+                  ? m.noBooksForClass
+                  : m.noBooks
             }
             description={
               debouncedSearch
-                ? "Try another title or publisher, or clear the search."
-                : "Add a book from the library, or upload a new one: its chapter list first, then each chapter as a PDF or as photos of its pages."
+                ? m.noMatchHint
+                : m.emptyHint
             }
             action={
               canWrite && !debouncedSearch ? (
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button variant="outline" onClick={() => setBrowsing(true)}>
-                    <Library /> Browse library
+                    <Library /> {m.browseLibrary}
                   </Button>
                   <Button variant="outline" onClick={() => setOpen(true)}>
-                    <Plus /> Add book
+                    <Plus /> {m.addBook}
                   </Button>
                 </div>
               ) : null
@@ -173,15 +185,18 @@ export function BooksView({ canWrite }: { canWrite: boolean }) {
                       </p>
                       <div className="flex items-center justify-between gap-2">
                         <Badge variant={done ? "success" : "neutral"}>
-                          {book.ready_chapter_count} / {book.chapter_count} chapters ready
+                          {fill(m.chaptersReady, {
+                            ready: book.ready_chapter_count,
+                            total: book.chapter_count,
+                          })}
                         </Badge>
                         {book.from_library ? (
                           <span className="truncate text-xs text-muted-foreground">
-                            from the library
+                            {m.fromLibrary}
                           </span>
                         ) : book.created_by_name ? (
                           <span className="truncate text-xs text-muted-foreground">
-                            by {book.created_by_name}
+                            {fill(m.byName, { name: book.created_by_name })}
                           </span>
                         ) : null}
                       </div>

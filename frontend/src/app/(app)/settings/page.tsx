@@ -11,8 +11,11 @@ import {
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import { buildCurrencyCatalog } from "@/lib/currency-timezones";
+import { getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Settings" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.settings };
+}
 
 export default async function SettingsPage() {
   const user = await requireUser();

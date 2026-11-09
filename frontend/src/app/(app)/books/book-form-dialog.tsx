@@ -28,6 +28,9 @@ import {
 import { useClassSummary } from "@/hooks/use-classes";
 import { useCurriculum } from "@/hooks/use-subjects";
 import type { BookDetail, BookRead, BookScan } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { BookScanPanel } from "./book-scan-panel";
 
@@ -39,9 +42,9 @@ interface ChapterRow {
 
 type Mode = "ai" | "manual";
 
-const MODES: { value: Mode; label: string; icon: typeof Sparkles }[] = [
-  { value: "ai", label: "Read with AI", icon: Sparkles },
-  { value: "manual", label: "Manual", icon: PenLine },
+const MODES: { value: Mode; icon: typeof Sparkles }[] = [
+  { value: "ai", icon: Sparkles },
+  { value: "manual", icon: PenLine },
 ];
 
 /**
@@ -74,6 +77,7 @@ export function BookFormDialog({
   /** Shown on "Add a book": look in the shared library before uploading. */
   onBrowseLibrary?: () => void;
 }) {
+  const { form: m, modes } = useCatalog(booksMessages);
   const router = useRouter();
   const classes = useClassSummary();
   const create = useCreateBook();
@@ -182,17 +186,17 @@ export function BookFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{book ? "Edit book" : "Add a book"}</DialogTitle>
+          <DialogTitle>{book ? m.editTitle : m.addTitle}</DialogTitle>
           <DialogDescription>
             {detailsLocked
-              ? "This book is from the shared library. Choose the class and subject your school files it under; only the school that uploaded it can change its title, publisher or version."
+              ? m.descLibrary
               : book
-                ? "Change the book's details. Its chapters and uploads are not affected."
+                ? m.descEdit
                 : choosingPages
-                  ? "Upload the book's cover and contents pages. The AI fills in its details and chapter list for you to check."
+                  ? m.descChoosePages
                   : mode === "ai"
-                    ? "Check what the AI read against the book and correct anything it got wrong. You upload each chapter's pages on the next screen."
-                    : "Enter the book's details and its chapter list as printed in the contents page. You upload each chapter's pages on the next screen."}
+                    ? m.descCheckAi
+                    : m.descManual}
           </DialogDescription>
         </DialogHeader>
 
@@ -200,13 +204,13 @@ export function BookFormDialog({
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Library className="size-4 shrink-0" aria-hidden />
             <span>
-              Another school may have uploaded it already.{" "}
+              {m.alreadyUploaded}{" "}
               <button
                 type="button"
                 className="font-medium text-primary underline-offset-4 hover:underline"
                 onClick={onBrowseLibrary}
               >
-                Search the library
+                {m.searchLibrary}
               </button>
             </span>
           </p>
@@ -215,10 +219,10 @@ export function BookFormDialog({
         {!book && (
           <div
             role="radiogroup"
-            aria-label="How to add the book"
+            aria-label={m.howToAdd}
             className="inline-flex w-full rounded-[calc(var(--control-radius)+3px)] border border-input bg-card p-0.5 shadow-sm"
           >
-            {MODES.map(({ value, label, icon: Icon }) => {
+            {MODES.map(({ value, icon: Icon }) => {
               const active = mode === value;
               return (
                 <button
@@ -237,7 +241,7 @@ export function BookFormDialog({
                 >
                   {/* The icons go on the narrowest phones, where both labels only just fit. */}
                   <Icon className="hidden size-4 shrink-0 min-[400px]:block" />
-                  <span className="truncate">{label}</span>
+                  <span className="truncate">{modes[value]}</span>
                 </button>
               );
             })}
@@ -248,10 +252,10 @@ export function BookFormDialog({
           <div className="flex items-start gap-2 rounded-lg bg-muted px-3 py-3 text-sm">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
             <div className="min-w-0 space-y-2">
-              <p className="font-medium">Reading with AI isn&apos;t available right now.</p>
+              <p className="font-medium">{m.aiUnavailable}</p>
               <p className="text-muted-foreground">{aiProblem}</p>
               <Button type="button" variant="outline" size="sm" onClick={() => setMode("manual")}>
-                <PenLine /> Enter it manually
+                <PenLine /> {m.enterManually}
               </Button>
             </div>
           </div>
@@ -264,7 +268,10 @@ export function BookFormDialog({
             />
             {scanStatus.data?.ready && (
               <p className="text-xs text-muted-foreground">
-                Read by {scanStatus.data.model} on {scanStatus.data.provider}.
+                {fill(m.readBy, {
+                  model: scanStatus.data.model,
+                  provider: scanStatus.data.provider,
+                })}
               </p>
             )}
           </div>
@@ -333,7 +340,7 @@ export function BookFormDialog({
                       router.push(`/books/${duplicate.bookId}` as Route);
                     }}
                   >
-                    Open it
+                    {m.openIt}
                   </Button>
                 ) : (
                   <Button
@@ -358,7 +365,7 @@ export function BookFormDialog({
                       )
                     }
                   >
-                    Add it to this class
+                    {m.addToClass}
                   </Button>
                 )}
               </div>
@@ -366,7 +373,7 @@ export function BookFormDialog({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="book-title">Title</Label>
+                <Label htmlFor="book-title">{m.title}</Label>
                 <Input
                   id="book-title"
                   required
@@ -378,7 +385,7 @@ export function BookFormDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="book-class">Class</Label>
+                <Label htmlFor="book-class">{m.class}</Label>
                 <NativeSelect
                   id="book-class"
                   required
@@ -389,7 +396,7 @@ export function BookFormDialog({
                   }}
                 >
                   <option value="" disabled>
-                    Choose a class
+                    {m.chooseClass}
                   </option>
                   {classes.data?.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -400,7 +407,7 @@ export function BookFormDialog({
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="book-subject">
-                  Subject <span className="font-normal text-muted-foreground">(optional)</span>
+                  {m.subject} <span className="font-normal text-muted-foreground">{m.optional}</span>
                 </Label>
                 <NativeSelect
                   id="book-subject"
@@ -408,7 +415,7 @@ export function BookFormDialog({
                   disabled={!classId}
                   onChange={(event) => setSubjectId(event.target.value)}
                 >
-                  <option value="">No subject</option>
+                  <option value="">{m.noSubject}</option>
                   {curriculum.data?.map((s) => (
                     <option key={s.subject_id} value={s.subject_id}>
                       {s.subject_name}
@@ -417,7 +424,7 @@ export function BookFormDialog({
                 </NativeSelect>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="book-publisher">Publisher</Label>
+                <Label htmlFor="book-publisher">{m.publisher}</Label>
                 <Input
                   id="book-publisher"
                   required
@@ -429,14 +436,14 @@ export function BookFormDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="book-version">Version</Label>
+                <Label htmlFor="book-version">{m.version}</Label>
                 <Input
                   id="book-version"
                   required
                   disabled={detailsLocked}
                   maxLength={60}
                   value={version}
-                  placeholder="3rd Edition, 2024"
+                  placeholder={m.versionPlaceholder}
                   onChange={(event) => setVersion(event.target.value)}
                 />
               </div>
@@ -445,16 +452,16 @@ export function BookFormDialog({
             {!book && (
               <fieldset className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <legend className="text-sm font-medium">Chapter list</legend>
+                  <legend className="text-sm font-medium">{m.chapterList}</legend>
                   <Button type="button" variant="ghost" size="sm" onClick={addRow}>
-                    <Plus /> Add chapter
+                    <Plus /> {m.addChapter}
                   </Button>
                 </div>
-                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                <div className="max-h-64 space-y-2 overflow-y-auto pe-1">
                   {rows.map((row, index) => (
                     <div key={row.key} className="flex items-center gap-2">
                       <Input
-                        aria-label={`Chapter ${index + 1} number`}
+                        aria-label={fill(m.chapterNumberAria, { n: index + 1 })}
                         type="number"
                         min={1}
                         max={999}
@@ -470,10 +477,10 @@ export function BookFormDialog({
                       />
                       <Input
                         id={`book-chapter-title-${row.key}`}
-                        aria-label={`Chapter ${index + 1} title`}
+                        aria-label={fill(m.chapterTitleAria, { n: index + 1 })}
                         maxLength={200}
                         value={row.title}
-                        placeholder="Chapter title"
+                        placeholder={m.chapterTitlePlaceholder}
                         onChange={(event) =>
                           setRows((current) =>
                             current.map((r) =>
@@ -492,7 +499,7 @@ export function BookFormDialog({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        aria-label="Remove chapter"
+                        aria-label={m.removeChapter}
                         onClick={() =>
                           setRows((current) => current.filter((r) => r.key !== row.key))
                         }
@@ -503,10 +510,10 @@ export function BookFormDialog({
                   ))}
                 </div>
                 {duplicateNumber ? (
-                  <p className="text-sm text-destructive">Two chapters have the same number.</p>
+                  <p className="text-sm text-destructive">{m.duplicateNumber}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Rows without a title are skipped. Press Enter to add the next chapter.
+                    {m.rowsHint}
                   </p>
                 )}
               </fieldset>
@@ -516,7 +523,7 @@ export function BookFormDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
+            {m.cancel}
           </Button>
           {choosingPages ? (
             <Button
@@ -526,11 +533,11 @@ export function BookFormDialog({
               onClick={readPages}
             >
               {!scan.isPending && <Sparkles />}
-              {scan.isPending ? "Reading…" : "Read pages"}
+              {scan.isPending ? m.reading : m.readPages}
             </Button>
           ) : (
             <Button type="submit" form="book-form" loading={pending} disabled={duplicateNumber}>
-              {book ? "Save" : "Add book"}
+              {book ? m.save : m.addBook}
             </Button>
           )}
         </DialogFooter>
@@ -554,21 +561,24 @@ function ScanSummary({
   subjectId: string;
   onRestart: () => void;
 }) {
+  const m = useCatalog(booksMessages).scanSummary;
   const notes = [...(scan.notes ?? [])];
   if (!classId && scan.class_printed) {
-    notes.push(
-      `The pages say “${scan.class_printed}”, which isn't one of your classes — choose the class.`,
-    );
+    notes.push(fill(m.classNotFound, { printed: scan.class_printed }));
   }
   if (classId && !subjectId && scan.subject_printed && !scan.subject_id) {
-    notes.push(
-      `The pages say “${scan.subject_printed}”, which isn't a subject you can file under for this class — choose one or leave it blank.`,
-    );
+    notes.push(fill(m.subjectNotFound, { printed: scan.subject_printed }));
   }
   if (!scan.chapters.length) {
-    notes.push("No chapter list was found — add the chapters yourself.");
+    notes.push(m.noChapters);
   }
-  const pages = `${scan.pages_read} page${scan.pages_read === 1 ? "" : "s"}`;
+  const pages = fill(scan.pages_read === 1 ? m.pages.one : m.pages.other, {
+    count: scan.pages_read,
+  });
+  const chapterCount = scan.chapters.length;
+  const chapters = fill(chapterCount === 1 ? m.chapters.one : m.chapters.other, {
+    count: chapterCount,
+  });
 
   return (
     <div className="flex flex-col gap-1 rounded-lg bg-primary/5 px-3 py-2 text-sm sm:flex-row sm:items-start sm:gap-2">
@@ -576,14 +586,12 @@ function ScanSummary({
         <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1 space-y-1">
           <p>
-            Filled in by AI from {pages}
-            {scan.chapters.length
-              ? `, with ${scan.chapters.length} chapter${scan.chapters.length === 1 ? "" : "s"}`
-              : ""}
-            . Check every field before adding the book.
+            {chapterCount
+              ? fill(m.filledWithChapters, { pages, chapters })
+              : fill(m.filled, { pages })}
           </p>
           {notes.length > 0 && (
-            <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+            <ul className="list-disc space-y-0.5 ps-4 text-xs text-muted-foreground">
               {notes.map((note) => (
                 <li key={note}>{note}</li>
               ))}
@@ -598,7 +606,7 @@ function ScanSummary({
         className="self-end sm:self-start"
         onClick={onRestart}
       >
-        <RotateCcw /> Other pages
+        <RotateCcw /> {m.otherPages}
       </Button>
     </div>
   );

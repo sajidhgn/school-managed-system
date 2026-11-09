@@ -87,9 +87,7 @@ def downgrade() -> None:
     op.drop_constraint(
         op.f("ck_whatsapp_messages_destination_present"), "whatsapp_messages", type_="check"
     )
-    op.alter_column(
-        "whatsapp_messages", "invite_code", existing_type=sa.String(64), nullable=False
-    )
+    op.alter_column("whatsapp_messages", "invite_code", existing_type=sa.String(64), nullable=False)
     op.drop_column("whatsapp_messages", "dedupe_key")
     op.drop_column("whatsapp_messages", "recipient_phone")
     op.drop_column("whatsapp_settings", "absence_alerts_enabled")

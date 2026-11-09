@@ -5,6 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/use-toast";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import {
   attendanceApi,
   type AnalyticsParams,
@@ -46,6 +49,7 @@ export function useAttendanceSession(sessionId: string | null) {
  * branch for the two cases.
  */
 export function useOpenRegister() {
+  const m = useCatalog(attendanceMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: AttendanceSessionOpen) => attendanceApi.open(body),
@@ -53,7 +57,7 @@ export function useOpenRegister() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
       queryClient.setQueryData(queryKeys.attendance.session(session.id), session);
     },
-    onError: (error) => toast.error("Couldn't open the register", errorMessage(error)),
+    onError: (error) => toast.error(m.openFailed, errorMessage(error)),
   });
 }
 
@@ -65,6 +69,7 @@ export function useOpenRegister() {
  * the caller passes it only when amending so the draft path stays a plain edit.
  */
 export function useMarkAttendance() {
+  const m = useCatalog(attendanceMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -80,11 +85,12 @@ export function useMarkAttendance() {
       queryClient.setQueryData(queryKeys.attendance.session(session.id), session);
       void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
     },
-    onError: (error) => toast.error("Couldn't save attendance", errorMessage(error)),
+    onError: (error) => toast.error(m.saveFailed, errorMessage(error)),
   });
 }
 
 export function useSubmitRegister() {
+  const m = useCatalog(attendanceMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (sessionId: string) => attendanceApi.submit(sessionId),
@@ -92,16 +98,20 @@ export function useSubmitRegister() {
       queryClient.setQueryData(queryKeys.attendance.session(session.id), session);
       void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
       toast.success(
-        "Register submitted",
-        `${session.present_count} present, ${session.absent_count} absent.`,
+        m.submitted,
+        fill(m.submittedDetail, {
+          present: session.present_count ?? 0,
+          absent: session.absent_count ?? 0,
+        }),
       );
     },
-    onError: (error) => toast.error("Couldn't submit the register", errorMessage(error)),
+    onError: (error) => toast.error(m.submitFailed, errorMessage(error)),
   });
 }
 
 /** `attendance:amend` only. The reason is required and lands in the audit trail. */
 export function useReopenRegister() {
+  const m = useCatalog(attendanceMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ sessionId, reason }: { sessionId: string; reason: string }) =>
@@ -109,9 +119,9 @@ export function useReopenRegister() {
     onSuccess: (session) => {
       queryClient.setQueryData(queryKeys.attendance.session(session.id), session);
       void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
-      toast.success("Register reopened", "Your correction will be recorded in the audit log.");
+      toast.success(m.reopened, m.reopenedDetail);
     },
-    onError: (error) => toast.error("Couldn't reopen the register", errorMessage(error)),
+    onError: (error) => toast.error(m.reopenFailed, errorMessage(error)),
   });
 }
 

@@ -5,6 +5,8 @@ import * as React from "react";
 import { ErrorState, TableCardSkeleton } from "@/components/data-states";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSaveWhatsAppSettings, useWhatsAppSettings } from "@/hooks/use-whatsapp";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 import { WhatsAppText } from "./whatsapp-text";
 
@@ -18,8 +20,12 @@ import { WhatsAppText } from "./whatsapp-text";
  *
  * Off by default: a school turns this on knowingly, because a burst of automated
  * messages from its number is what WhatsApp flags.
+ *
+ * The sample under "What a parent receives" is the server's English wording
+ * (`render_absence_alert` in the backend), so it is content and is not translated.
  */
 export function AbsenceAlertsPanel({ canManage }: { canManage: boolean }) {
+  const m = useCatalog(whatsappMessages).absence;
   const settings = useWhatsAppSettings();
   const save = useSaveWhatsAppSettings();
 
@@ -33,7 +39,7 @@ export function AbsenceAlertsPanel({ canManage }: { canManage: boolean }) {
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Absence alerts</CardTitle>
+          <CardTitle>{m.title}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <label className="flex items-start gap-2">
@@ -53,26 +59,23 @@ export function AbsenceAlertsPanel({ canManage }: { canManage: boolean }) {
               }
             />
             <span>
-              <span className="font-medium">Message parents when their child is absent</span>
-              <span className="mt-1 block text-muted-foreground">
-                Sent from this campus&apos;s WhatsApp when today&apos;s whole-day register is
-                submitted, to each parent on their own, never in the class group.
-              </span>
+              <span className="font-medium">{m.toggle}</span>
+              <span className="mt-1 block text-muted-foreground">{m.toggleHint}</span>
             </span>
           </label>
           <ul className="list-disc space-y-1 ps-5 text-muted-foreground">
-            <li>Only parents allowed to see that child&apos;s records are messaged, not pickup-only contacts.</li>
-            <li>A parent turned off for a child on the student&apos;s page is not messaged.</li>
-            <li>Late, half day and leave send nothing. So do lesson registers and past days.</li>
-            <li>Reopening and resubmitting a register never sends a second message.</li>
-            <li>A number without WhatsApp shows as failed in the Outbox.</li>
+            <li>{m.ruleRecords}</li>
+            <li>{m.ruleOptOut}</li>
+            <li>{m.ruleStatuses}</li>
+            <li>{m.ruleOnce}</li>
+            <li>{m.ruleFailed}</li>
           </ul>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>What a parent receives</CardTitle>
+          <CardTitle>{m.sampleTitle}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <WhatsAppText
@@ -81,9 +84,7 @@ export function AbsenceAlertsPanel({ canManage }: { canManage: boolean }) {
               "(Tue 28 Oct 2026).\nIf you were not expecting this, please contact the school office."
             }
           />
-          <p className="text-xs text-muted-foreground">
-            Parents who use the portal in Urdu receive it in Urdu.
-          </p>
+          <p className="text-xs text-muted-foreground">{m.sampleNote}</p>
         </CardContent>
       </Card>
     </div>

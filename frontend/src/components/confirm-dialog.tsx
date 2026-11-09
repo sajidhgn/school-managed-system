@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { sharedMessages } from "@/lib/i18n/modules/shared";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,7 +26,7 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Confirm",
+  confirmLabel,
   variant = "destructive",
   loading,
   onConfirm,
@@ -37,6 +40,7 @@ export function ConfirmDialog({
   loading?: boolean;
   onConfirm: () => void;
 }) {
+  const m = useCatalog(sharedMessages);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -46,10 +50,10 @@ export function ConfirmDialog({
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button variant={variant} onClick={onConfirm} loading={loading}>
-            {confirmLabel}
+            {confirmLabel ?? m.confirm}
           </Button>
         </DialogFooter>
       </DialogContent>

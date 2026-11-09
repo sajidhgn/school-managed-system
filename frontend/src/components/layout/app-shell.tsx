@@ -1,5 +1,7 @@
 "use client";
 
+import { sharedMessages } from "@/lib/i18n/modules/shared";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { Button as HeroButton, Drawer, useOverlayState } from "@heroui/react";
 import { Menu } from "lucide-react";
 
@@ -47,6 +49,7 @@ export function AppShell({
 }) {
   const user = useRequiredSession();
   const mobileNav = useOverlayState();
+  const shared = useCatalog(sharedMessages);
   const brandName = activeSchoolName ?? user.organization_name ?? null;
 
   return (
@@ -70,7 +73,7 @@ export function AppShell({
               isIconOnly
               variant="ghost"
               size="sm"
-              aria-label="Open navigation"
+              aria-label={shared.openNavigation}
               className="lg:hidden"
             >
               <Menu className="size-4" aria-hidden />
@@ -78,11 +81,11 @@ export function AppShell({
             <Drawer.Backdrop variant="blur">
               <Drawer.Content placement="left" className="lg:hidden">
                 <Drawer.Dialog
-                  aria-label="Navigation"
+                  aria-label={shared.navigation}
                   className="panel-night w-72 max-w-[85vw] bg-sidebar p-0 text-foreground sm:w-72"
                 >
                   <Brand logoUrl={logoUrl} name={brandName} />
-                  <Drawer.CloseTrigger aria-label="Close navigation" />
+                  <Drawer.CloseTrigger aria-label={shared.closeNavigation} />
                   <SidebarNav activeSchoolName={activeSchoolName} onNavigate={mobileNav.close} />
                 </Drawer.Dialog>
               </Drawer.Content>

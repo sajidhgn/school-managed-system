@@ -8,6 +8,7 @@ import { ArrowLeft, Check, ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 import { ParentPortalCard } from "./parent-portal-card";
 import { StudentFeesPanel } from "./student-fees-panel";
+import { fillNodes } from "@/lib/i18n/format";
 import { StudentFormDialog } from "../student-form-dialog";
 import { STUDENTS_LIST_QUERY_KEY } from "../students-view";
 import { StudentAttendancePanel } from "@/components/attendance/student-attendance-panel";
@@ -27,13 +28,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDeleteStudent, useStudent, useUpdateStudent } from "@/hooks/use-students";
-import {
-  GENDER_LABELS,
-  STUDENT_STATUS_LABELS,
-  label as labelFor,
-  type StudentRead,
-  type StudentStatus,
-} from "@/lib/api/types";
+import { label as labelFor, type StudentRead, type StudentStatus } from "@/lib/api/types";
+import { fill, ltr } from "@/lib/i18n/format";
+import { studentsMessages } from "@/lib/i18n/modules/students";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 /**
@@ -114,6 +113,8 @@ export function StudentDetailView({
   canReadGuardians,
   canGrantPortal,
   canTogglePortal,
+  canPortalCredentials,
+  canDeleteGuardians,
 }: {
   studentId: string;
   canManage: boolean;
@@ -126,7 +127,13 @@ export function StudentDetailView({
   canReadGuardians: boolean;
   canGrantPortal: boolean;
   canTogglePortal: boolean;
+  /** `guardian:portal`. */
+  canPortalCredentials: boolean;
+  /** `guardian:delete`. */
+  canDeleteGuardians: boolean;
 }) {
+  const { detail: m, form: f, remove: rm } = useCatalog(studentsMessages);
+  const L = useLabels();
   const router = useRouter();
   const query = useStudent(studentId);
   const listHref = useStudentsListHref();
@@ -150,7 +157,7 @@ export function StudentDetailView({
     .find(({ section }) => section.id === student.section_id);
   const placementLabel = placement
     ? `${placement.cls.name} — ${placement.section.name}`
-    : "Unassigned";
+    : m.unassigned;
 
   async function onConfirmDelete() {
     await deleteStudent.mutateAsync(studentId);
@@ -164,13 +171,16 @@ export function StudentDetailView({
         href={listHref}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" />
-        All students
+        <ArrowLeft className="size-4 rtl:rotate-180" />
+        {m.allStudents}
       </Link>
 
       <PageHeader
         title={student.full_name}
-        description={`Admission ${student.admission_number} · ${placementLabel}`}
+        description={fill(m.description, {
+          number: ltr(student.admission_number),
+          placement: placementLabel,
+        })}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {canManage ? (
@@ -182,11 +192,11 @@ export function StudentDetailView({
               <>
                 <Button variant="outline" onClick={() => setEditOpen(true)}>
                   <Pencil />
-                  Edit
+                  {m.edit}
                 </Button>
                 <Button variant="outline" onClick={() => setConfirmDelete(true)}>
                   <Trash2 />
-                  Remove
+                  {m.remove}
                 </Button>
               </>
             ) : null}
@@ -197,25 +207,25 @@ export function StudentDetailView({
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Student details</CardTitle>
+            <CardTitle>{m.studentDetails}</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-5 sm:grid-cols-2">
-              <Detail label="First name" value={student.first_name} />
-              <Detail label="Last name" value={student.last_name} />
-              <Detail label="Date of birth" value={formatDate(student.date_of_birth)} />
+              <Detail label={f.firstName} value={student.first_name} />
+              <Detail label={f.lastName} value={student.last_name} />
+              <Detail label={f.dateOfBirth} value={formatDate(student.date_of_birth)} />
               <Detail
-                label="Gender"
-                value={student.gender ? GENDER_LABELS[student.gender] : null}
+                label={f.gender}
+                value={student.gender ? labelFor(L.gender, student.gender) : null}
               />
               <Detail
-                label="Status"
+                label={f.status}
                 value={<StudentStatusBadge status={student.status} />}
               />
-              <Detail label="Enrolled on" value={formatDate(student.enrolled_on)} />
-              <Detail label="Class & section" value={placementLabel} />
-              <Detail label="Admission number" value={student.admission_number} />
-              <Detail label="Address" value={student.address} />
+              <Detail label={f.enrolledOn} value={formatDate(student.enrolled_on)} />
+              <Detail label={m.classSection} value={placementLabel} />
+              <Detail label={f.admissionNumber} value={student.admission_number} />
+              <Detail label={f.address} value={student.address} />
             </dl>
           </CardContent>
         </Card>
@@ -223,13 +233,13 @@ export function StudentDetailView({
         <div className="space-y-5">
           <Card>
             <CardHeader>
-              <CardTitle>Guardian</CardTitle>
+              <CardTitle>{m.guardian}</CardTitle>
             </CardHeader>
             <CardContent>
               <dl className="space-y-4">
-                <Detail label="Name" value={student.guardian_name} />
+                <Detail label={m.name} value={student.guardian_name} />
                 <Detail
-                  label="Phone"
+                  label={m.phone}
                   value={
                     student.guardian_phone ? (
                       <a href={`tel:${student.guardian_phone}`} className="hover:underline">
@@ -239,7 +249,7 @@ export function StudentDetailView({
                   }
                 />
                 <Detail
-                  label="Email"
+                  label={m.email}
                   value={
                     student.guardian_email ? (
                       <a
@@ -260,18 +270,20 @@ export function StudentDetailView({
               student={student}
               canGrant={canGrantPortal}
               canToggle={canTogglePortal}
+              canPortal={canPortalCredentials}
+              canDelete={canDeleteGuardians}
             />
           ) : null}
 
           <Card>
             <CardHeader>
-              <CardTitle>Emergency contact</CardTitle>
+              <CardTitle>{m.emergencyContact}</CardTitle>
             </CardHeader>
             <CardContent>
               <dl className="space-y-4">
-                <Detail label="Name" value={student.emergency_contact_name} />
+                <Detail label={m.name} value={student.emergency_contact_name} />
                 <Detail
-                  label="Phone"
+                  label={m.phone}
                   value={
                     student.emergency_contact_phone ? (
                       <a
@@ -289,12 +301,12 @@ export function StudentDetailView({
 
           <Card>
             <CardHeader>
-              <CardTitle>Record</CardTitle>
+              <CardTitle>{m.record}</CardTitle>
             </CardHeader>
             <CardContent>
               <dl className="space-y-4">
-                <Detail label="Created" value={formatDateTime(student.created_at)} />
-                <Detail label="Last updated" value={formatDateTime(student.updated_at)} />
+                <Detail label={m.created} value={formatDateTime(student.created_at)} />
+                <Detail label={m.lastUpdated} value={formatDateTime(student.updated_at)} />
               </dl>
             </CardContent>
           </Card>
@@ -309,7 +321,7 @@ export function StudentDetailView({
       {canReadAttendance ? (
         <Card className="mt-5">
           <CardHeader>
-            <CardTitle>Attendance</CardTitle>
+            <CardTitle>{m.attendance}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="max-w-xl">
@@ -342,14 +354,11 @@ export function StudentDetailView({
           <ConfirmDialog
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
-            title="Remove student?"
-            description={
-              <>
-                <span className="font-medium text-foreground">{student.full_name}</span> will be
-                removed from the directory. This cannot be undone.
-              </>
-            }
-            confirmLabel="Remove student"
+            title={rm.title}
+            description={fillNodes(rm.description, {
+              name: <span className="font-medium text-foreground">{student.full_name}</span>,
+            })}
+            confirmLabel={rm.confirm}
             loading={deleteStudent.isPending}
             onConfirm={onConfirmDelete}
           />
@@ -362,7 +371,7 @@ export function StudentDetailView({
 /**
  * Change the enrollment status without opening the whole form.
  *
- * The values come from `STUDENT_STATUS_LABELS`, which is the same open-ended map the
+ * The values come from the `studentStatus` labels, which is the same open-ended map the
  * badge renders from — a status added on the backend appears here without a frontend
  * change, rather than silently missing from the menu that is supposed to set it.
  *
@@ -371,6 +380,8 @@ export function StudentDetailView({
  * "transferred" changes a headcount somebody else is reading.
  */
 function StatusMenu({ student }: { student: StudentRead }) {
+  const m = useCatalog(studentsMessages).detail;
+  const L = useLabels();
   const update = useUpdateStudent();
 
   return (
@@ -379,13 +390,13 @@ function StatusMenu({ student }: { student: StudentRead }) {
         <Button variant="outline" size="sm" disabled={update.isPending}>
           <StudentStatusBadge status={student.status} />
           <ChevronDown className="size-3.5" aria-hidden />
-          <span className="sr-only">Change enrollment status</span>
+          <span className="sr-only">{m.changeStatus}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Enrollment status</DropdownMenuLabel>
+        <DropdownMenuLabel>{m.enrollmentStatus}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {Object.keys(STUDENT_STATUS_LABELS).map((value) => (
+        {Object.keys(L.studentStatus).map((value) => (
           <DropdownMenuItem
             key={value}
             disabled={value === student.status || update.isPending}
@@ -398,7 +409,7 @@ function StatusMenu({ student }: { student: StudentRead }) {
             ) : (
               <span className="size-4" aria-hidden />
             )}
-            {labelFor(STUDENT_STATUS_LABELS, value)}
+            {labelFor(L.studentStatus, value)}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

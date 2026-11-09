@@ -262,7 +262,7 @@ async def world(tenant: Tenant, mailbox: list[EmailMessage], db_settings: Settin
     app = tenant.client._transport.app  # type: ignore[attr-defined]
     transport = httpx.MockTransport(waha.handler)
     app.dependency_overrides[get_waha_client] = lambda: WahaClient(db_settings, transport=transport)
-    app.dependency_overrides[get_diary_agent_factory] = lambda: (lambda: agent)
+    app.dependency_overrides[get_diary_agent_factory] = lambda: lambda: agent
 
     w = World(tenant=tenant, campus=campus, waha=waha, agent=agent)
     w.teacher_id = await add_member(

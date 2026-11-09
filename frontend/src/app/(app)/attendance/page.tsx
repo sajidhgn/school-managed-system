@@ -3,9 +3,15 @@ import { Suspense } from "react";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { getCatalog } from "@/lib/i18n/server";
 import { AttendanceView } from "./attendance-view";
 
-export const metadata: Metadata = { title: "Attendance" };
+export async function generateMetadata(): Promise<Metadata> {
+  const m = await getCatalog(attendanceMessages);
+  return { title: m.meta.board };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

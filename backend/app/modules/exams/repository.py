@@ -31,7 +31,7 @@ from app.modules.academics.teaching_scope import (
     taught_section_ids,
     teaches_subject,
 )
-from app.modules.exams.models import Exam, ExamMark, ExamPaper
+from app.modules.exams.models import Exam, ExamGradingScale, ExamMark, ExamPaper
 from app.modules.students.models import Student, StudentStatus
 
 
@@ -358,3 +358,13 @@ class ExamMarkRepository(BaseRepository[ExamMark]):
         )
         await self.session.execute(stmt)
         return len(entries)
+
+
+class ExamGradingScaleRepository(BaseRepository[ExamGradingScale]):
+    """The one grading scale per campus (school-scoped by the base select)."""
+
+    model = ExamGradingScale
+
+    async def get_current(self) -> ExamGradingScale | None:
+        stmt = self._base_select().execution_options(populate_existing=True)
+        return (await self.session.execute(stmt)).scalars().first()

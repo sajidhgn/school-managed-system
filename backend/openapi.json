@@ -8627,6 +8627,106 @@
         }
       }
     },
+    "/api/v1/exams/grading-scale": {
+      "get": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "This campus's grading scale (the board scale until it saves its own)",
+        "description": "Never 404: a campus that has not saved a scale is on the board scale, and\n`is_default` says so.",
+        "operationId": "get_grading_scale_api_v1_exams_grading_scale_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GradingScaleRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Create or replace this campus's grading scale",
+        "description": "The whole scale at once. The lowest band must start at 0%. Every exam's\nresult sheet is graded with it from the next read; marks never change.",
+        "operationId": "set_grading_scale_api_v1_exams_grading_scale_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GradingScaleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GradingScaleRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Exams"
+        ],
+        "summary": "Reset this campus to the board grading scale",
+        "operationId": "delete_grading_scale_api_v1_exams_grading_scale_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
     "/api/v1/exams": {
       "get": {
         "tags": [
@@ -19146,6 +19246,13 @@
             },
             "type": "array",
             "title": "Rows"
+          },
+          "grading_scale": {
+            "items": {
+              "$ref": "#/components/schemas/GradeBand-Output"
+            },
+            "type": "array",
+            "title": "Grading Scale"
           }
         },
         "type": "object",
@@ -19154,7 +19261,8 @@
           "class_id",
           "class_name",
           "papers",
-          "rows"
+          "rows",
+          "grading_scale"
         ],
         "title": "ExamClassResults",
         "description": "The class result sheet: papers as columns, students as rows."
@@ -19558,6 +19666,28 @@
           "rank": {
             "type": "integer",
             "title": "Rank"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remark"
           }
         },
         "type": "object",
@@ -21705,6 +21835,165 @@
           "count"
         ],
         "title": "GenderSlice"
+      },
+      "GradeBand-Input": {
+        "properties": {
+          "min_percent": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Min Percent",
+            "examples": [
+              "80"
+            ]
+          },
+          "grade": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 1,
+            "title": "Grade",
+            "examples": [
+              "A1"
+            ]
+          },
+          "remark": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remark",
+            "examples": [
+              "Exceptional"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_percent",
+          "grade"
+        ],
+        "title": "GradeBand",
+        "description": "One band: a percentage at or above `min_percent` earns `grade`."
+      },
+      "GradeBand-Output": {
+        "properties": {
+          "min_percent": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
+            "title": "Min Percent",
+            "examples": [
+              "80"
+            ]
+          },
+          "grade": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 1,
+            "title": "Grade",
+            "examples": [
+              "A1"
+            ]
+          },
+          "remark": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remark",
+            "examples": [
+              "Exceptional"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_percent",
+          "grade"
+        ],
+        "title": "GradeBand",
+        "description": "One band: a percentage at or above `min_percent` earns `grade`."
+      },
+      "GradingScaleInput": {
+        "properties": {
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/GradeBand-Input"
+            },
+            "type": "array",
+            "maxItems": 15,
+            "minItems": 2,
+            "title": "Bands"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bands"
+        ],
+        "title": "GradingScaleInput",
+        "description": "The whole scale, replaced at once. See `ExamGradingScale` for why."
+      },
+      "GradingScaleRead": {
+        "properties": {
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/GradeBand-Output"
+            },
+            "type": "array",
+            "title": "Bands"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bands",
+          "is_default"
+        ],
+        "title": "GradingScaleRead"
       },
       "GrowthPoint": {
         "properties": {
@@ -27888,6 +28177,28 @@
               }
             ],
             "title": "Class Size"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remark"
           }
         },
         "type": "object",
@@ -27981,6 +28292,17 @@
           "marked": {
             "type": "boolean",
             "title": "Marked"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
           }
         },
         "type": "object",
@@ -28728,6 +29050,17 @@
           "is_absent": {
             "type": "boolean",
             "title": "Is Absent"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
           }
         },
         "type": "object",

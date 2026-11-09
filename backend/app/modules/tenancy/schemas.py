@@ -103,17 +103,41 @@ class CardDesignConfig(BaseSchema):
 
     design: Literal[
         # The quiet originals.
-        "classic", "bold", "gradient", "stripe", "minimal",
+        "classic",
+        "bold",
+        "gradient",
+        "stripe",
+        "minimal",
         # The print-shop styles: colour panels, sweeps and geometric bands
         # modelled on physical sample cards, with icon-chip detail lines.
-        "chevron", "panel", "wave", "mosaic",
+        "chevron",
+        "panel",
+        "wave",
+        "mosaic",
         # The modern set: split and outlined headers, decorative backgrounds
         # (dots, grid, ribbon, blob, rings, corner triangles), trailing sweep.
-        "duotone", "outline", "ribbon", "dots", "blob",
-        "rings", "tide", "slate", "banner", "corner", "grid",
+        "duotone",
+        "outline",
+        "ribbon",
+        "dots",
+        "blob",
+        "rings",
+        "tide",
+        "slate",
+        "banner",
+        "corner",
+        "grid",
         # Combinations: panels, patterns and fills recomposed.
-        "prism", "crest", "frame", "sash", "orbit",
-        "aurora", "pillar", "halo", "graphite", "breeze",
+        "prism",
+        "crest",
+        "frame",
+        "sash",
+        "orbit",
+        "aurora",
+        "pillar",
+        "halo",
+        "graphite",
+        "breeze",
         # The laminated lanyard card: solid bands top and bottom.
         "band",
     ] = "classic"

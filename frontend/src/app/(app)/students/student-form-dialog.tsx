@@ -31,13 +31,10 @@ import {
   toNullable,
   type StudentFormValues,
 } from "@/lib/validation/students";
-import {
-  GENDER_LABELS,
-  STUDENT_STATUS_LABELS,
-  type StudentCreate,
-  type StudentRead,
-  type StudentUpdate,
-} from "@/lib/api/types";
+import type { StudentCreate, StudentRead, StudentUpdate } from "@/lib/api/types";
+import { localizeFieldError, studentsMessages } from "@/lib/i18n/modules/students";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 const EMPTY: StudentFormValues = {
   first_name: "",
@@ -94,6 +91,8 @@ export function StudentFormDialog({
   onOpenChange: (open: boolean) => void;
   student?: StudentRead | null;
 }) {
+  const { form: m, validation } = useCatalog(studentsMessages);
+  const L = useLabels();
   const isEdit = Boolean(student);
   const [formError, setFormError] = React.useState<string | null>(null);
 
@@ -105,6 +104,9 @@ export function StudentFormDialog({
     resolver: zodResolver(studentFormSchema),
     defaultValues: EMPTY,
   });
+  const errors = form.formState.errors;
+  const fieldError = (name: keyof StudentFormValues) =>
+    localizeFieldError(errors[name], validation);
 
   // Re-seed whenever the dialog opens, so a previous edit never leaks into the
   // next one.
@@ -152,12 +154,8 @@ export function StudentFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit student" : "Enroll student"}</DialogTitle>
-          <DialogDescription>
-            {isEdit
-              ? "Update this student's record."
-              : "Add a student to your school's directory."}
-          </DialogDescription>
+          <DialogTitle>{isEdit ? m.editTitle : m.newTitle}</DialogTitle>
+          <DialogDescription>{isEdit ? m.editDescription : m.newDescription}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
@@ -165,42 +163,42 @@ export function StudentFormDialog({
 
           <section className="grid gap-4 sm:grid-cols-2">
             <Field
-              label="First name"
+              label={m.firstName}
               htmlFor="first_name"
-              error={form.formState.errors.first_name}
+              error={fieldError("first_name")}
               required
             >
               <Input autoFocus {...form.register("first_name")} />
             </Field>
 
             <Field
-              label="Last name"
+              label={m.lastName}
               htmlFor="last_name"
-              error={form.formState.errors.last_name}
+              error={fieldError("last_name")}
               required
             >
               <Input {...form.register("last_name")} />
             </Field>
 
             <Field
-              label="Admission number"
+              label={m.admissionNumber}
               htmlFor="admission_number"
-              error={form.formState.errors.admission_number}
-              hint="Must be unique within your school."
+              error={fieldError("admission_number")}
+              hint={m.admissionNumberHint}
               required
             >
               <Input {...form.register("admission_number")} />
             </Field>
 
             <Field
-              label="Date of birth"
+              label={m.dateOfBirth}
               htmlFor="date_of_birth"
-              error={form.formState.errors.date_of_birth}
+              error={fieldError("date_of_birth")}
             >
               <Input type="date" {...form.register("date_of_birth")} />
             </Field>
 
-            <Field label="Gender" htmlFor="gender" error={form.formState.errors.gender}>
+            <Field label={m.gender} htmlFor="gender" error={fieldError("gender")}>
               <Controller
                 control={form.control}
                 name="gender"
@@ -210,11 +208,11 @@ export function StudentFormDialog({
                     onValueChange={(value) => field.onChange(value === NO_SECTION ? "" : value)}
                   >
                     <SelectTrigger id="gender">
-                      <SelectValue placeholder="Not specified" />
+                      <SelectValue placeholder={m.notSpecified} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NO_SECTION}>Not specified</SelectItem>
-                      {Object.entries(GENDER_LABELS).map(([value, label]) => (
+                      <SelectItem value={NO_SECTION}>{m.notSpecified}</SelectItem>
+                      {Object.entries(L.gender).map(([value, label]) => (
                         <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
@@ -225,7 +223,7 @@ export function StudentFormDialog({
               />
             </Field>
 
-            <Field label="Status" htmlFor="status" error={form.formState.errors.status} required>
+            <Field label={m.status} htmlFor="status" error={fieldError("status")} required>
               <Controller
                 control={form.control}
                 name="status"
@@ -235,7 +233,7 @@ export function StudentFormDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(STUDENT_STATUS_LABELS).map(([value, label]) => (
+                      {Object.entries(L.studentStatus).map(([value, label]) => (
                         <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
@@ -246,7 +244,7 @@ export function StudentFormDialog({
               />
             </Field>
 
-            <Field label="Section" htmlFor="section_id" error={form.formState.errors.section_id}>
+            <Field label={m.section} htmlFor="section_id" error={fieldError("section_id")}>
               <Controller
                 control={form.control}
                 name="section_id"
@@ -256,10 +254,10 @@ export function StudentFormDialog({
                     onValueChange={(value) => field.onChange(value === NO_SECTION ? "" : value)}
                   >
                     <SelectTrigger id="section_id">
-                      <SelectValue placeholder="Unassigned" />
+                      <SelectValue placeholder={m.unassigned} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NO_SECTION}>Unassigned</SelectItem>
+                      <SelectItem value={NO_SECTION}>{m.unassigned}</SelectItem>
                       {(classes ?? []).flatMap((cls) =>
                         cls.sections.map((section) => (
                           <SelectItem key={section.id} value={section.id}>
@@ -274,9 +272,9 @@ export function StudentFormDialog({
             </Field>
 
             <Field
-              label="Enrolled on"
+              label={m.enrolledOn}
               htmlFor="enrolled_on"
-              error={form.formState.errors.enrolled_on}
+              error={fieldError("enrolled_on")}
             >
               <Input type="date" {...form.register("enrolled_on")} />
             </Field>
@@ -286,50 +284,50 @@ export function StudentFormDialog({
 
           <section className="grid gap-4 sm:grid-cols-2">
             <Field
-              label="Guardian name"
+              label={m.guardianName}
               htmlFor="guardian_name"
-              error={form.formState.errors.guardian_name}
+              error={fieldError("guardian_name")}
             >
               <Input {...form.register("guardian_name")} />
             </Field>
 
             <Field
-              label="Guardian phone"
+              label={m.guardianPhone}
               htmlFor="guardian_phone"
-              error={form.formState.errors.guardian_phone}
+              error={fieldError("guardian_phone")}
             >
               <Input type="tel" {...form.register("guardian_phone")} />
             </Field>
 
             <Field
-              label="Guardian email"
+              label={m.guardianEmail}
               htmlFor="guardian_email"
-              error={form.formState.errors.guardian_email}
+              error={fieldError("guardian_email")}
               className="sm:col-span-2"
             >
               <Input type="email" {...form.register("guardian_email")} />
             </Field>
 
             <Field
-              label="Emergency contact"
+              label={m.emergencyContact}
               htmlFor="emergency_contact_name"
-              error={form.formState.errors.emergency_contact_name}
+              error={fieldError("emergency_contact_name")}
             >
               <Input {...form.register("emergency_contact_name")} />
             </Field>
 
             <Field
-              label="Emergency phone"
+              label={m.emergencyPhone}
               htmlFor="emergency_contact_phone"
-              error={form.formState.errors.emergency_contact_phone}
+              error={fieldError("emergency_contact_phone")}
             >
               <Input type="tel" {...form.register("emergency_contact_phone")} />
             </Field>
 
             <Field
-              label="Address"
+              label={m.address}
               htmlFor="address"
-              error={form.formState.errors.address}
+              error={fieldError("address")}
               className="sm:col-span-2"
             >
               <Textarea rows={2} {...form.register("address")} />
@@ -343,10 +341,10 @@ export function StudentFormDialog({
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              Cancel
+              {m.cancel}
             </Button>
             <Button type="submit" loading={saving}>
-              {isEdit ? "Save changes" : "Enroll student"}
+              {isEdit ? m.save : m.enroll}
             </Button>
           </DialogFooter>
         </form>

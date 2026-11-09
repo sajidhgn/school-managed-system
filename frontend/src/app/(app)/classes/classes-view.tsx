@@ -24,13 +24,35 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { UNASSIGNED_DESCRIPTION, UNASSIGNED_TITLE, useAssignmentBound } from "@/hooks/use-assignment-bound";
+import { useAssignmentBound } from "@/hooks/use-assignment-bound";
 import { useClassSummary, useDeleteClass, useDeleteSection } from "@/hooks/use-classes";
 import type { ClassSummary, SectionSummary } from "@/lib/api/types";
+import type { Translation } from "@/lib/i18n/catalog";
+import { fill } from "@/lib/i18n/format";
+import { classesMessages } from "@/lib/i18n/modules/classes";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { ClassFormDialog } from "./class-form-dialog";
 import { SectionFormDialog } from "./section-form-dialog";
 
 type BadgeVariant = "neutral" | "success" | "warning" | "destructive" | "outline";
+type CapacityMessages = Translation<(typeof classesMessages)["en"]>["capacity"];
+
+/** `{ one, other }` picked by the count and filled with it. */
+function counted(forms: { one: string; other: string }, count: number): string {
+  return fill(count === 1 ? forms.one : forms.other, { count });
+}
+
+/** A template with one `{name}` slot filled by a node (here, the bold name). */
+function withName(template: string, name: React.ReactNode): React.ReactNode {
+  const [before, after = ""] = template.split("{name}");
+  return (
+    <>
+      {before}
+      {name}
+      {after}
+    </>
+  );
+}
 
 /**
  * Seat pressure for a section.
@@ -39,18 +61,21 @@ type BadgeVariant = "neutral" | "success" | "warning" | "destructive" | "outline
  * desk — so it is escalated to the destructive variant rather than being left
  * as a number the admin has to compare by eye.
  */
-function capacityStatus(section: SectionSummary): { label: string; variant: BadgeVariant } {
-  if (section.capacity === null) return { label: "No limit set", variant: "outline" };
+function capacityStatus(
+  section: SectionSummary,
+  m: CapacityMessages,
+): { label: string; variant: BadgeVariant } {
+  if (section.capacity === null) return { label: m.noLimit, variant: "outline" };
 
   const remaining = section.capacity - section.student_count;
   if (remaining < 0) {
-    return { label: `Over by ${Math.abs(remaining)}`, variant: "destructive" };
+    return { label: fill(m.overBy, { count: Math.abs(remaining) }), variant: "destructive" };
   }
-  if (remaining === 0) return { label: "Full", variant: "warning" };
+  if (remaining === 0) return { label: m.full, variant: "warning" };
   if (remaining <= Math.max(1, Math.round(section.capacity * 0.1))) {
-    return { label: `${remaining} seat${remaining === 1 ? "" : "s"} left`, variant: "warning" };
+    return { label: counted(m.seatsLeft, remaining), variant: "warning" };
   }
-  return { label: `${remaining} seats left`, variant: "success" };
+  return { label: counted(m.seatsLeft, remaining), variant: "success" };
 }
 
 function ClassesSkeleton() {
@@ -80,6 +105,7 @@ export function ClassesView({
   /** Active campus. Scopes the class-teacher picker to the staff who work there. */
   schoolId: string | null;
 }) {
+  const { page: m, capacity: capacityMessages } = useCatalog(classesMessages);
   const query = useClassSummary();
   const bound = useAssignmentBound();
   const deleteClass = useDeleteClass();
@@ -141,13 +167,13 @@ export function ClassesView({
   return (
     <>
       <PageHeader
-        title="Classes & sections"
-        description="The structure of your school: every class, its sections, and how full they are."
+        title={m.title}
+        description={m.description}
         actions={
           canManage ? (
             <Button onClick={openCreateClass}>
               <Plus />
-              Add class
+              {m.addClass}
             </Button>
           ) : null
         }
@@ -163,17 +189,13 @@ export function ClassesView({
         <Card>
           <EmptyState
             icon={Layers}
-            title={bound ? UNASSIGNED_TITLE : "No classes yet"}
-            description={
-              bound
-                ? UNASSIGNED_DESCRIPTION
-                : "Create your first class, then add the sections students will be seated in."
-            }
+            title={bound ? m.unassignedTitle : m.noClasses}
+            description={bound ? m.unassignedDescription : m.noClassesHint}
             action={
               canManage ? (
                 <Button size="sm" onClick={openCreateClass}>
                   <Plus />
-                  Add class
+                  {m.addClass}
                 </Button>
               ) : null
             }
@@ -190,12 +212,14 @@ export function ClassesView({
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
                       <CardTitle>{cls.name}</CardTitle>
-                      <Badge variant="neutral">Level {cls.level}</Badge>
+                      <Badge variant="neutral">{fill(m.level, { level: cls.level })}</Badge>
                     </div>
                     <CardDescription className="flex items-center gap-1.5">
                       <Users className="size-3.5" aria-hidden />
-                      {cls.student_count} student{cls.student_count === 1 ? "" : "s"} across{" "}
-                      {cls.section_count} section{cls.section_count === 1 ? "" : "s"}
+                      {fill(m.studentsAcross, {
+                        students: counted(m.students, cls.student_count),
+                        sections: counted(m.sections, cls.section_count),
+                      })}
                     </CardDescription>
                   </div>
 
@@ -207,24 +231,24 @@ export function ClassesView({
                         onClick={() => openSectionForm(cls, null)}
                       >
                         <Plus />
-                        Add section
+                        {m.addSection}
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`Actions for ${cls.name}`}
+                            aria-label={fill(m.actionsFor, { name: cls.name })}
                           >
                             <MoreHorizontal />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => openEditClass(cls)}>
-                            Edit class
+                            {m.editClass}
                           </DropdownMenuItem>
                           <DropdownMenuItem destructive onClick={() => setDeletingClass(cls)}>
-                            Delete class
+                            {m.deleteClass}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -236,8 +260,8 @@ export function ClassesView({
                   {sections.length === 0 ? (
                     <EmptyState
                       icon={Layers}
-                      title="No sections in this class"
-                      description="Students are seated in sections, so add at least one before enrolling."
+                      title={m.noSections}
+                      description={m.noSectionsHint}
                       action={
                         canManage ? (
                           <Button
@@ -246,7 +270,7 @@ export function ClassesView({
                             onClick={() => openSectionForm(cls, null)}
                           >
                             <Plus />
-                            Add section
+                            {m.addSection}
                           </Button>
                         ) : null
                       }
@@ -256,13 +280,13 @@ export function ClassesView({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Section</TableHead>
-                          <TableHead>Class teacher</TableHead>
-                          <TableHead>Enrolment</TableHead>
-                          <TableHead>Capacity</TableHead>
+                          <TableHead>{m.colSection}</TableHead>
+                          <TableHead>{m.colClassTeacher}</TableHead>
+                          <TableHead>{m.colEnrolment}</TableHead>
+                          <TableHead>{m.colCapacity}</TableHead>
                           {canManage ? (
                             <TableHead className="w-12">
-                              <span className="sr-only">Actions</span>
+                              <span className="sr-only">{m.actions}</span>
                             </TableHead>
                           ) : null}
                         </TableRow>
@@ -270,7 +294,7 @@ export function ClassesView({
 
                       <TableBody>
                         {sections.map((section) => {
-                          const status = capacityStatus(section);
+                          const status = capacityStatus(section, capacityMessages);
 
                           return (
                             <TableRow key={section.id}>
@@ -284,7 +308,7 @@ export function ClassesView({
                               */}
                               <TableCell className="text-muted-foreground">
                                 {section.class_teacher_name ?? (
-                                  <span aria-label="No class teacher assigned">—</span>
+                                  <span aria-label={m.noClassTeacher}>—</span>
                                 )}
                               </TableCell>
                               <TableCell className="tabular-nums text-muted-foreground">
@@ -302,7 +326,10 @@ export function ClassesView({
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        aria-label={`Actions for section ${section.name} of ${cls.name}`}
+                                        aria-label={fill(m.sectionActions, {
+                                          section: section.name,
+                                          class: cls.name,
+                                        })}
                                       >
                                         <MoreHorizontal />
                                       </Button>
@@ -311,13 +338,13 @@ export function ClassesView({
                                       <DropdownMenuItem
                                         onClick={() => openSectionForm(cls, section)}
                                       >
-                                        Edit section
+                                        {m.editSection}
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         destructive
                                         onClick={() => setDeletingSection({ cls, section })}
                                       >
-                                        Delete section
+                                        {m.deleteSection}
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
@@ -358,14 +385,12 @@ export function ClassesView({
           <ConfirmDialog
             open={Boolean(deletingClass)}
             onOpenChange={(open) => !open && setDeletingClass(null)}
-            title="Delete class?"
-            description={
-              <>
-                <span className="font-medium text-foreground">{deletingClass?.name}</span> will be
-                removed. Classes that still contain sections or students cannot be deleted.
-              </>
-            }
-            confirmLabel="Delete class"
+            title={m.deleteClassTitle}
+            description={withName(
+              m.deleteClassDescription,
+              <span className="font-medium text-foreground">{deletingClass?.name}</span>,
+            )}
+            confirmLabel={m.deleteClass}
             loading={deleteClass.isPending}
             onConfirm={confirmDeleteClass}
           />
@@ -373,16 +398,14 @@ export function ClassesView({
           <ConfirmDialog
             open={Boolean(deletingSection)}
             onOpenChange={(open) => !open && setDeletingSection(null)}
-            title="Delete section?"
-            description={
-              <>
-                <span className="font-medium text-foreground">
-                  {deletingSection?.cls.name} — {deletingSection?.section.name}
-                </span>{" "}
-                will be removed. Sections with students still assigned cannot be deleted.
-              </>
-            }
-            confirmLabel="Delete section"
+            title={m.deleteSectionTitle}
+            description={withName(
+              m.deleteSectionDescription,
+              <span className="font-medium text-foreground">
+                {deletingSection?.cls.name} — {deletingSection?.section.name}
+              </span>,
+            )}
+            confirmLabel={m.deleteSection}
             loading={deleteSection.isPending}
             onConfirm={confirmDeleteSection}
           />

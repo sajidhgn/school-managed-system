@@ -298,6 +298,16 @@ function ResultsCard({ results, p }: { results: PortalExamResult[]; p: ParentMes
                   <p className="text-xl font-semibold tabular-nums">
                     <bdi dir="ltr">{Number(result.percentage).toFixed(1)}%</bdi>
                   </p>
+                  {result.grade ? (
+                    <p className="text-sm font-semibold" title={result.remark ?? undefined}>
+                      {p.resultsGrade.replace("{grade}", result.grade)}
+                      {result.remark ? (
+                        <span className="ms-1 font-normal text-muted-foreground">
+                          · {result.remark}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
                   {result.rank !== null && result.class_size !== null ? (
                     <p className="text-xs text-muted-foreground">
                       {p.resultsPosition
@@ -333,9 +343,14 @@ function ResultsCard({ results, p }: { results: PortalExamResult[]; p: ParentMes
                           ) : !paper.marked ? (
                             <span className="text-muted-foreground">{p.resultsNotMarked}</span>
                           ) : (
-                            <bdi dir="ltr">
-                              {formatMarks(obtained)} / {paper.max_marks}
-                            </bdi>
+                            <>
+                              <bdi dir="ltr">
+                                {formatMarks(obtained)} / {paper.max_marks}
+                              </bdi>
+                              {paper.grade ? (
+                                <span className="ms-2 font-semibold">{paper.grade}</span>
+                              ) : null}
+                            </>
                           )}
                         </td>
                       </tr>

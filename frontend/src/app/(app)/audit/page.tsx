@@ -9,9 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { serverGetRequired } from "@/lib/api/server";
 import { PERMISSIONS, type AuditLogRead } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
-import { getTranslations } from "@/lib/i18n/server";
+import type { Translation } from "@/lib/i18n/catalog";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { getCatalog, getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Audit log" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.audit };
+}
 
 /**
  * The school's audit trail.
@@ -32,7 +37,12 @@ export default async function AuditPage({
   searchParams: Promise<{ before?: string }>;
 }) {
   const params = await searchParams;
-  const [{ user, schoolId }, t] = await Promise.all([requireSchoolContext(), getTranslations()]);
+  const [{ user, schoolId }, t, a] = await Promise.all([
+    requireSchoolContext(),
+    getTranslations(),
+    getCatalog(adminMessages),
+  ]);
+  const m = a.audit;
 
   // Hidden from the nav for anyone without the permission, but the URL still
   // resolves. Without this the API's 403 surfaced as a 500 page; a teacher who
@@ -79,7 +89,7 @@ export default async function AuditPage({
                     {entry.entity_type ?? "—"}
                   </TableCell>
                   <TableCell className="max-w-md">
-                    <Diff before={entry.before} after={entry.after} />
+                    <Diff before={entry.before} after={entry.after} m={m} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -89,10 +99,10 @@ export default async function AuditPage({
       )}
       {entries.length > 0 ? (
         <div className="mt-4 flex justify-between">
-          {params.before ? <Button asChild variant="outline"><Link href="/audit">Newest</Link></Button> : <span />}
+          {params.before ? <Button asChild variant="outline"><Link href="/audit">{m.newest}</Link></Button> : <span />}
           {entries.length > 50 ? (
             <Button asChild variant="outline">
-              <Link href={`/audit?before=${encodeURIComponent(page.at(-1)!.created_at)}`}>Older</Link>
+              <Link href={`/audit?before=${encodeURIComponent(page.at(-1)!.created_at)}`}>{m.older}</Link>
             </Button>
           ) : null}
         </div>
@@ -101,12 +111,16 @@ export default async function AuditPage({
   );
 }
 
+type AuditMessages = Translation<(typeof adminMessages)["en"]>["audit"];
+
 function Diff({
   before,
   after,
+  m,
 }: {
   before: Record<string, unknown> | null | undefined;
   after: Record<string, unknown> | null | undefined;
+  m: AuditMessages;
 }) {
   if (!before && !after) return <span className="text-muted-foreground">—</span>;
 
@@ -119,24 +133,26 @@ function Diff({
         <li key={key} className="truncate">
           <span className="text-muted-foreground">{key}: </span>
           {before?.[key] !== undefined ? (
-            <span className="text-destructive line-through">{format(before[key])}</span>
+            <span className="text-destructive line-through">{format(before[key], m)}</span>
           ) : null}
-          {before?.[key] !== undefined && after?.[key] !== undefined ? " → " : null}
+          {before?.[key] !== undefined && after?.[key] !== undefined ? m.arrow : null}
           {after?.[key] !== undefined ? (
-            <span className="text-success">{format(after[key])}</span>
+            <span className="text-success">{format(after[key], m)}</span>
           ) : null}
         </li>
       ))}
       {keys.length > 4 ? (
-        <li className="text-muted-foreground">+{keys.length - 4} more</li>
+        <li className="text-muted-foreground">{fill(m.moreFields, { count: keys.length - 4 })}</li>
       ) : null}
     </ul>
   );
 }
 
-function format(value: unknown): string {
+function format(value: unknown, m: AuditMessages): string {
   if (value === null || value === undefined) return "—";
-  if (Array.isArray(value)) return value.length > 3 ? `${value.length} items` : value.join(", ");
+  if (Array.isArray(value)) {
+    return value.length > 3 ? fill(m.items, { count: value.length }) : value.join(", ");
+  }
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }

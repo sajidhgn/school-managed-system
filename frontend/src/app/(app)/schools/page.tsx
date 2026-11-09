@@ -12,8 +12,11 @@ import {
 } from "@/lib/api/types";
 import { canAny } from "@/lib/auth/permissions";
 import { hasPermission, requireUser } from "@/lib/auth/session";
+import { getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Schools" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.schools };
+}
 
 /**
  * The organization's campuses.

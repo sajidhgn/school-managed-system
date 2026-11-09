@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ClipboardList, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Plus, Scale, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState } from "@/components/data-states";
@@ -23,8 +23,12 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useDeleteExam, useExams } from "@/hooks/use-exams";
 import type { ExamRead, ExamStatus } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { examsMessages } from "@/lib/i18n/modules/exams";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { formatDate } from "@/lib/utils";
-import { EXAM_STATUS_LABELS, ExamFormDialog } from "./exam-form-dialog";
+import { ExamFormDialog } from "./exam-form-dialog";
+import { GradingScaleDialog } from "./grading-scale-dialog";
 
 const STATUS_VARIANT: Record<ExamStatus, "neutral" | "success" | "outline"> = {
   scheduled: "outline",
@@ -32,7 +36,14 @@ const STATUS_VARIANT: Record<ExamStatus, "neutral" | "success" | "outline"> = {
   published: "success",
 };
 
-export function ExamsView({ canManage }: { canManage: boolean }) {
+export function ExamsView({
+  canManage,
+  canSetGrading,
+}: {
+  canManage: boolean;
+  canSetGrading: boolean;
+}) {
+  const { list: m, status: statusLabel } = useCatalog(examsMessages);
   const [search, setSearch] = React.useState("");
   const debounced = useDebouncedValue(search, 300);
   const query = useExams({ q: debounced || null, size: 50 });
@@ -41,34 +52,41 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ExamRead | null>(null);
   const [confirming, setConfirming] = React.useState<ExamRead | null>(null);
+  const [grading, setGrading] = React.useState(false);
 
   const exams = query.data?.items ?? [];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Exams"
-        description="Schedule exams, add papers per class and subject, and enter marks."
+        title={m.title}
+        description={m.description}
         actions={
-          canManage && (
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setFormOpen(true);
-              }}
-            >
-              <Plus className="mr-1 h-4 w-4" aria-hidden />
-              New exam
+          <>
+            <Button variant="outline" onClick={() => setGrading(true)}>
+              <Scale className="me-1 h-4 w-4" aria-hidden />
+              {m.gradingScale}
             </Button>
-          )
+            {canManage ? (
+              <Button
+                onClick={() => {
+                  setEditing(null);
+                  setFormOpen(true);
+                }}
+              >
+                <Plus className="me-1 h-4 w-4" aria-hidden />
+                {m.newExam}
+              </Button>
+            ) : null}
+          </>
         }
       />
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>Exam schedule</CardTitle>
+          <CardTitle>{m.scheduleTitle}</CardTitle>
           <Input
-            placeholder="Search exams…"
+            placeholder={m.searchPlaceholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="max-w-xs"
@@ -83,12 +101,8 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
           {query.data && exams.length === 0 && (
             <EmptyState
               icon={ClipboardList}
-              title={debounced ? "No matching exams" : "No exams yet"}
-              description={
-                debounced
-                  ? "Try a different search."
-                  : "Create an exam, add its papers, and mark sheets open from there."
-              }
+              title={debounced ? m.noMatches : m.noExams}
+              description={debounced ? m.tryDifferentSearch : m.emptyHint}
             />
           )}
 
@@ -96,10 +110,10 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Exam</TableHead>
-                  <TableHead className="w-44">Dates</TableHead>
-                  <TableHead className="w-24">Papers</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
+                  <TableHead>{m.colExam}</TableHead>
+                  <TableHead className="w-44">{m.colDates}</TableHead>
+                  <TableHead className="w-24">{m.colPapers}</TableHead>
+                  <TableHead className="w-28">{m.colStatus}</TableHead>
                   <TableHead className="w-32" />
                 </TableRow>
               </TableHeader>
@@ -124,10 +138,10 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
                     <TableCell>{exam.paper_count}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[exam.status]}>
-                        {EXAM_STATUS_LABELS[exam.status]}
+                        {statusLabel[exam.status]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-end">
                       {canManage && (
                         <>
                           <Button
@@ -138,7 +152,7 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
                               setFormOpen(true);
                             }}
                           >
-                            Edit
+                            {m.edit}
                           </Button>
                           <Button
                             size="sm"
@@ -146,7 +160,7 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
                             onClick={() => setConfirming(exam)}
                           >
                             <Trash2 className="h-3 w-3" aria-hidden />
-                            <span className="sr-only">Delete {exam.name}</span>
+                            <span className="sr-only">{fill(m.deleteNamed, { name: exam.name })}</span>
                           </Button>
                         </>
                       )}
@@ -163,15 +177,16 @@ export function ExamsView({ canManage }: { canManage: boolean }) {
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete ${confirming?.name ?? "this exam"}?`}
-        description="This is refused once any marks have been entered — an exam with marks is the academic record."
-        confirmLabel="Delete"
+        title={fill(m.deleteTitle, { name: confirming?.name ?? m.deleteFallback })}
+        description={m.deleteDescription}
+        confirmLabel={m.delete}
         variant="destructive"
         onConfirm={() => {
           if (confirming) remove.mutate(confirming.id);
           setConfirming(null);
         }}
       />
+      <GradingScaleDialog open={grading} onOpenChange={setGrading} canEdit={canSetGrading} />
     </div>
   );
 }

@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useCreateSubject, useUpdateSubject } from "@/hooks/use-subjects";
 import type { SubjectKind, SubjectRead } from "@/lib/api/types";
+import { subjectsMessages } from "@/lib/i18n/modules/subjects";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 export function SubjectFormDialog({
   open,
@@ -26,6 +28,7 @@ export function SubjectFormDialog({
   onOpenChange: (open: boolean) => void;
   subject: SubjectRead | null;
 }) {
+  const m = useCatalog(subjectsMessages).form;
   const create = useCreateSubject();
   const update = useUpdateSubject();
 
@@ -53,17 +56,14 @@ export function SubjectFormDialog({
       <DialogContent>
         <form onSubmit={(event) => void handleSubmit(event)}>
           <DialogHeader>
-            <DialogTitle>{subject ? "Edit subject" : "New subject"}</DialogTitle>
-            <DialogDescription>
-              The code is a short handle for timetable grids and report-card columns, where
-              &ldquo;Mathematics&rdquo; does not fit.
-            </DialogDescription>
+            <DialogTitle>{subject ? m.editTitle : m.newTitle}</DialogTitle>
+            <DialogDescription>{m.description}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-[8rem_1fr] gap-3">
               <div className="space-y-1">
-                <Label htmlFor="subject-code">Code</Label>
+                <Label htmlFor="subject-code">{m.code}</Label>
                 <Input
                   id="subject-code"
                   required
@@ -76,12 +76,12 @@ export function SubjectFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="subject-name">Name</Label>
+                <Label htmlFor="subject-name">{m.name}</Label>
                 <Input
                   id="subject-name"
                   required
                   maxLength={120}
-                  placeholder="Mathematics"
+                  placeholder={m.namePlaceholder}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
@@ -89,25 +89,25 @@ export function SubjectFormDialog({
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="subject-kind">Type</Label>
+              <Label htmlFor="subject-kind">{m.type}</Label>
               <NativeSelect
                 id="subject-kind"
                 value={kind}
                 onChange={(event) => setKind(event.target.value as SubjectKind)}
               >
-                <option value="core">Core — every student in the grade takes it</option>
-                <option value="elective">Elective — chosen, so never &ldquo;missing&rdquo;</option>
-                <option value="activity">Activity — timetabled and attended, not graded</option>
+                <option value="core">{m.kindCore}</option>
+                <option value="elective">{m.kindElective}</option>
+                <option value="activity">{m.kindActivity}</option>
               </NativeSelect>
             </div>
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {m.cancel}
             </Button>
             <Button type="submit" disabled={create.isPending || update.isPending}>
-              {subject ? "Save" : "Create"}
+              {subject ? m.save : m.create}
             </Button>
           </DialogFooter>
         </form>

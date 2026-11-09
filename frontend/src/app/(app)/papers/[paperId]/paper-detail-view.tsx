@@ -1,5 +1,6 @@
 "use client";
 
+import { fillNodes } from "@/lib/i18n/format";
 import * as React from "react";
 import type { Route } from "next";
 import Link from "next/link";
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -46,16 +48,16 @@ import type {
   PaperSectionRead,
   QuestionDifficulty,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn, formatDateTime } from "@/lib/utils";
 import { ChoiceGroup } from "../choice-group";
 import {
-  DIFFICULTY_LABELS,
   DIFFICULTY_VARIANT,
   LANGUAGE_LABELS,
-  PAPER_DIFFICULTY_LABELS,
-  PAPER_STATUS,
-  PAPER_TYPE_LABELS,
-  SECTION_LABELS,
+  PAPER_STATUS_VARIANT,
+  QUESTION_DIFFICULTIES,
   optionLabel,
   reportIssues,
   sectionLetter,
@@ -68,6 +70,7 @@ import { PaperText, QuestionContent } from "./question-content";
 import { QuestionEditDialog } from "./question-edit-dialog";
 
 export function PaperDetailView({ paperId }: { paperId: string }) {
+  const m = useCatalog(papersMessages).detail;
   const router = useRouter();
   const paper = usePaper(paperId);
   const removePaper = useDeletePaper();
@@ -94,7 +97,7 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
         href={"/papers" as Route}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" /> All test papers
+        <ArrowLeft className="size-4 rtl:rotate-180" /> {m.allPapers}
       </Link>
       <PageHeader
         title={data.title}
@@ -106,21 +109,21 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
             {printable ? (
               <Button asChild>
                 <Link href={`/papers/${data.id}/print` as Route}>
-                  <Printer /> Print
+                  <Printer /> {m.print}
                 </Link>
               </Button>
             ) : (
               <Button disabled>
-                <Printer /> Print
+                <Printer /> {m.print}
               </Button>
             )}
             {editable && (
               <>
                 <Button variant="outline" onClick={() => setEditing(true)}>
-                  <Pencil /> Edit details
+                  <Pencil /> {m.editDetails}
                 </Button>
                 <Button variant="outline" onClick={() => setRegenerating(true)}>
-                  <RotateCw /> Regenerate
+                  <RotateCw /> {m.regenerate}
                 </Button>
               </>
             )}
@@ -128,7 +131,7 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
               <Button
                 variant="outline"
                 size="icon"
-                aria-label="Delete paper"
+                aria-label={m.deletePaperAria}
                 onClick={() => setDeleting(true)}
               >
                 <Trash2 />
@@ -142,16 +145,17 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
 
       {busy && (
         <Note icon={Loader2} spin>
-          <span className="font-medium">Generating questions…</span> The agent is writing{" "}
-          {data.requested.reduce((sum, s) => sum + s.count, 0)} questions from{" "}
-          {data.chapters.length === 1 ? "the chapter" : `${data.chapters.length} chapters`} and
-          checking each one against the book. This page updates by itself.
+          <span className="font-medium">{m.generatingTitle}</span>{" "}
+          {fill(data.chapters.length === 1 ? m.generatingOne : m.generatingMany, {
+            count: data.requested.reduce((sum, s) => sum + s.count, 0),
+            chapters: data.chapters.length,
+          })}
         </Note>
       )}
       {data.status === "failed" && (
         <Note icon={AlertTriangle} tone="destructive">
-          {data.error ?? "The agent could not write this paper."}
-          {data.can_edit ? " Regenerate to try again, or change the chapters in a new paper." : ""}
+          {data.error ?? m.failedDefault}
+          {data.can_edit ? ` ${m.failedHint}` : ""}
         </Note>
       )}
       {data.status === "needs_review" && <IssuesNote paper={data} />}
@@ -160,14 +164,14 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-semibold">
-              Questions{" "}
+              {m.questionsHeading}{" "}
               <span className="font-normal text-muted-foreground">
-                ({data.question_count} · {data.total_marks} marks)
+                {fill(m.questionsCount, { count: data.question_count, marks: data.total_marks })}
               </span>
             </h2>
             {editable && (
               <Button variant="outline" size="sm" onClick={() => setBankOpen(true)}>
-                <Library /> Add from question bank
+                <Library /> {m.addFromBank}
               </Button>
             )}
           </div>
@@ -185,12 +189,8 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
             <Card>
               <EmptyState
                 icon={FileQuestion}
-                title="No questions on this paper"
-                description={
-                  editable
-                    ? "Regenerate the paper, or add questions from the class's question bank."
-                    : undefined
-                }
+                title={m.noQuestions}
+                description={editable ? m.noQuestionsHint : undefined}
               />
             </Card>
           )}
@@ -202,9 +202,9 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
       <ConfirmDialog
         open={regenerating}
         onOpenChange={setRegenerating}
-        title="Regenerate this paper?"
-        description="The agent writes a new set of questions from the same chapters and settings. The current questions leave this paper but stay in the question bank, and any edits you made to them stay there too."
-        confirmLabel="Regenerate"
+        title={m.regenerateTitle}
+        description={m.regenerateDescription}
+        confirmLabel={m.regenerateConfirm}
         variant="default"
         loading={regenerate.isPending}
         onConfirm={() =>
@@ -216,9 +216,9 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title={`Delete ${data.title}?`}
-        description="The paper is removed. Its questions stay in the class's question bank."
-        confirmLabel="Delete paper"
+        title={fill(m.deleteTitle, { title: data.title })}
+        description={m.deleteDescription}
+        confirmLabel={m.deleteConfirm}
         loading={removePaper.isPending}
         onConfirm={() =>
           removePaper.mutate(data.id, {
@@ -231,26 +231,36 @@ export function PaperDetailView({ paperId }: { paperId: string }) {
 }
 
 function SummaryCard({ paper }: { paper: PaperDetail }) {
-  const status = PAPER_STATUS[paper.status];
+  const t = useCatalog(papersMessages);
+  const m = t.summary;
   const facts: [string, React.ReactNode][] = [
     [
-      "Status",
-      <Badge key="status" variant={status.variant} className="gap-1">
+      m.status,
+      <Badge key="status" variant={PAPER_STATUS_VARIANT[paper.status]} className="gap-1">
         {BUSY_PAPER_STATUSES.has(paper.status) && <Loader2 className="size-3 animate-spin" />}
-        {status.label}
+        {t.status[paper.status]}
       </Badge>,
     ],
     [
-      "Language",
+      m.language,
       <span key="lang" lang={paper.language}>
         {LANGUAGE_LABELS[paper.language]}
       </span>,
     ],
-    ["Paper type", PAPER_TYPE_LABELS[paper.paper_type]],
-    ["Difficulty", PAPER_DIFFICULTY_LABELS[paper.difficulty]],
-    ["Time allowed", paper.duration_minutes ? `${paper.duration_minutes} minutes` : "—"],
-    ["Total marks", `${paper.total_marks} (${paper.question_count} questions)`],
+    [m.paperType, t.paperType[paper.paper_type]],
+    [m.difficulty, t.paperDifficulty[paper.difficulty]],
+    [
+      m.timeAllowed,
+      paper.duration_minutes ? fill(m.minutes, { count: paper.duration_minutes }) : "—",
+    ],
+    [
+      m.totalMarks,
+      fill(m.totalMarksValue, { marks: paper.total_marks, count: paper.question_count }),
+    ],
   ];
+  const created = paper.created_by_name
+    ? fill(m.createdBy, { date: formatDateTime(paper.created_at), name: paper.created_by_name })
+    : fill(m.created, { date: formatDateTime(paper.created_at) });
 
   return (
     <Card>
@@ -265,34 +275,33 @@ function SummaryCard({ paper }: { paper: PaperDetail }) {
         </dl>
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">
-            Chapters{paper.book_title ? ` of ${paper.book_title}` : ""}
+            {paper.book_title ? fill(m.chaptersOf, { book: paper.book_title }) : m.chapters}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {paper.chapters.length ? (
               paper.chapters.map((chapter) => (
                 <Badge key={chapter.id} variant="outline">
-                  Ch {chapter.number}: {chapter.title}
+                  {fill(m.chapterBadge, { number: chapter.number, title: chapter.title })}
                 </Badge>
               ))
             ) : (
-              <span className="text-sm text-muted-foreground">
-                The chapters were removed from the book.
-              </span>
+              <span className="text-sm text-muted-foreground">{m.chaptersRemoved}</span>
             )}
           </div>
         </div>
         {paper.instructions ? (
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Instructions</p>
+            <p className="text-xs text-muted-foreground">{m.instructions}</p>
             <p className="whitespace-pre-line text-sm">
               <PaperText text={paper.instructions} language={paper.language} />
             </p>
           </div>
         ) : null}
         <p className="text-xs text-muted-foreground">
-          Created {formatDateTime(paper.created_at)}
-          {paper.created_by_name ? ` by ${paper.created_by_name}` : ""}
-          {paper.generated_at ? ` · questions written ${formatDateTime(paper.generated_at)}` : ""}
+          {created}
+          {paper.generated_at
+            ? ` · ${fill(m.written, { date: formatDateTime(paper.generated_at) })}`
+            : ""}
         </p>
       </CardContent>
     </Card>
@@ -300,11 +309,12 @@ function SummaryCard({ paper }: { paper: PaperDetail }) {
 }
 
 function IssuesNote({ paper }: { paper: PaperDetail }) {
+  const m = useCatalog(papersMessages).issues;
   const issues = reportIssues(paper.report);
   return (
     <div className="space-y-2 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm">
       <p className="flex items-center gap-2 font-medium">
-        <Bot className="size-4" /> The agent asks you to review this paper
+        <Bot className="size-4" /> {m.title}
       </p>
       {issues.length ? (
         <ul className="space-y-1">
@@ -316,9 +326,7 @@ function IssuesNote({ paper }: { paper: PaperDetail }) {
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground">
-          Some questions did not come out as asked. Check them before printing.
-        </p>
+        <p className="text-muted-foreground">{m.fallback}</p>
       )}
     </div>
   );
@@ -335,18 +343,28 @@ function SectionCard({
   index: number;
   editable: boolean;
 }) {
+  const t = useCatalog(papersMessages);
+  const m = t.sectionCard;
+  // The on-screen heading is the app's, so its letter is the viewer's: A–E, الف–ہ.
+  const { locale } = useTranslations();
   const { count, each, total } = sectionMarks(section);
   const questions = [...section.questions].sort((a, b) => a.position - b.position);
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-baseline justify-between gap-2 pb-3">
         <CardTitle>
-          Section {sectionLetter(index, "en")} — {SECTION_LABELS[section.type]}
+          {fill(m.title, {
+            letter: sectionLetter(index, locale),
+            section: t.section[section.type],
+          })}
         </CardTitle>
         <span className="text-sm text-muted-foreground tabular-nums">
           {each !== null
-            ? `${count} × ${each} = ${total} marks`
-            : `${count} questions · ${total} marks`}
+            ? // A left-to-right island, or Urdu would lay the sum out backwards.
+              fillNodes(m.marksEach, {
+                sum: <bdi dir="ltr">{`${count} × ${each} = ${total}`}</bdi>,
+              })
+            : fill(m.marksTotal, { count, total })}
         </span>
       </CardHeader>
       <CardContent>
@@ -377,6 +395,8 @@ function QuestionItem({
   number: number;
   editable: boolean;
 }) {
+  const t = useCatalog(papersMessages);
+  const m = t.question;
   const replace = useReplacePaperQuestion(paper.id);
   const remove = useRemovePaperQuestion(paper.id);
   const [editing, setEditing] = React.useState(false);
@@ -401,21 +421,27 @@ function QuestionItem({
 
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <Badge variant={DIFFICULTY_VARIANT[question.difficulty]}>
-              {DIFFICULTY_LABELS[question.difficulty]}
+              {t.difficulty[question.difficulty]}
             </Badge>
             {askedOther && entry.requested_difficulty && (
-              <Badge variant="outline" title="The difficulty this slot asked for">
-                asked {DIFFICULTY_LABELS[entry.requested_difficulty].toLowerCase()}
+              <Badge variant="outline" title={m.difficultyAsked}>
+                {fill(m.asked, {
+                  difficulty: t.difficulty[entry.requested_difficulty].toLowerCase(),
+                })}
               </Badge>
             )}
             <Badge variant="neutral">
-              {entry.marks} mark{entry.marks === 1 ? "" : "s"}
+              {fill(entry.marks === 1 ? m.marksOne : m.marksMany, { count: entry.marks })}
             </Badge>
             {(question.printed_page !== null || question.chapter_number !== null) && (
               <span className="text-muted-foreground" title={question.chapter_title ?? undefined}>
                 {[
-                  question.printed_page !== null ? `p. ${question.printed_page}` : null,
-                  question.chapter_number !== null ? `Ch ${question.chapter_number}` : null,
+                  question.printed_page !== null
+                    ? fill(m.page, { page: question.printed_page })
+                    : null,
+                  question.chapter_number !== null
+                    ? fill(m.chapter, { number: question.chapter_number })
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(", ")}
@@ -423,7 +449,7 @@ function QuestionItem({
             )}
             {optionDisagrees && (
               <Badge variant="warning" className="gap-1">
-                <AlertTriangle className="size-3" /> Checker chose a different option
+                <AlertTriangle className="size-3" /> {m.checkerDisagrees}
               </Badge>
             )}
           </div>
@@ -431,7 +457,7 @@ function QuestionItem({
           {(question.answer || keyText) && (
             <details className="group rounded-md bg-muted/60 px-3 py-2 text-sm">
               <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                Answer key
+                {m.answerKey}
               </summary>
               <div className="mt-2 space-y-1 whitespace-pre-line">
                 {keyText && (
@@ -454,8 +480,8 @@ function QuestionItem({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Edit question ${number}`}
-              title="Edit"
+              aria-label={fill(m.editAria, { number })}
+              title={m.editTitle}
               disabled={replace.isPending}
               onClick={() => setEditing(true)}
             >
@@ -464,8 +490,8 @@ function QuestionItem({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Replace question ${number}`}
-              title="Replace with a new question"
+              aria-label={fill(m.replaceAria, { number })}
+              title={m.replaceTitle}
               disabled={replace.isPending}
               onClick={() => setReplacing(true)}
             >
@@ -474,8 +500,8 @@ function QuestionItem({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Remove question ${number}`}
-              title="Remove from paper"
+              aria-label={fill(m.removeAria, { number })}
+              title={m.removeTitle}
               disabled={replace.isPending}
               onClick={() => setRemoving(true)}
             >
@@ -487,8 +513,7 @@ function QuestionItem({
 
       {replace.isPending && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-card/85 text-sm font-medium backdrop-blur-[1px]">
-          <Loader2 className="size-4 animate-spin" /> Writing a new question… this can take about 10
-          seconds.
+          <Loader2 className="size-4 animate-spin" /> {m.writing}
         </div>
       )}
 
@@ -511,9 +536,9 @@ function QuestionItem({
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
-        title={`Remove question ${number}?`}
-        description="It leaves this paper but stays in the question bank, so you can add it back later."
-        confirmLabel="Remove question"
+        title={fill(m.removeConfirmTitle, { number })}
+        description={m.removeConfirmDescription}
+        confirmLabel={m.removeConfirm}
         loading={remove.isPending}
         onConfirm={() => remove.mutate(entry.id, { onSuccess: () => setRemoving(false) })}
       />
@@ -534,6 +559,8 @@ function ReplaceDialog({
   number: number;
   onReplace: (difficulty: QuestionDifficulty) => void;
 }) {
+  const t = useCatalog(papersMessages);
+  const m = t.replace;
   const initial = entry.requested_difficulty ?? entry.question.difficulty;
   const [difficulty, setDifficulty] = React.useState<QuestionDifficulty>(initial);
 
@@ -545,28 +572,26 @@ function ReplaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Replace question {number}?</DialogTitle>
+          <DialogTitle>{fill(m.title, { number })}</DialogTitle>
           <DialogDescription>
-            The agent writes a new {SECTION_LABELS[entry.question.type].toLowerCase()} question from
-            the same chapters. The current one leaves the paper but stays in the question bank. This
-            takes a few seconds.
+            {fill(m.description, { type: t.questionTypeInline[entry.question.type] })}
           </DialogDescription>
         </DialogHeader>
         <ChoiceGroup
-          label="Difficulty of the new question"
+          label={m.difficultyLabel}
           value={difficulty}
           onChange={setDifficulty}
-          options={(["easy", "medium", "hard"] as const).map((v) => ({
+          options={QUESTION_DIFFICULTIES.map((v) => ({
             value: v,
-            label: DIFFICULTY_LABELS[v],
+            label: t.difficulty[v],
           }))}
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button onClick={() => onReplace(difficulty)}>
-            <Shuffle /> Replace
+            <Shuffle /> {m.confirm}
           </Button>
         </DialogFooter>
       </DialogContent>

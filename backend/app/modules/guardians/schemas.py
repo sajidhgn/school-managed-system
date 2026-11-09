@@ -346,6 +346,8 @@ class PortalPaperResult(BaseSchema):
     marks_obtained: Decimal | None
     is_absent: bool
     marked: bool
+    grade: str | None = None
+    """On the campus grading scale; None with no scale, unmarked or absent."""
 
 
 class PortalExamResult(BaseSchema):
@@ -369,6 +371,9 @@ class PortalExamResult(BaseSchema):
     """None when the child has since moved class and is no longer on that class's
     roster, so a rank among the old classmates cannot be computed honestly."""
     class_size: int | None
+    grade: str | None = None
+    """The overall grade on the campus scale -- the one on the report card."""
+    remark: str | None = None
 
 
 class GuardianMessageResponse(BaseSchema):

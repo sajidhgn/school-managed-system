@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateAcademicYear, useUpdateAcademicYear } from "@/hooks/use-calendar";
 import type { AcademicYearRead } from "@/lib/api/types";
+import { calendarMessages } from "@/lib/i18n/modules/calendar";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 export function YearFormDialog({
   open,
@@ -25,6 +27,7 @@ export function YearFormDialog({
   onOpenChange: (open: boolean) => void;
   year: AcademicYearRead | null;
 }) {
+  const m = useCatalog(calendarMessages).yearForm;
   const create = useCreateAcademicYear();
   const update = useUpdateAcademicYear();
 
@@ -69,16 +72,13 @@ export function YearFormDialog({
       <DialogContent>
         <form onSubmit={(event) => void handleSubmit(event)}>
           <DialogHeader>
-            <DialogTitle>{year ? "Edit academic year" : "New academic year"}</DialogTitle>
-            <DialogDescription>
-              The dates bound every attendance percentage and report card quoted against
-              this year.
-            </DialogDescription>
+            <DialogTitle>{year ? m.editTitle : m.newTitle}</DialogTitle>
+            <DialogDescription>{m.description}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-1">
-              <Label htmlFor="year-name">Name</Label>
+              <Label htmlFor="year-name">{m.name}</Label>
               <Input
                 id="year-name"
                 required
@@ -90,7 +90,7 @@ export function YearFormDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="year-start">Starts</Label>
+                <Label htmlFor="year-start">{m.starts}</Label>
                 <Input
                   id="year-start"
                   type="date"
@@ -100,7 +100,7 @@ export function YearFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="year-end">Ends</Label>
+                <Label htmlFor="year-end">{m.ends}</Label>
                 <Input
                   id="year-end"
                   type="date"
@@ -111,7 +111,7 @@ export function YearFormDialog({
               </div>
             </div>
             {invalidRange && (
-              <p className="text-sm text-destructive">The year must end after it starts.</p>
+              <p className="text-sm text-destructive">{m.invalidRange}</p>
             )}
 
             {/* Only on create. Promoting an existing year DEMOTES another, so it is
@@ -124,20 +124,18 @@ export function YearFormDialog({
                   checked={makeCurrent}
                   onChange={(event) => setMakeCurrent(event.target.checked)}
                 />
-                Make this the current year
-                <span className="text-muted-foreground">
-                  (demotes whichever year holds it now)
-                </span>
+                {m.makeCurrent}
+                <span className="text-muted-foreground">{m.makeCurrentHint}</span>
               </label>
             )}
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {m.cancel}
             </Button>
             <Button type="submit" disabled={invalidRange || create.isPending || update.isPending}>
-              {year ? "Save" : "Create"}
+              {year ? m.save : m.create}
             </Button>
           </DialogFooter>
         </form>

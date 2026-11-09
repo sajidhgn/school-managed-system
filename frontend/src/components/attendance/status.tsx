@@ -13,6 +13,9 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import type { AttendanceStatus, RegisterState } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,13 +26,13 @@ import { cn } from "@/lib/utils";
  * red still reads "Absent". The tints match the dashboard's register mix
  * (`components/dashboard/analytics.tsx`), so a colour means the same thing on every
  * screen that shows attendance.
+ *
+ * The words — `status` and the one-character `statusShort` for calendar cells — are
+ * in the attendance catalog (`lib/i18n/modules/attendance.ts`).
  */
 export const STATUS_META: Record<
   AttendanceStatus,
   {
-    label: string;
-    /** One character for a calendar cell, where a word will not fit. */
-    short: string;
     Icon: typeof CircleCheck;
     /** A light wash for a cell, with ordinary ink on it. */
     cell: string;
@@ -39,42 +42,30 @@ export const STATUS_META: Record<
   }
 > = {
   present: {
-    label: "Present",
-    short: "P",
     Icon: CircleCheck,
     cell: "bg-success/15",
     swatch: "bg-success",
     badge: "success",
   },
   late: {
-    label: "Late",
-    short: "L",
     Icon: Clock,
     cell: "bg-warning/25",
     swatch: "bg-warning",
     badge: "warning",
   },
   half_day: {
-    label: "Half day",
-    short: "½",
     Icon: Contrast,
     cell: "bg-warning/12",
     swatch: "bg-warning/50",
     badge: "warning",
   },
   absent: {
-    label: "Absent",
-    short: "A",
     Icon: CircleX,
     cell: "bg-destructive/15",
     swatch: "bg-destructive",
     badge: "destructive",
   },
   excused: {
-    // "Leave" is the word schools here use for an authorised absence; the API calls
-    // it `excused`. Both appear so neither audience has to translate.
-    label: "Leave (excused)",
-    short: "E",
     Icon: CircleMinus,
     cell: "bg-muted",
     swatch: "bg-muted-foreground/40",
@@ -86,11 +77,12 @@ export const STATUS_META: Record<
 export const STATUS_ORDER: AttendanceStatus[] = ["present", "late", "half_day", "absent", "excused"];
 
 export function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) {
+  const m = useCatalog(attendanceMessages);
   const meta = STATUS_META[status];
   return (
     <Badge variant={meta.badge}>
       <meta.Icon className="size-3" aria-hidden />
-      {meta.label}
+      {m.status[status]}
     </Badge>
   );
 }
@@ -102,19 +94,20 @@ export function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) 
  */
 export const REGISTER_META: Record<
   RegisterState,
-  { label: string; Icon: typeof CircleCheck; badge: "success" | "warning" | "neutral" }
+  { Icon: typeof CircleCheck; badge: "success" | "warning" | "neutral" }
 > = {
-  submitted: { label: "Submitted", Icon: CircleCheck, badge: "success" },
-  draft: { label: "In progress", Icon: CircleAlert, badge: "neutral" },
-  not_started: { label: "Not started", Icon: CircleDashed, badge: "warning" },
+  submitted: { Icon: CircleCheck, badge: "success" },
+  draft: { Icon: CircleAlert, badge: "neutral" },
+  not_started: { Icon: CircleDashed, badge: "warning" },
 };
 
 export function RegisterStateBadge({ state }: { state: RegisterState }) {
+  const m = useCatalog(attendanceMessages);
   const meta = REGISTER_META[state];
   return (
     <Badge variant={meta.badge}>
       <meta.Icon className="size-3" aria-hidden />
-      {meta.label}
+      {m.registerState[state]}
     </Badge>
   );
 }
@@ -135,19 +128,20 @@ export function TodayBadge({
   register: RegisterState;
   status: AttendanceStatus | null | undefined;
 }) {
+  const m = useCatalog(attendanceMessages).today;
   if (register === "submitted" && status) return <AttendanceStatusBadge status={status} />;
   if (register === "draft") {
     return (
       <Badge variant="neutral">
         <CircleAlert className="size-3" aria-hidden />
-        Register open
+        {m.registerOpen}
       </Badge>
     );
   }
   return (
     <Badge variant="outline" className="text-muted-foreground">
       <CircleDashed className="size-3" aria-hidden />
-      Not marked
+      {m.notMarked}
     </Badge>
   );
 }
@@ -165,9 +159,12 @@ export function deltaPoints(
   return now == null || before == null ? null : now - before;
 }
 
-/** `+2.4 pts` / `−1.0 pts`, with a true minus sign. */
-export function formatDelta(delta: number): string {
-  return `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)} pts`;
+/**
+ * `+2.4 pts` / `−1.0 pts`, with a true minus sign. `template` is the catalog's
+ * `trend.points`, which places the unit for the language.
+ */
+export function formatDelta(delta: number, template: string): string {
+  return fill(template, { value: `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}` });
 }
 
 /**
@@ -178,29 +175,34 @@ export function formatDelta(delta: number): string {
 export function TrendDelta({
   now,
   before,
-  suffix,
+  template,
   className,
   compact = false,
 }: {
   now: number | null | undefined;
   before: number | null | undefined;
-  /** e.g. "vs previous 30 days"; omitted in tables, where the header says it. */
-  suffix?: string;
+  /**
+   * The figure in a sentence, with `{delta}` where it goes — e.g. "{delta} vs
+   * previous 30 days"; omitted in tables, where the header says it.
+   */
+  template?: string;
   className?: string;
   /** Icon only, with the figure for screen readers and the tooltip. */
   compact?: boolean;
 }) {
+  const m = useCatalog(attendanceMessages).trend;
   const delta = deltaPoints(now, before);
   if (delta == null) {
     return (
       <span className={cn("text-xs text-muted-foreground", className)}>
-        {compact ? <span aria-label="No earlier data">—</span> : "No earlier data"}
+        {compact ? <span aria-label={m.noEarlierData}>—</span> : m.noEarlierData}
       </span>
     );
   }
   const flat = Math.abs(delta) < 0.1;
   const Icon = flat ? Minus : delta > 0 ? ArrowUpRight : ArrowDownRight;
-  const text = `${formatDelta(delta)}${suffix ? ` ${suffix}` : ""}`;
+  const figure = formatDelta(delta, m.points);
+  const text = template ? fill(template, { delta: figure }) : figure;
   return (
     <span
       title={text}
@@ -230,12 +232,13 @@ export function RateMeter({
   /** Accessible name, e.g. "Grade 9 · A attendance". */
   label?: string;
 }) {
+  const m = useCatalog(attendanceMessages);
   return (
     <div className={cn("flex min-w-0 items-center gap-2", className)}>
       <span
         className="h-2 min-w-12 flex-1 rounded-e-[4px] bg-muted"
         role="img"
-        aria-label={label ? `${label}: ${formatPct(value)}` : formatPct(value)}
+        aria-label={label ? fill(m.rateMeter, { label, value: formatPct(value) }) : formatPct(value)}
       >
         {value != null ? (
           <span

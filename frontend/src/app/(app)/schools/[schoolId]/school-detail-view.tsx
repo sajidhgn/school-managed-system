@@ -36,25 +36,13 @@ import { ApiError } from "@/lib/api/errors";
 import { schools as schoolsApi } from "@/lib/api/resources";
 import {
   PERMISSIONS,
-  SCHOOL_STATUS_LABELS,
   label,
   type SchoolRead,
 } from "@/lib/api/types";
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /**
  * One campus in full.
@@ -83,6 +71,8 @@ export function SchoolDetailView({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const { schoolDetail: m, schools: ms } = useCatalog(adminMessages);
+  const L = useLabels();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(school.name);
   const [editCity, setEditCity] = useState(school.city ?? "");
@@ -111,7 +101,7 @@ export function SchoolDetailView({
   async function save() {
     if (!editName.trim()) return;
     if (editThemeColors.some((color) => !THEME_COLOR_PATTERN.test(color))) {
-      setFormError("Each theme colour must be a 6-digit hex value, like #1D4ED8.");
+      setFormError(m.themeColourError);
       return;
     }
     setBusy(true);
@@ -126,11 +116,11 @@ export function SchoolDetailView({
         logo_url: editLogoUrl.trim() || null,
         theme_colors: editThemeColors.length ? editThemeColors : null,
       });
-      toast({ title: `${editName.trim()} updated.` });
+      toast({ title: fill(ms.updated, { name: editName.trim() }) });
       setEditing(false);
       router.refresh();
     } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : "Please try again.");
+      setFormError(error instanceof ApiError ? error.message : t.common.tryAgain);
     } finally {
       setBusy(false);
     }
@@ -140,12 +130,12 @@ export function SchoolDetailView({
     setBusy(true);
     try {
       await schoolsApi.archive(school.id);
-      toast({ title: `${school.name} archived.` });
+      toast({ title: fill(ms.archived, { name: school.name }) });
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not archive this school",
+        title: ms.archiveFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -160,7 +150,7 @@ export function SchoolDetailView({
         href="/schools"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" aria-hidden />
+        <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
         {t.schools.title}
       </Link>
 
@@ -170,31 +160,31 @@ export function SchoolDetailView({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={school.status === "active" ? "success" : "neutral"}>
-              {label(SCHOOL_STATUS_LABELS, school.status)}
+              {label(L.schoolStatus, school.status)}
             </Badge>
             {canSelectCampus && school.status === "active" ? (
               isActiveCampus ? (
                 <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Check className="size-4" aria-hidden />
-                  Active campus
+                  {m.activeCampus}
                 </span>
               ) : (
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => openScoped("/dashboard")}>
-                  Work in this campus
+                  {m.workHere}
                 </Button>
               )
             ) : null}
             <Can permission={PERMISSIONS.schoolUpdate}>
               <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
                 <Pencil className="size-4" aria-hidden />
-                Edit
+                {t.common.edit}
               </Button>
             </Can>
             {school.status === "active" ? (
               <Can permission={PERMISSIONS.schoolArchive}>
                 <Button variant="ghost" size="sm" onClick={() => setArchiving(true)}>
                   <Archive className="size-4" aria-hidden />
-                  Archive
+                  {ms.archive}
                 </Button>
               </Can>
             ) : null}
@@ -233,22 +223,22 @@ export function SchoolDetailView({
       </div>
 
       <section className="mt-8 rounded-xl border border-border bg-card">
-        <h2 className="border-b border-border px-5 py-3 text-sm font-medium">Details</h2>
+        <h2 className="border-b border-border px-5 py-3 text-sm font-medium">{m.details}</h2>
         <dl className="grid gap-x-8 gap-y-4 p-5 sm:grid-cols-2">
-          <Detail term="Short code" value={school.code} />
-          <Detail term="Status" value={label(SCHOOL_STATUS_LABELS, school.status)} />
-          <Detail term="City" value={school.city} icon={MapPin} />
-          <Detail term="Address" value={school.address} />
-          <Detail term="Email" value={school.email} icon={Mail} />
-          <Detail term="Phone" value={school.phone} icon={Phone} />
+          <Detail term={t.onboarding.schoolCode} value={school.code} />
+          <Detail term={t.common.status} value={label(L.schoolStatus, school.status)} />
+          <Detail term={t.onboarding.city} value={school.city} icon={MapPin} />
+          <Detail term={m.address} value={school.address} />
+          <Detail term={t.common.email} value={school.email} icon={Mail} />
+          <Detail term={m.phone} value={school.phone} icon={Phone} />
           <Detail
-            term="Academic year starts"
-            value={MONTHS[(school.academic_year_start_month ?? 1) - 1] ?? null}
+            term={m.academicYearStarts}
+            value={m.months[(school.academic_year_start_month ?? 1) - 1] ?? null}
           />
-          <Detail term="Timezone" value={school.timezone} />
-          <Detail term="Language" value={school.locale} />
+          <Detail term={t.settings.timezone} value={school.timezone} />
+          <Detail term={m.language} value={school.locale} />
           <Detail
-            term="Created"
+            term={m.created}
             value={school.created_at ? new Date(school.created_at).toLocaleDateString() : null}
           />
         </dl>
@@ -257,7 +247,7 @@ export function SchoolDetailView({
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit {school.name}</DialogTitle>
+            <DialogTitle>{fill(m.editTitle, { name: school.name })}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
             <label className="grid gap-1.5 text-sm">
@@ -269,17 +259,14 @@ export function SchoolDetailView({
               <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} />
             </label>
             <div className="grid gap-1.5 text-sm">
-              <span className="font-medium">Logo</span>
+              <span className="font-medium">{m.logo}</span>
               <LogoInput value={editLogoUrl} onChange={setEditLogoUrl} />
             </div>
             <div className="grid gap-1.5 text-sm">
-              <span className="font-medium">Theme colours</span>
+              <span className="font-medium">{m.themeColours}</span>
               <ColorListInput values={editThemeColors} onChange={setEditThemeColors} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Branding here applies to this branch only. Leave a field empty to use
-              your organization&apos;s branding from Settings.
-            </p>
+            <p className="text-xs text-muted-foreground">{m.brandingHint}</p>
             {formError ? (
               <p role="alert" className="text-sm text-destructive">
                 {formError}
@@ -300,9 +287,9 @@ export function SchoolDetailView({
       <ConfirmDialog
         open={archiving}
         onOpenChange={setArchiving}
-        title={`Archive ${school.name}?`}
-        description="Its records stay readable and exportable. Staff lose the ability to add new data there until it is restored."
-        confirmLabel="Archive"
+        title={fill(ms.archiveTitle, { name: school.name })}
+        description={m.archiveDescription}
+        confirmLabel={ms.archive}
         onConfirm={archive}
       />
     </div>

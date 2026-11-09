@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyRound, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Field } from "@/components/form/field";
@@ -16,9 +16,13 @@ import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { invitations as invitationsApi, members as membersApi } from "@/lib/api/resources";
 import type { RoleRead, UsageItem } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useRbacText } from "@/lib/i18n/modules/permissions";
 import {
-  invitationCreateSchema,
-  memberCreateSchema,
+  createInvitationSchema,
+  createMemberSchema,
   type InvitationCreateValues,
   type MemberCreateValues,
 } from "@/lib/validation/rbac";
@@ -55,6 +59,10 @@ export function AddMemberForm({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const { addMember: m, validation } = useCatalog(adminMessages);
+  const rbac = useRbacText();
+  const inviteSchema = useMemo(() => createInvitationSchema(validation), [validation]);
+  const memberSchema = useMemo(() => createMemberSchema(validation), [validation]);
   const [mode, setMode] = useState<"manual" | "invite">("manual");
   const initialBranchId = defaultBranchId ?? branches[0]?.id ?? "";
   const [branchId, setBranchId] = useState(initialBranchId);
@@ -73,11 +81,11 @@ export function AddMemberForm({
   const seatsExhausted = staffSeats?.is_exhausted ?? false;
 
   const inviteForm = useForm<InvitationCreateValues>({
-    resolver: zodResolver(invitationCreateSchema),
+    resolver: zodResolver(inviteSchema),
     defaultValues: { email: "", full_name: "", role_id: roles[0]?.id ?? "" },
   });
   const manualForm = useForm<MemberCreateValues>({
-    resolver: zodResolver(memberCreateSchema),
+    resolver: zodResolver(memberSchema),
     defaultValues: { email: "", full_name: "", password: "", role_id: roles[0]?.id ?? "" },
   });
 
@@ -97,7 +105,7 @@ export function AddMemberForm({
         toast({
           variant: "destructive",
           title: t.invitations.noSeatsTitle,
-          description: `${error.message} Upgrade your plan to add more people.`,
+          description: `${error.message} ${m.upgradeForMore}`,
         });
         return;
       }
@@ -111,7 +119,7 @@ export function AddMemberForm({
   async function createManually(values: MemberCreateValues) {
     try {
       await membersApi.create(branchId, values);
-      toast({ title: `${values.full_name} was added to ${branchName}.` });
+      toast({ title: fill(m.added, { name: values.full_name, branch: branchName }) });
       manualForm.reset({ email: "", full_name: "", password: "", role_id: values.role_id });
       router.refresh();
     } catch (error) {
@@ -136,7 +144,7 @@ export function AddMemberForm({
         full_name: values.full_name || undefined,
         role_id: values.role_id,
       });
-      toast({ title: `Invitation sent to ${values.email}.` });
+      toast({ title: fill(m.invitationSent, { email: values.email }) });
       inviteForm.reset({ email: "", full_name: "", role_id: values.role_id });
       router.refresh();
     } catch (error) {
@@ -168,18 +176,20 @@ export function AddMemberForm({
 
   const roleOptions = roles.map((role) => (
     <option key={role.id} value={role.id}>
-      {role.name}
+      {rbac.roleName(role.code, role.name)}
     </option>
   ));
 
   const seatNotice = seatsExhausted ? (
     <p className="rounded-md bg-warning/15 px-3 py-2 text-sm">
-      You have used all {staffSeats?.allowed} staff seats on your plan. Upgrade, or remove a
-      member, before adding anyone else.
+      {fill(m.seatsUsed, { count: staffSeats?.allowed ?? 0 })}
     </p>
   ) : staffSeats && !staffSeats.is_unlimited ? (
     <p className="text-xs text-muted-foreground">
-      {staffSeats.remaining} of {staffSeats.allowed} staff seats remaining.
+      {fill(m.seatsRemaining, {
+        remaining: staffSeats.remaining ?? 0,
+        allowed: staffSeats.allowed,
+      })}
     </p>
   ) : null;
 
@@ -187,26 +197,26 @@ export function AddMemberForm({
 
   return (
     <>
-      <div className="mb-3 flex gap-2" role="group" aria-label="Member creation method">
+      <div className="mb-3 flex gap-2" role="group" aria-label={m.methodAria}>
         <Button
           type="button"
           variant={mode === "manual" ? "default" : "outline"}
           onClick={() => setMode("manual")}
         >
-          <KeyRound className="size-4" aria-hidden /> Create with password
+          <KeyRound className="size-4" aria-hidden /> {m.createWithPassword}
         </Button>
         <Button
           type="button"
           variant={mode === "invite" ? "default" : "outline"}
           onClick={() => setMode("invite")}
         >
-          <Mail className="size-4" aria-hidden /> Send invite
+          <Mail className="size-4" aria-hidden /> {m.sendInvite}
         </Button>
       </div>
 
       {branches.length === 0 ? (
         <p className="mb-8 rounded-md bg-muted/60 p-4 text-sm text-muted-foreground">
-          Create a school branch first — every member belongs to one.
+          {m.noBranches}
         </p>
       ) : mode === "manual" ? (
         <form onSubmit={manualForm.handleSubmit(createManually)} className={boxClass} noValidate>
@@ -221,7 +231,7 @@ export function AddMemberForm({
             <Field label={t.common.email} htmlFor="manual-email" error={manualForm.formState.errors.email} required>
               <Input type="email" placeholder="teacher@school.pk" {...manualForm.register("email")} />
             </Field>
-            <Field label="Temporary password" htmlFor="manual-password" error={manualForm.formState.errors.password} required>
+            <Field label={m.tempPassword} htmlFor="manual-password" error={manualForm.formState.errors.password} required>
               <PasswordInput autoComplete="new-password" {...manualForm.register("password")} />
             </Field>
           </div>
@@ -229,7 +239,7 @@ export function AddMemberForm({
           <div>
             <Button type="submit" disabled={manualForm.formState.isSubmitting || seatsExhausted}>
               <KeyRound className="size-4" aria-hidden />
-              Create member
+              {m.createMember}
             </Button>
           </div>
         </form>

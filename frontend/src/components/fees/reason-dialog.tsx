@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /**
  * A confirmation that will not proceed without a written reason.
@@ -44,6 +46,7 @@ export function ReasonDialog({
   busy: boolean;
   onConfirm: () => void | Promise<void>;
 }) {
+  const m = useCatalog(feesMessages).reason;
   const tooShort = reason.trim().length < 3;
 
   return (
@@ -54,24 +57,21 @@ export function ReasonDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <label className="grid gap-1.5 text-sm">
-          <span className="font-medium">Reason</span>
+          <span className="font-medium">{m.label}</span>
           <Input
             value={reason}
             onChange={(event) => onReasonChange(event.target.value)}
-            placeholder="Duplicate challan, keyed in error…"
+            placeholder={m.placeholder}
             autoFocus
           />
-          <span className="text-xs text-muted-foreground">
-            Recorded in the audit log against your name. Write it for whoever reads this
-            in six months.
-          </span>
+          <span className="text-xs text-muted-foreground">{m.help}</span>
         </label>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={busy || tooShort}>
-            {busy ? "Working…" : confirmLabel}
+            {busy ? m.working : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

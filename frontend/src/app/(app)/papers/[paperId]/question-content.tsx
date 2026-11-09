@@ -1,6 +1,10 @@
+"use client";
+
 import { Check } from "lucide-react";
 
 import type { PaperLanguage, QuestionRead } from "@/lib/api/types";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { optionLabel, textDir } from "../paper-meta";
 import { isRtlLanguage, rtlFace, rtlLanguage } from "../script-font";
@@ -47,6 +51,7 @@ export function QuestionContent({
   showAnswer?: boolean;
   compact?: boolean;
 }) {
+  const m = useCatalog(papersMessages).question;
   const language = question.language;
   const rtl = isRtlLanguage(language);
   return (
@@ -79,7 +84,7 @@ export function QuestionContent({
                 {correct && (
                   <Check
                     className="size-4 shrink-0 self-center text-success"
-                    aria-label="Correct answer"
+                    aria-label={m.correctAnswer}
                   />
                 )}
               </li>

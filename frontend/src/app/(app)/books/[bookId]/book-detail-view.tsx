@@ -54,46 +54,68 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { bookUrls } from "@/lib/api/resources/books";
 import type {
   BookDetail,
-  BookPageRead,
   ChapterRead,
   ChapterStatus,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn, formatDateTime } from "@/lib/utils";
 import { BookFormDialog } from "../book-form-dialog";
 
 const ACCEPTED_FILES = "application/pdf,image/jpeg,image/png,image/webp";
 
-const STATUS: Record<
-  ChapterStatus,
-  { label: string; variant: BadgeProps["variant"] }
-> = {
-  empty: { label: "No pages yet", variant: "neutral" },
-  uploaded: { label: "Not processed", variant: "neutral" },
-  queued: { label: "Queued", variant: "default" },
-  reading: { label: "OpenAI reading", variant: "default" },
-  processing: { label: "Agent reading…", variant: "default" },
-  ready: { label: "Ready", variant: "success" },
-  needs_review: { label: "Needs review", variant: "warning" },
-  failed: { label: "Failed", variant: "destructive" },
+/** Badge colour per chapter status; the labels are in `booksMessages.status`. */
+const STATUS_VARIANT: Record<ChapterStatus, BadgeProps["variant"]> = {
+  empty: "neutral",
+  uploaded: "neutral",
+  queued: "default",
+  reading: "default",
+  processing: "default",
+  ready: "success",
+  needs_review: "warning",
+  failed: "destructive",
 };
 
-const PLACEMENT: Record<BookPageRead["placement"], string> = {
-  printed_number: "by page number",
-  pdf_order: "PDF order",
-  agent: "placed by agent",
-  upload_order: "upload order",
-};
+type Refs = (typeof booksMessages)["en"]["refs"];
+type Counted = { one: string; other: string };
+
+/** `{ one, other }` picked by the count and filled with it. */
+function counted(forms: Counted, count: number): string {
+  return fill(count === 1 ? forms.one : forms.other, { count });
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function pageLabel(printed: number | null, position: number): string {
-  return printed !== null ? `p. ${printed}` : `#${position} (no page number)`;
+function pageLabel(refs: Refs, printed: number | null, position: number): string {
+  return printed !== null
+    ? fill(refs.page, { n: printed })
+    : fill(refs.pageNoNumber, { position });
+}
+
+/** Where a search hit sits: printed page numbers when known, else page positions. */
+function hitPages(
+  refs: Refs,
+  hit: {
+    printed_start: number | null;
+    printed_end?: number | null;
+    page_start: number;
+    page_end: number;
+  },
+): string {
+  if (hit.printed_start === null) {
+    return fill(refs.pagePositions, { start: hit.page_start, end: hit.page_end });
+  }
+  return hit.printed_start === hit.printed_end
+    ? fill(refs.page, { n: hit.printed_start })
+    : fill(refs.pageRange, { start: hit.printed_start, end: hit.printed_end ?? "" });
 }
 
 export function BookDetailView({ bookId }: { bookId: string }) {
+  const m = useCatalog(booksMessages).detail;
   const router = useRouter();
   const book = useBook(bookId);
   const removeBook = useDeleteBook();
@@ -117,7 +139,7 @@ export function BookDetailView({ bookId }: { bookId: string }) {
         href={"/books" as Route}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" /> All books
+        <ArrowLeft className="size-4 rtl:rotate-180" /> {m.allBooks}
       </Link>
       <PageHeader
         title={data.title}
@@ -133,10 +155,10 @@ export function BookDetailView({ bookId }: { bookId: string }) {
           data.can_remove ? (
             <>
               <Button variant="outline" onClick={() => setEditing(true)}>
-                <Pencil /> {data.can_edit ? "Edit" : "Change class"}
+                <Pencil /> {data.can_edit ? m.edit : m.changeClass}
               </Button>
               <Button variant="outline" onClick={() => setDeleting(true)}>
-                <Trash2 /> {deletes ? "Delete" : "Remove"}
+                <Trash2 /> {deletes ? m.delete : m.remove}
               </Button>
             </>
           ) : null
@@ -150,12 +172,12 @@ export function BookDetailView({ bookId }: { bookId: string }) {
             aria-hidden
           />
           <p>
-            From the shared library: uploaded by another school, which keeps its
-            chapters and pages up to date. Printed for {data.grade}
             {data.school_count > 1
-              ? `, used by ${data.school_count} schools`
-              : ""}
-            .
+              ? fill(m.fromLibraryUsedBy, {
+                  grade: data.grade,
+                  count: data.school_count,
+                })
+              : fill(m.fromLibrary, { grade: data.grade })}
           </p>
         </div>
       )}
@@ -165,9 +187,12 @@ export function BookDetailView({ bookId }: { bookId: string }) {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">
-            Chapters{" "}
+            {m.chapters}{" "}
             <span className="font-normal text-muted-foreground">
-              ({data.ready_chapter_count} of {data.chapter_count} ready)
+              {fill(m.chaptersReady, {
+                ready: data.ready_chapter_count,
+                total: data.chapter_count,
+              })}
             </span>
           </h2>
         </div>
@@ -176,9 +201,7 @@ export function BookDetailView({ bookId }: { bookId: string }) {
         ))}
         {data.can_edit && <AddChapterForm book={data} />}
         {!data.chapters.length && !data.can_edit && (
-          <p className="text-sm text-muted-foreground">
-            This book has no chapters yet.
-          </p>
+          <p className="text-sm text-muted-foreground">{m.noChapters}</p>
         )}
       </section>
 
@@ -186,15 +209,15 @@ export function BookDetailView({ bookId }: { bookId: string }) {
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title={`${deletes ? "Delete" : "Remove"} ${data.title}?`}
+        title={fill(deletes ? m.deleteTitle : m.removeTitle, { title: data.title })}
         description={
           deletes
-            ? "Every chapter, uploaded file, page and search index of this book is removed. This cannot be undone."
+            ? m.deleteDescription
             : data.from_library
-              ? "It leaves your school's books. The book stays in the shared library, and you can add it again later."
-              : `${others} other school${others === 1 ? " uses" : "s use"} this book, so it stays in the library for them with its chapters and pages. It leaves your school's books; you can add it back from the library.`
+              ? m.removeLibraryDescription
+              : counted(m.removeSharedDescription, others)
         }
-        confirmLabel={deletes ? "Delete book" : "Remove book"}
+        confirmLabel={deletes ? m.deleteBook : m.removeBook}
         loading={removeBook.isPending}
         onConfirm={() =>
           removeBook.mutate(data.id, {
@@ -211,6 +234,7 @@ export function BookDetailView({ bookId }: { bookId: string }) {
 // ---------------------------------------------------------------------------
 
 function SearchCard({ book }: { book: BookDetail }) {
+  const { detail: m, refs } = useCatalog(booksMessages);
   const [q, setQ] = React.useState("");
   const debounced = useDebouncedValue(q.trim(), 450);
   const results = useBookSearch(book.id, debounced);
@@ -222,21 +246,24 @@ function SearchCard({ book }: { book: BookDetail }) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2">
-          <Search className="size-4" /> Search this book
+          <Search className="size-4" /> {m.searchTitle}
         </CardTitle>
         <CardDescription>
-          Finds passages by meaning, not just matching words — e.g. &ldquo;how
-          to add fractions with different denominators&rdquo;.
+          {m.searchDescription}{" "}
+          {indexed ? (
+            <Link
+              href={`/books/ask?book=${book.id}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {m.askAboutBook}
+            </Link>
+          ) : null}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <Input
           value={q}
-          placeholder={
-            indexed
-              ? "Ask about anything in the book…"
-              : "Process a chapter first"
-          }
+          placeholder={indexed ? m.searchPlaceholder : m.processFirst}
           disabled={!indexed}
           maxLength={500}
           onChange={(event) => setQ(event.target.value)}
@@ -244,14 +271,12 @@ function SearchCard({ book }: { book: BookDetail }) {
         {debounced.length >= 2 &&
           (results.isFetching && !results.data ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Searching…
+              <Loader2 className="size-4 animate-spin" /> {m.searching}
             </p>
           ) : results.isError ? (
             <ErrorState error={results.error} className="py-6" />
           ) : !results.data?.length ? (
-            <p className="text-sm text-muted-foreground">
-              Nothing in the indexed chapters matches.
-            </p>
+            <p className="text-sm text-muted-foreground">{m.noHits}</p>
           ) : (
             <ol className="space-y-2">
               {results.data.map((hit) => (
@@ -261,17 +286,14 @@ function SearchCard({ book }: { book: BookDetail }) {
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">
-                      Chapter {hit.chapter_number}: {hit.chapter_title}
+                      {fill(m.chapterHeading, {
+                        number: hit.chapter_number,
+                        title: hit.chapter_title,
+                      })}
                     </span>
-                    <span>
-                      {hit.printed_start !== null
-                        ? hit.printed_start === hit.printed_end
-                          ? `p. ${hit.printed_start}`
-                          : `pp. ${hit.printed_start}–${hit.printed_end}`
-                        : `pages #${hit.page_start}–${hit.page_end}`}
-                    </span>
+                    <span>{hitPages(refs, hit)}</span>
                     <Badge variant="outline">
-                      {Math.round(hit.score * 100)}% match
+                      {fill(refs.match, { percent: Math.round(hit.score * 100) })}
                     </Badge>
                   </div>
                   <p className="line-clamp-4 whitespace-pre-line text-sm">
@@ -291,6 +313,7 @@ function SearchCard({ book }: { book: BookDetail }) {
 // ---------------------------------------------------------------------------
 
 function AddChapterForm({ book }: { book: BookDetail }) {
+  const m = useCatalog(booksMessages).detail;
   const add = useAddChapter(book.id);
   const next = Math.max(0, ...book.chapters.map((c) => c.number)) + 1;
   const [number, setNumber] = React.useState(String(next));
@@ -314,7 +337,7 @@ function AddChapterForm({ book }: { book: BookDetail }) {
           htmlFor="new-chapter-number"
           className="text-xs text-muted-foreground"
         >
-          Chapter no.
+          {m.chapterNo}
         </label>
         <Input
           id="new-chapter-number"
@@ -332,19 +355,19 @@ function AddChapterForm({ book }: { book: BookDetail }) {
           htmlFor="new-chapter-title"
           className="text-xs text-muted-foreground"
         >
-          Title
+          {m.title}
         </label>
         <Input
           id="new-chapter-title"
           required
           maxLength={200}
           value={title}
-          placeholder="Chapter title"
+          placeholder={m.chapterTitlePlaceholder}
           onChange={(event) => setTitle(event.target.value)}
         />
       </div>
       <Button type="submit" variant="outline" loading={add.isPending}>
-        <Plus /> Add chapter
+        <Plus /> {m.addChapter}
       </Button>
     </form>
   );
@@ -357,6 +380,7 @@ function ChapterCard({
   book: BookDetail;
   chapter: ChapterRead;
 }) {
+  const { detail: m, status: statusLabels } = useCatalog(booksMessages);
   const upload = useUploadChapterFiles(book.id);
   const removeFile = useDeleteChapterFile(book.id);
   const runAgent = useProcessChapter(book.id);
@@ -380,7 +404,6 @@ function ChapterCard({
   const canRun = book.can_edit && chapter.files.length > 0 && !busy && !locked;
   const canAccept = book.can_edit && chapter.status === "needs_review";
   const hasPages = chapter.page_count > 0;
-  const status = STATUS[chapter.status];
   const report = chapter.report;
 
   const send = (files: FileList | File[] | null) => {
@@ -406,7 +429,7 @@ function ChapterCard({
             }}
           >
             <Input
-              aria-label="Chapter number"
+              aria-label={m.chapterNumberAria}
               type="number"
               min={1}
               max={999}
@@ -415,7 +438,7 @@ function ChapterCard({
               onChange={(event) => setNumber(event.target.value)}
             />
             <Input
-              aria-label="Chapter title"
+              aria-label={m.chapterTitleAria}
               className="min-w-48 flex-1"
               maxLength={200}
               required
@@ -423,7 +446,7 @@ function ChapterCard({
               onChange={(event) => setTitle(event.target.value)}
             />
             <Button type="submit" size="sm" loading={update.isPending}>
-              Save
+              {m.save}
             </Button>
             <Button
               type="button"
@@ -431,38 +454,39 @@ function ChapterCard({
               variant="ghost"
               onClick={() => setRenaming(false)}
             >
-              Cancel
+              {m.cancel}
             </Button>
           </form>
         ) : (
           <div className="space-y-1">
             <CardTitle>
-              Chapter {chapter.number}: {chapter.title}
+              {fill(m.chapterHeading, { number: chapter.number, title: chapter.title })}
             </CardTitle>
             <CardDescription>
               {chapter.page_count
-                ? `${chapter.page_count} page${chapter.page_count === 1 ? "" : "s"} ${
-                    chapter.indexing ? "read · search index pending" : "indexed"
-                  }`
-                : `${chapter.files.length} file${chapter.files.length === 1 ? "" : "s"} uploaded`}
+                ? counted(
+                    chapter.indexing ? m.pagesIndexPending : m.pagesIndexed,
+                    chapter.page_count,
+                  )
+                : counted(m.filesUploaded, chapter.files.length)}
               {chapter.processed_at
-                ? ` · checked ${formatDateTime(chapter.processed_at)}`
+                ? ` · ${fill(m.checkedAt, { date: formatDateTime(chapter.processed_at) })}`
                 : ""}
             </CardDescription>
           </div>
         )}
         <div className="flex items-center gap-1">
-          <Badge variant={status.variant} className="gap-1">
+          <Badge variant={STATUS_VARIANT[chapter.status]} className="gap-1">
             {busy && <Loader2 className="size-3 animate-spin" />}
             {chapter.status === "reading" && <Clock className="size-3" />}
-            {status.label}
+            {statusLabels[chapter.status]}
           </Badge>
           {editable && !renaming && (
             <>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Rename chapter"
+                aria-label={m.renameChapter}
                 onClick={() => {
                   setNumber(String(chapter.number));
                   setTitle(chapter.title);
@@ -474,7 +498,7 @@ function ChapterCard({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Remove chapter"
+                aria-label={m.removeChapter}
                 onClick={() => setDeleting(true)}
               >
                 <Trash2 />
@@ -507,7 +531,7 @@ function ChapterCard({
                 </a>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {file.kind === "pdf"
-                    ? `${file.page_count} page${file.page_count === 1 ? "" : "s"} · `
+                    ? `${counted(m.filePages, file.page_count)} · `
                     : ""}
                   {formatSize(file.size_bytes)}
                 </span>
@@ -516,7 +540,7 @@ function ChapterCard({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    aria-label={`Remove ${file.original_name}`}
+                    aria-label={fill(m.removeFile, { name: file.original_name })}
                     disabled={removeFile.isPending}
                     onClick={() =>
                       removeFile.mutate({
@@ -566,15 +590,12 @@ function ChapterCard({
             )}
             <span className="font-medium">
               {upload.isPending
-                ? "Uploading…"
+                ? m.uploading
                 : chapter.files.length
-                  ? "Add more pages"
-                  : "Upload this chapter"}
+                  ? m.addMorePages
+                  : m.uploadChapter}
             </span>
-            <span className="text-xs text-muted-foreground">
-              A PDF, or photos of the pages in any order — JPEG, PNG or WebP.
-              Drop files here or click to choose.
-            </span>
+            <span className="text-xs text-muted-foreground">{m.uploadHint}</span>
             <input
               ref={input}
               type="file"
@@ -590,32 +611,18 @@ function ChapterCard({
         )}
 
         {chapter.status === "queued" && (
-          <AgentNote icon={Bot}>
-            Waiting for the agent. It reads every page, sorts them by page
-            number, checks they belong to Chapter {chapter.number}, and indexes
-            the text.
-          </AgentNote>
+          <AgentNote icon={Bot}>{fill(m.noteQueued, { number: chapter.number })}</AgentNote>
         )}
         {chapter.status === "reading" && (
-          <AgentNote icon={Clock}>
-            OpenAI is reading the scanned pages in a batch, at half the usual
-            price. This usually takes a few hours and at most 24; the agent then
-            finishes the chapter by itself. Its files can&apos;t be changed
-            until then.
-          </AgentNote>
+          <AgentNote icon={Clock}>{m.noteReading}</AgentNote>
         )}
         {chapter.status === "processing" && (
           <AgentNote icon={Loader2} spin>
-            The agent is reading the pages and checking them against the chapter
-            list…
+            {m.noteProcessing}
           </AgentNote>
         )}
         {chapter.indexing && (
-          <AgentNote icon={Clock}>
-            The pages are ready to read. Search will include this chapter once
-            OpenAI finishes indexing it in a batch — usually within a few hours,
-            at most 24.
-          </AgentNote>
+          <AgentNote icon={Clock}>{m.noteIndexing}</AgentNote>
         )}
         {chapter.status === "failed" && chapter.error && (
           <AgentNote icon={AlertTriangle} tone="destructive">
@@ -636,7 +643,7 @@ function ChapterCard({
                   loading={runAgent.isPending}
                   onClick={() => runAgent.mutate(chapter.id)}
                 >
-                  <Bot /> Run agent
+                  <Bot /> {m.runAgent}
                 </Button>
               ) : (
                 <Button
@@ -645,7 +652,7 @@ function ChapterCard({
                   loading={runAgent.isPending}
                   onClick={() => runAgent.mutate(chapter.id)}
                 >
-                  <RotateCw /> Run agent again
+                  <RotateCw /> {m.runAgain}
                 </Button>
               ))}
             {canAccept && (
@@ -655,7 +662,7 @@ function ChapterCard({
                 loading={accept.isPending}
                 onClick={() => accept.mutate(chapter.id)}
               >
-                <CheckCircle2 /> Accept as it is
+                <CheckCircle2 /> {m.acceptAsIs}
               </Button>
             )}
             {hasPages && (
@@ -665,8 +672,8 @@ function ChapterCard({
                 onClick={() => setShowPages((v) => !v)}
               >
                 {showPages
-                  ? "Hide pages"
-                  : `Show pages (${chapter.page_count})`}
+                  ? m.hidePages
+                  : fill(m.showPages, { count: chapter.page_count })}
               </Button>
             )}
           </div>
@@ -678,9 +685,9 @@ function ChapterCard({
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title={`Remove Chapter ${chapter.number}: ${chapter.title}?`}
-        description="Its uploaded files, pages and search index are deleted with it."
-        confirmLabel="Remove chapter"
+        title={fill(m.removeChapterTitle, { number: chapter.number, title: chapter.title })}
+        description={m.removeChapterDescription}
+        confirmLabel={m.removeChapter}
         loading={remove.isPending}
         onConfirm={() =>
           remove.mutate(chapter.id, { onSuccess: () => setDeleting(false) })
@@ -723,6 +730,7 @@ function AgentReport({
   book: BookDetail;
   chapter: ChapterRead;
 }) {
+  const m = useCatalog(booksMessages).detail;
   const report = chapter.report;
   if (!report) return null;
   const detected = book.chapters.find(
@@ -738,37 +746,49 @@ function AgentReport({
   return (
     <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
       <p className="flex items-center gap-2 font-medium">
-        <Bot className="size-4" /> Agent check
+        <Bot className="size-4" /> {m.agentCheck}
       </p>
       <p>
         {report.matches_declared && confidence >= 60 ? (
           <span className="text-success">
-            This is Chapter {chapter.number} ({confidence}% sure).
+            {fill(m.verdictSure, { number: chapter.number, confidence })}
           </span>
         ) : report.matches_declared ? (
           <span className="text-warning-foreground dark:text-warning">
-            Probably Chapter {chapter.number}, but only {confidence}% sure —
-            check the pages.
+            {fill(m.verdictUnsure, { number: chapter.number, confidence })}
           </span>
         ) : report.detected_chapter_number !== null &&
           report.detected_chapter_number !== undefined ? (
           <span className="text-warning-foreground dark:text-warning">
-            This looks like Chapter {report.detected_chapter_number}
-            {detected ? `: ${detected.title}` : ""} ({confidence}%), not Chapter{" "}
-            {chapter.number}.
+            {detected
+              ? fill(m.verdictOtherTitled, {
+                  detected: report.detected_chapter_number,
+                  title: detected.title,
+                  confidence,
+                  number: chapter.number,
+                })
+              : fill(m.verdictOther, {
+                  detected: report.detected_chapter_number,
+                  confidence,
+                  number: chapter.number,
+                })}
           </span>
         ) : (
           <span className="text-warning-foreground dark:text-warning">
-            This upload does not match any chapter in the list.
+            {m.verdictNone}
           </span>
         )}
       </p>
       <p className="text-muted-foreground">
-        {report.pages_total} page{report.pages_total === 1 ? "" : "s"} ·{" "}
-        {report.text_layer_pages} from the PDF&apos;s text ·{" "}
-        {report.vision_pages} read from the image · {report.chunks} passage
-        {report.chunks === 1 ? "" : "s"}{" "}
-        {chapter.indexing ? "waiting to be indexed" : "indexed"}
+        {[
+          counted(m.reportPages, report.pages_total ?? 0),
+          fill(m.reportTextLayer, { count: report.text_layer_pages ?? 0 }),
+          fill(m.reportVision, { count: report.vision_pages ?? 0 }),
+          counted(
+            chapter.indexing ? m.reportPassagesWaiting : m.reportPassagesIndexed,
+            report.chunks ?? 0,
+          ),
+        ].join(" · ")}
       </p>
       {issues.length > 0 && (
         <ul className="space-y-1">
@@ -785,7 +805,7 @@ function AgentReport({
       )}
       {report.accepted_by_name && (
         <p className="text-xs text-muted-foreground">
-          Accepted by {report.accepted_by_name}.
+          {fill(m.acceptedBy, { name: report.accepted_by_name })}
         </p>
       )}
     </div>
@@ -799,6 +819,7 @@ function PageList({
   book: BookDetail;
   chapter: ChapterRead;
 }) {
+  const { detail: m, refs, placement } = useCatalog(booksMessages);
   const pages = useChapterPages(
     book.id,
     chapter.id,
@@ -809,7 +830,7 @@ function PageList({
   if (pages.isLoading) {
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Loading pages…
+        <Loader2 className="size-4 animate-spin" /> {m.loadingPages}
       </p>
     );
   }
@@ -838,7 +859,7 @@ function PageList({
                 {/* eslint-disable-next-line @next/next/no-img-element -- served by the BFF with the session attached */}
                 <img
                   src={bookUrls.pageImage(book.id, page.id)}
-                  alt={`Page ${page.printed_page_number ?? page.position}`}
+                  alt={fill(m.pageAlt, { n: page.printed_page_number ?? page.position })}
                   loading="lazy"
                   className="h-48 w-full bg-muted object-cover object-top"
                 />
@@ -847,26 +868,26 @@ function PageList({
             <div className="space-y-1.5 p-3">
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="font-medium">
-                  {pageLabel(page.printed_page_number, page.position)}
+                  {pageLabel(refs, page.printed_page_number, page.position)}
                 </span>
-                <Badge variant="neutral">{PLACEMENT[page.placement]}</Badge>
+                <Badge variant="neutral">{placement[page.placement]}</Badge>
                 <Badge variant="outline">
-                  {page.method === "vision" ? "read by AI" : "PDF text"}
+                  {page.method === "vision" ? m.readByAi : m.pdfText}
                 </Badge>
                 {page.opens_chapter && (
-                  <Badge variant="default">chapter start</Badge>
+                  <Badge variant="default">{m.chapterStart}</Badge>
                 )}
                 {foreign && (
                   <Badge variant="warning">
                     {page.detected_chapter_number === null
-                      ? "not in chapter list"
-                      : `looks like Ch ${page.detected_chapter_number}`}
+                      ? m.notInChapterList
+                      : fill(m.looksLikeChapter, { number: page.detected_chapter_number })}
                   </Badge>
                 )}
               </div>
               <details>
                 <summary className="cursor-pointer text-xs text-muted-foreground">
-                  {page.text ? "Extracted text" : "No text could be read"}
+                  {page.text ? m.extractedText : m.noText}
                 </summary>
                 {page.text && (
                   <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-line text-xs">

@@ -5,6 +5,7 @@ import { MailCheck } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { ResendVerification } from "@/components/auth/resend-verification";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,10 @@ export function SignupForm({
         <p className="text-sm text-muted-foreground">
           Sent to <span className="font-medium text-foreground">{done.email}</span>
         </p>
+        <div className="mt-2 grid gap-2 border-t border-border pt-4">
+          <p className="text-xs text-muted-foreground">{t.auth.didntGetEmail}</p>
+          <ResendVerification email={done.email} />
+        </div>
       </div>
     );
   }

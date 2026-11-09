@@ -18,10 +18,13 @@ import { toast } from "@/components/ui/use-toast";
 import { ApiError } from "@/lib/api/errors";
 import { schools as schoolsApi } from "@/lib/api/resources";
 import type { StudentListRow } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { studentsCardMessages } from "@/lib/i18n/modules/students-card";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import {
+  CARD_DESIGNS,
   CardBackdrop,
-  DESIGN_LABELS,
   StudentCardBackView,
   StudentCardView,
   designTokens,
@@ -81,6 +84,7 @@ export function CardDesignDialog({
   onOpenChange: (open: boolean) => void;
   school: CardSchool | null;
 }) {
+  const m = useCatalog(studentsCardMessages).designer;
   const router = useRouter();
   const savedDesign = React.useMemo(() => resolveCardDesign(school), [school]);
   const [config, setConfig] = React.useState<ResolvedCardDesign>(savedDesign);
@@ -121,13 +125,13 @@ export function CardDesignDialog({
     setSaving(true);
     try {
       await schoolsApi.update(school.id, { card_design: config });
-      toast({ title: "Card design saved for the whole school." });
+      toast({ title: m.saved });
       router.refresh();
       onOpenChange(false);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not save the card design",
+        title: m.saveFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -141,19 +145,16 @@ export function CardDesignDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Card design</DialogTitle>
-          <DialogDescription>
-            Design the ID card for {school.name}. The preview shows a sample student;
-            once saved, every student&apos;s card prints in this design.
-          </DialogDescription>
+          <DialogTitle>{m.title}</DialogTitle>
+          <DialogDescription>{fill(m.description, { school: school.name })}</DialogDescription>
         </DialogHeader>
 
         <div
           role="radiogroup"
-          aria-label="Card design"
+          aria-label={m.gallery}
           className="flex max-h-56 flex-wrap justify-center gap-3 overflow-y-auto rounded-md border border-border/60 p-2"
         >
-          {(Object.keys(DESIGN_LABELS) as ResolvedCardDesign["design"][]).map((value) => (
+          {CARD_DESIGNS.map((value) => (
             <DesignThumbnail
               key={value}
               design={value}
@@ -166,157 +167,145 @@ export function CardDesignDialog({
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <DesignerSelect
-            label="Orientation"
+            label={m.orientation}
             value={config.orientation}
             onChange={(v) => set("orientation", v as ResolvedCardDesign["orientation"])}
             options={[
-              ["landscape", "Landscape (wallet)"],
-              ["portrait", "Portrait (lanyard)"],
+              ["landscape", m.landscape],
+              ["portrait", m.portrait],
             ]}
           />
           <DesignerSelect
-            label="Logo position"
+            label={m.logoPosition}
             value={config.logo_position}
             onChange={(v) => set("logo_position", v as ResolvedCardDesign["logo_position"])}
             options={[
-              ["start", "Left"],
-              ["center", "Centre"],
-              ["end", "Right"],
+              ["start", m.logoStart],
+              ["center", m.logoCenter],
+              ["end", m.logoEnd],
             ]}
           />
           <DesignerSelect
-            label="Contact number"
+            label={m.contactNumber}
             value={config.contact_number}
             onChange={(v) => set("contact_number", v as ResolvedCardDesign["contact_number"])}
             options={[
-              ["guardian", "Guardian's"],
-              ["emergency", "Emergency contact"],
-              ["school", "School office"],
+              ["guardian", m.contactGuardian],
+              ["emergency", m.contactEmergency],
+              ["school", m.contactSchool],
             ]}
           />
           <DesignerSelect
-            label="Photo shape"
+            label={m.photoShape}
             value={config.photo_shape}
             onChange={(v) => set("photo_shape", v as ResolvedCardDesign["photo_shape"])}
             options={[
-              ["rounded", "Rounded"],
-              ["circle", "Circle"],
-              ["square", "Square"],
+              ["rounded", m.shapeRounded],
+              ["circle", m.shapeCircle],
+              ["square", m.shapeSquare],
             ]}
           />
           <DesignerSelect
-            label="Photo size"
+            label={m.photoSize}
             value={config.photo_size}
             onChange={(v) => set("photo_size", v as ResolvedCardDesign["photo_size"])}
             options={[
-              ["sm", "Small"],
-              ["md", "Medium"],
-              ["lg", "Large"],
+              ["sm", m.sizeSm],
+              ["md", m.sizeMd],
+              ["lg", m.sizeLg],
             ]}
           />
           <DesignerSelect
-            label="Photo side"
+            label={m.photoSide}
             value={config.photo_position}
             onChange={(v) => set("photo_position", v as ResolvedCardDesign["photo_position"])}
             options={[
-              ["start", "Left of details"],
-              ["end", "Right of details"],
+              ["start", m.photoStart],
+              ["end", m.photoEnd],
             ]}
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <DesignerToggle
-            label="Admission no."
+            label={m.showAdmissionNo}
             checked={config.show_admission_number}
             onChange={(v) => set("show_admission_number", v)}
           />
           <DesignerToggle
-            label="Class"
+            label={m.showClass}
             checked={config.show_class}
             onChange={(v) => set("show_class", v)}
           />
           <DesignerToggle
-            label="Date of birth"
+            label={m.showDateOfBirth}
             checked={config.show_date_of_birth}
             onChange={(v) => set("show_date_of_birth", v)}
           />
           <DesignerToggle
-            label="Guardian name"
+            label={m.showGuardianName}
             checked={config.show_guardian_name}
             onChange={(v) => set("show_guardian_name", v)}
           />
           <DesignerToggle
-            label="QR code (on back)"
+            label={m.showQr}
             checked={config.show_qr}
             onChange={(v) => set("show_qr", v)}
           />
           <DesignerToggle
-            label="Validity dates (on back)"
+            label={m.showValidity}
             checked={config.show_validity}
             onChange={(v) => set("show_validity", v)}
           />
         </div>
 
         <div className="grid gap-1 text-xs">
-          <span className="text-muted-foreground">
-            School rules — printed on the card&apos;s back, one per line (up to six)
-          </span>
+          <span className="text-muted-foreground">{m.rulesLabel}</span>
           <textarea
             value={rulesText}
             onChange={(event) => changeRules(event.target.value)}
             rows={3}
-            placeholder={
-              "Be on time for school and classes\nWear the proper school uniform every day"
-            }
+            placeholder={m.rulesPlaceholder}
             className="rounded-control border border-input bg-card px-2 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         <div className="grid gap-1 text-xs">
-          <span className="text-muted-foreground">
-            Front footer line — leave empty for the standard &quot;If found, please call
-            …&quot; with the chosen contact number
-          </span>
+          <span className="text-muted-foreground">{m.contactLineLabel}</span>
           <input
             type="text"
             value={config.contact_line}
             onChange={(event) => set("contact_line", event.target.value.slice(0, 120))}
-            placeholder="If found, please call 0300 1234567"
+            placeholder={m.contactLinePlaceholder}
             className="h-8 rounded-control border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         <div className="grid gap-1 text-xs">
-          <span className="text-muted-foreground">
-            &quot;If found&quot; notice — printed on the back; leave empty for the standard
-            line with the school name and contact number
-          </span>
+          <span className="text-muted-foreground">{m.foundNoticeLabel}</span>
           <textarea
             value={config.found_notice}
             onChange={(event) => set("found_notice", event.target.value.slice(0, 300))}
             rows={2}
-            placeholder="This card identifies a student of Cambridge International and remains school property. If found, please return it to the school office or call 0300 1234567."
+            placeholder={m.foundNoticePlaceholder}
             className="rounded-control border border-input bg-card px-2 py-1.5 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4">
-          <p className="mb-3 text-center text-xs text-muted-foreground">
-            Preview — sample student, front
-          </p>
+          <p className="mb-3 text-center text-xs text-muted-foreground">{m.previewFront}</p>
           <StudentCardView student={SAMPLE_STUDENT} school={school} config={config} />
-          <p className="my-3 text-center text-xs text-muted-foreground">Back</p>
+          <p className="my-3 text-center text-xs text-muted-foreground">{m.previewBack}</p>
           <StudentCardBackView student={SAMPLE_STUDENT} school={school} config={config} />
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button onClick={save} disabled={saving}>
             <Save className="size-4" aria-hidden />
-            {saving ? "Saving…" : "Save design for school"}
+            {saving ? m.saving : m.save}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -386,6 +375,8 @@ function DesignThumbnail({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const designLabels: Record<ResolvedCardDesign["design"], string> =
+    useCatalog(studentsCardMessages).designs;
   const tokens = designTokens(design, palette);
   const headerBand = tokens.headerStyle?.backgroundColor || tokens.headerStyle?.backgroundImage;
 
@@ -486,7 +477,7 @@ function DesignThumbnail({
           selected ? "font-medium text-foreground" : "text-muted-foreground",
         )}
       >
-        {DESIGN_LABELS[design]}
+        {designLabels[design]}
       </span>
     </button>
   );

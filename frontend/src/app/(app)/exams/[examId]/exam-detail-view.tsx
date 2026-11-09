@@ -43,8 +43,11 @@ import {
 } from "@/hooks/use-exams";
 import { useSubjects } from "@/hooks/use-subjects";
 import type { ExamPaperRead, MarkEntry } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { examsMessages } from "@/lib/i18n/modules/exams";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { formatDate } from "@/lib/utils";
-import { EXAM_STATUS_LABELS, ExamFormDialog } from "../exam-form-dialog";
+import { ExamFormDialog } from "../exam-form-dialog";
 
 /** Add a paper, or edit an existing one's date and marks scheme. */
 function PaperFormDialog({
@@ -58,6 +61,7 @@ function PaperFormDialog({
   onOpenChange: (open: boolean) => void;
   paper: ExamPaperRead | null;
 }) {
+  const m = useCatalog(examsMessages).paperForm;
   const classes = useClassSummary();
   const subjects = useSubjects({ size: 100 });
   const add = useAddPaper(examId);
@@ -100,27 +104,23 @@ function PaperFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {paper ? `${paper.class_name} · ${paper.subject_name}` : "Add a paper"}
+            {paper ? `${paper.class_name} · ${paper.subject_name}` : m.addTitle}
           </DialogTitle>
-          <DialogDescription>
-            {paper
-              ? "The class and subject are fixed — a paper with marks re-pointed elsewhere would reassign a whole class's results."
-              : "One class sitting one subject. Each pairing can appear once per exam."}
-          </DialogDescription>
+          <DialogDescription>{paper ? m.editDescription : m.addDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           {!paper && (
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="paper-class">Class</Label>
+                <Label htmlFor="paper-class">{m.class}</Label>
                 <NativeSelect
                   id="paper-class"
                   value={classId}
                   onChange={(event) => setClassId(event.target.value)}
                 >
                   <option value="" disabled>
-                    Choose…
+                    {m.choose}
                   </option>
                   {(classes.data ?? []).map((item) => (
                     <option key={item.id} value={item.id}>
@@ -130,14 +130,14 @@ function PaperFormDialog({
                 </NativeSelect>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="paper-subject">Subject</Label>
+                <Label htmlFor="paper-subject">{m.subject}</Label>
                 <NativeSelect
                   id="paper-subject"
                   value={subjectId}
                   onChange={(event) => setSubjectId(event.target.value)}
                 >
                   <option value="" disabled>
-                    Choose…
+                    {m.choose}
                   </option>
                   {(subjects.data?.items ?? []).map((subject) => (
                     <option key={subject.id} value={subject.id}>
@@ -150,7 +150,7 @@ function PaperFormDialog({
           )}
           <div className="grid grid-cols-3 gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="paper-date">Date</Label>
+              <Label htmlFor="paper-date">{m.date}</Label>
               <Input
                 id="paper-date"
                 type="date"
@@ -159,7 +159,7 @@ function PaperFormDialog({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="paper-max">Max marks</Label>
+              <Label htmlFor="paper-max">{m.maxMarks}</Label>
               <Input
                 id="paper-max"
                 type="number"
@@ -169,7 +169,7 @@ function PaperFormDialog({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="paper-pass">Pass marks</Label>
+              <Label htmlFor="paper-pass">{m.passMarks}</Label>
               <Input
                 id="paper-pass"
                 type="number"
@@ -184,13 +184,13 @@ function PaperFormDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button
             onClick={save}
             disabled={saving || (!paper && (!classId || !subjectId)) || !Number(maxMarks)}
           >
-            {saving ? "Saving…" : paper ? "Save changes" : "Add paper"}
+            {saving ? m.saving : paper ? m.saveChanges : m.add}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -217,6 +217,7 @@ function MarksDialog({
   onClose: () => void;
   canManage: boolean;
 }) {
+  const m = useCatalog(examsMessages).marks;
   const query = usePaperMarks(paperId);
   const save = useSaveMarks(examId);
 
@@ -271,13 +272,13 @@ function MarksDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {paper ? `${paper.class_name} · ${paper.subject_name}` : "Mark sheet"}
+            {paper ? `${paper.class_name} · ${paper.subject_name}` : m.title}
           </DialogTitle>
           <DialogDescription>
             {paper
-              ? `Out of ${paper.max_marks}${
-                  paper.pass_marks !== null ? `, pass at ${paper.pass_marks}` : ""
-                }. Absent rows save as "AB"; rows left blank are not saved at all.`
+              ? paper.pass_marks !== null
+                ? fill(m.outOfWithPass, { max: paper.max_marks, pass: paper.pass_marks })
+                : fill(m.outOf, { max: paper.max_marks })
               : ""}
           </DialogDescription>
         </DialogHeader>
@@ -292,11 +293,11 @@ function MarksDialog({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-24">Roll no.</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead className="w-24">Marks</TableHead>
-                  <TableHead className="w-20">Absent</TableHead>
-                  <TableHead>Remarks</TableHead>
+                  <TableHead className="w-24">{m.colRoll}</TableHead>
+                  <TableHead>{m.colStudent}</TableHead>
+                  <TableHead className="w-24">{m.colMarks}</TableHead>
+                  <TableHead className="w-20">{m.colAbsent}</TableHead>
+                  <TableHead>{m.colRemarks}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -324,7 +325,7 @@ function MarksDialog({
                           value={draft.marks}
                           disabled={!canManage || draft.absent}
                           aria-invalid={invalid || undefined}
-                          aria-label={`Marks for ${row.full_name}`}
+                          aria-label={fill(m.marksFor, { name: row.full_name })}
                           onChange={(event) =>
                             setDraft(row.student_id, { marks: event.target.value })
                           }
@@ -336,7 +337,7 @@ function MarksDialog({
                           type="checkbox"
                           checked={draft.absent}
                           disabled={!canManage}
-                          aria-label={`${row.full_name} absent`}
+                          aria-label={fill(m.absentFor, { name: row.full_name })}
                           onChange={(event) =>
                             setDraft(row.student_id, {
                               absent: event.target.checked,
@@ -350,7 +351,7 @@ function MarksDialog({
                         <Input
                           value={draft.remarks}
                           disabled={!canManage}
-                          aria-label={`Remarks for ${row.full_name}`}
+                          aria-label={fill(m.remarksFor, { name: row.full_name })}
                           onChange={(event) =>
                             setDraft(row.student_id, { remarks: event.target.value })
                           }
@@ -367,17 +368,23 @@ function MarksDialog({
 
         {overMax > 0 && paper && (
           <p role="alert" className="text-sm text-destructive">
-            {overMax} row(s) exceed the paper&apos;s maximum of {paper.max_marks}.
+            {overMax === 1
+              ? fill(m.overMaxOne, { max: paper.max_marks })
+              : fill(m.overMaxMany, { count: overMax, max: paper.max_marks })}
           </p>
         )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={save.isPending}>
-            Close
+            {m.close}
           </Button>
           {canManage && (
             <Button onClick={submit} disabled={save.isPending || entries.length === 0 || overMax > 0}>
-              {save.isPending ? "Saving…" : `Save ${entries.length} entr${entries.length === 1 ? "y" : "ies"}`}
+              {save.isPending
+                ? m.saving
+                : entries.length === 1
+                  ? m.saveOne
+                  : fill(m.saveMany, { count: entries.length })}
             </Button>
           )}
         </DialogFooter>
@@ -388,6 +395,7 @@ function MarksDialog({
 
 /** The ranked result sheet for one class of this exam. */
 function ResultsCard({ examId, papers }: { examId: string; papers: ExamPaperRead[] }) {
+  const m = useCatalog(examsMessages).results;
   // The classes that actually sat this exam, derived from its papers.
   const classOptions = React.useMemo(() => {
     const seen = new Map<string, string>();
@@ -407,17 +415,14 @@ function ResultsCard({ examId, papers }: { examId: string; papers: ExamPaperRead
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Results</CardTitle>
-        <CardDescription>
-          Papers as columns, students ranked by percentage of the papers marked for
-          them — an unmarked paper does not count as zero.
-        </CardDescription>
+        <CardTitle>{m.title}</CardTitle>
+        <CardDescription>{m.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <NativeSelect
           value={classId}
           onChange={(event) => setClassId(event.target.value)}
-          aria-label="Class"
+          aria-label={m.classAria}
           className="max-w-xs"
         >
           {classOptions.map(([id, name]) => (
@@ -433,7 +438,7 @@ function ResultsCard({ examId, papers }: { examId: string; papers: ExamPaperRead
         )}
 
         {results.data && results.data.rows.length === 0 && (
-          <p className="text-sm text-muted-foreground">No students seated in this class.</p>
+          <p className="text-sm text-muted-foreground">{m.noStudents}</p>
         )}
 
         {results.data && results.data.rows.length > 0 && (
@@ -441,18 +446,19 @@ function ResultsCard({ examId, papers }: { examId: string; papers: ExamPaperRead
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-14">Rank</TableHead>
-                  <TableHead>Student</TableHead>
+                  <TableHead className="w-14">{m.colRank}</TableHead>
+                  <TableHead>{m.colStudent}</TableHead>
                   {results.data.papers.map((paper) => (
-                    <TableHead key={paper.id} className="text-right">
+                    <TableHead key={paper.id} className="text-end">
                       <span title={paper.subject_name}>{paper.subject_code}</span>
                       <span className="block text-[10px] font-normal text-muted-foreground">
                         /{paper.max_marks}
                       </span>
                     </TableHead>
                   ))}
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="w-20 text-right">%</TableHead>
+                  <TableHead className="text-end">{m.colTotal}</TableHead>
+                  <TableHead className="w-20 text-end">%</TableHead>
+                  <TableHead className="w-20">{m.colGrade}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -466,21 +472,37 @@ function ResultsCard({ examId, papers }: { examId: string; papers: ExamPaperRead
                       </span>
                     </TableCell>
                     {row.cells.map((cell) => (
-                      <TableCell key={cell.paper_id} className="text-right tabular-nums">
+                      <TableCell key={cell.paper_id} className="text-end tabular-nums">
                         {cell.is_absent ? (
-                          <span className="text-destructive">AB</span>
+                          <span className="text-destructive">{m.absentShort}</span>
                         ) : cell.marks_obtained !== null ? (
-                          cell.marks_obtained
+                          <>
+                            {cell.marks_obtained}
+                            {cell.grade ? (
+                              <span className="block text-[10px] text-muted-foreground">
+                                {cell.grade}
+                              </span>
+                            ) : null}
+                          </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                     ))}
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">
                       {row.total_obtained}/{row.total_max}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell className="text-end font-medium tabular-nums">
                       {row.percentage}%
+                    </TableCell>
+                    <TableCell>
+                      {row.grade ? (
+                        <span title={row.remark ?? undefined} className="font-semibold">
+                          {row.grade}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -488,6 +510,27 @@ function ResultsCard({ examId, papers }: { examId: string; papers: ExamPaperRead
             </Table>
           </div>
         )}
+
+        {/* The legend: which bands these grades came from, so a printed sheet can be
+            read without knowing this campus's settings. */}
+        {results.data && results.data.rows.length > 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {m.gradesLegend}{" "}
+            {results.data.grading_scale
+              .map((band, index, all) =>
+                index === all.length - 1
+                  ? fill(m.bandBelow, {
+                      grade: band.grade,
+                      min: all[index - 1]?.min_percent.replace(/\.00$/, "") ?? "—",
+                    })
+                  : fill(m.bandFrom, {
+                      grade: band.grade,
+                      min: band.min_percent.replace(/\.00$/, ""),
+                    }),
+              )
+              .join(" · ")}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -500,6 +543,7 @@ export function ExamDetailView({
   examId: string;
   canManage: boolean;
 }) {
+  const { detail: m, status: statusLabel } = useCatalog(examsMessages);
   const exam = useExam(examId);
   const papers = useExamPapers(examId);
   const removePaper = useRemovePaper(examId);
@@ -520,8 +564,8 @@ export function ExamDetailView({
         href="/exams"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        All exams
+        <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
+        {m.allExams}
       </Link>
 
       {exam.isPending ? (
@@ -534,7 +578,7 @@ export function ExamDetailView({
               ? `${formatDate(exam.data.start_date)}${
                   exam.data.end_date ? ` – ${formatDate(exam.data.end_date)}` : ""
                 }`
-              : "No dates set"
+              : m.noDates
           }
           actions={
             <div className="flex items-center gap-2">
@@ -547,12 +591,12 @@ export function ExamDetailView({
                       : "outline"
                 }
               >
-                {EXAM_STATUS_LABELS[exam.data.status]}
+                {statusLabel[exam.data.status]}
               </Badge>
               {canManage && (
                 <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                  <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden />
-                  Edit
+                  <Pencil className="me-1 h-3.5 w-3.5" aria-hidden />
+                  {m.edit}
                 </Button>
               )}
             </div>
@@ -563,8 +607,8 @@ export function ExamDetailView({
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>Papers</CardTitle>
-            <CardDescription>One class sitting one subject, each with its own sheet.</CardDescription>
+            <CardTitle>{m.papersTitle}</CardTitle>
+            <CardDescription>{m.papersDescription}</CardDescription>
           </div>
           {canManage && (
             <Button
@@ -574,8 +618,8 @@ export function ExamDetailView({
                 setPaperFormOpen(true);
               }}
             >
-              <Plus className="mr-1 h-4 w-4" aria-hidden />
-              Add paper
+              <Plus className="me-1 h-4 w-4" aria-hidden />
+              {m.addPaper}
             </Button>
           )}
         </CardHeader>
@@ -588,8 +632,8 @@ export function ExamDetailView({
           {papers.data && papers.data.length === 0 && (
             <EmptyState
               icon={ClipboardList}
-              title="No papers yet"
-              description="Add the papers this exam is sat as — mark sheets open from each row."
+              title={m.noPapers}
+              description={m.noPapersHint}
             />
           )}
 
@@ -597,11 +641,11 @@ export function ExamDetailView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Class</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead className="w-32">Date</TableHead>
-                  <TableHead className="w-28">Max / pass</TableHead>
-                  <TableHead className="w-24">Entered</TableHead>
+                  <TableHead>{m.colClass}</TableHead>
+                  <TableHead>{m.colSubject}</TableHead>
+                  <TableHead className="w-32">{m.colDate}</TableHead>
+                  <TableHead className="w-28">{m.colMaxPass}</TableHead>
+                  <TableHead className="w-24">{m.colEntered}</TableHead>
                   <TableHead className="w-56" />
                 </TableRow>
               </TableHeader>
@@ -623,13 +667,13 @@ export function ExamDetailView({
                       {paper.pass_marks !== null ? ` / ${paper.pass_marks}` : ""}
                     </TableCell>
                     <TableCell className="tabular-nums">{paper.marks_entered}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-end">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => setMarksPaperId(paper.id)}
                       >
-                        {canManage ? "Enter marks" : "View marks"}
+                        {canManage ? m.enterMarks : m.viewMarks}
                       </Button>
                       {canManage && (
                         <>
@@ -641,7 +685,7 @@ export function ExamDetailView({
                               setPaperFormOpen(true);
                             }}
                           >
-                            Edit
+                            {m.edit}
                           </Button>
                           <Button
                             size="sm"
@@ -650,7 +694,10 @@ export function ExamDetailView({
                           >
                             <Trash2 className="h-3 w-3" aria-hidden />
                             <span className="sr-only">
-                              Remove {paper.class_name} {paper.subject_name}
+                              {fill(m.removeNamed, {
+                                className: paper.class_name,
+                                subject: paper.subject_name,
+                              })}
                             </span>
                           </Button>
                         </>
@@ -684,9 +731,12 @@ export function ExamDetailView({
       <ConfirmDialog
         open={removingPaper !== null}
         onOpenChange={(open) => !open && setRemovingPaper(null)}
-        title={`Remove ${removingPaper?.class_name ?? ""} · ${removingPaper?.subject_name ?? "this paper"}?`}
-        description="This is refused once marks have been entered for it."
-        confirmLabel="Remove"
+        title={fill(m.removeTitle, {
+          className: removingPaper?.class_name ?? "",
+          subject: removingPaper?.subject_name ?? m.removeFallback,
+        })}
+        description={m.removeDescription}
+        confirmLabel={m.remove}
         variant="destructive"
         onConfirm={() => {
           if (removingPaper) removePaper.mutate(removingPaper.id);

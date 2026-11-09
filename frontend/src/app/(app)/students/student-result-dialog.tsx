@@ -25,27 +25,11 @@ import {
 } from "@/components/ui/table";
 import { useExamResults } from "@/hooks/use-exams";
 import type { ExamClassResults, ExamResultRow, StudentListRow } from "@/lib/api/types";
+import { fill, ltr } from "@/lib/i18n/format";
+import { examsMessages } from "@/lib/i18n/modules/exams";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { resolvePalette, type CardSchool } from "./student-card";
-
-/**
- * The board letter grade for an overall percentage.
- *
- * The LEGACY Pakistani board scale (A1/A+ at 80, pass at 33) rather than the
- * post-2023 ten-band A++–U scheme: the revised scheme is still rolling out
- * board by board, and the cards schools actually hand to parents — including
- * every print-shop template this card is modelled on — carry this one. One
- * function, so switching a school to the new bands is a local edit.
- */
-function gradeFor(percentage: number): { grade: string; remarks: string } {
-  if (percentage >= 80) return { grade: "A+", remarks: "Excellent" };
-  if (percentage >= 70) return { grade: "A", remarks: "Very Good" };
-  if (percentage >= 60) return { grade: "B", remarks: "Good" };
-  if (percentage >= 50) return { grade: "C", remarks: "Satisfactory" };
-  if (percentage >= 40) return { grade: "D", remarks: "Fair" };
-  if (percentage >= 33) return { grade: "E", remarks: "Needs improvement" };
-  return { grade: "F", remarks: "Fail" };
-}
 
 /**
  * Prints ONLY the result card. Same visibility trick as `CardPrintStyle` (see
@@ -137,13 +121,18 @@ function ResultCardSheet({
   results: ExamClassResults;
   row: ExamResultRow;
 }) {
+  const m = useCatalog(examsMessages).card;
   const palette = resolvePalette(school);
   const primary = palette[0];
   const secondary = palette[1] ?? primary;
 
   const cellByPaper = new Map(row.cells.map((cell) => [cell.paper_id, cell]));
-  const percentage = Number(row.percentage);
-  const { grade, remarks } = gradeFor(percentage);
+  // The grade comes from the API, graded on THIS campus's scale (the board scale
+  // until the principal changes it under Exams → Grading scale) — the same one the
+  // result sheet and the parent portal show.
+  const grade = row.grade ?? "—";
+  const remarks = row.remark ?? "";
+  const failBand = results.grading_scale[results.grading_scale.length - 1];
   // A paper under its declared pass line (or sat absent, where one is
   // declared) fails the subject; the board grade only ever softens the story,
   // so the verdict is computed from the papers, not the percentage.
@@ -154,7 +143,9 @@ function ResultCardSheet({
     if (cell.is_absent) return true;
     return cell.marks_obtained !== null && Number(cell.marks_obtained) < paper.pass_marks;
   }).length;
-  const passed = failedPapers === 0 && percentage >= 33;
+  // FAIL for any paper under its pass mark, or an overall result in the scale's
+  // lowest band — "under 33%" on the board scale, whatever the campus set otherwise.
+  const passed = failedPapers === 0 && row.grade !== null && row.grade !== failBand?.grade;
 
   const contactLine = [
     [school?.address, school?.city].filter(Boolean).join(", "),
@@ -181,10 +172,12 @@ function ResultCardSheet({
             className="mt-2 text-3xl font-extrabold uppercase leading-tight"
             style={{ color: primary }}
           >
-            {school?.name ?? "School"}
+            {school?.name ?? m.schoolFallback}
           </h1>
           {school?.code ? (
-            <p className="mt-1 text-sm font-semibold">Registration No: {school.code}</p>
+            <p className="mt-1 text-sm font-semibold">
+              {fill(m.registrationNo, { code: ltr(school.code) })}
+            </p>
           ) : null}
           {contactLine ? (
             <p
@@ -199,7 +192,7 @@ function ResultCardSheet({
               className="mt-3 inline-block rounded-md px-6 py-1 text-sm font-bold uppercase tracking-[0.2em]"
               style={{ backgroundColor: primary, color: "#ffffff" }}
             >
-              Result card
+              {m.banner}
             </span>
           </div>
         </div>
@@ -209,16 +202,16 @@ function ResultCardSheet({
             without the office striking one out. */}
         <div className="mt-5 space-y-2.5 text-sm">
           <div className="flex gap-6">
-            <BlankField label="Name" value={student.full_name} className="flex-[3]" />
+            <BlankField label={m.name} value={student.full_name} className="flex-[3]" />
             <BlankField
-              label="S/o, D/o"
+              label={m.guardian}
               value={student.guardian_name ?? ""}
               className="flex-[2]"
             />
           </div>
           <div className="flex gap-6">
             <BlankField
-              label="Class"
+              label={m.class}
               value={
                 student.class_name
                   ? `${student.class_name}${student.section_name ? ` (${student.section_name})` : ""}`
@@ -226,22 +219,22 @@ function ResultCardSheet({
               }
               className="flex-1"
             />
-            <BlankField label="Examination" value={examName} className="flex-[2]" />
+            <BlankField label={m.examination} value={examName} className="flex-[2]" />
             <BlankField
-              label="Session"
+              label={m.session}
               value={new Date().getFullYear()}
               className="w-32 flex-none"
             />
           </div>
           <div className="flex gap-6">
             <BlankField
-              label="Admission No"
+              label={m.admissionNo}
               value={student.admission_number}
               className="flex-1"
             />
             <BlankField
-              label="Position in class"
-              value={`${row.rank} of ${results.rows.length}`}
+              label={m.position}
+              value={fill(m.positionValue, { rank: row.rank, total: results.rows.length })}
               className="flex-1"
             />
           </div>
@@ -253,10 +246,11 @@ function ResultCardSheet({
         <table className="mt-4 w-full border-collapse text-sm">
           <thead>
             <tr style={{ backgroundColor: primary, color: "#ffffff" }}>
-              <th className="w-12 border border-black px-2 py-1.5">Sr.#</th>
-              <th className="border border-black px-2 py-1.5 text-start">Subjects</th>
-              <th className="w-24 border border-black px-2 py-1.5">Full Marks</th>
-              <th className="w-24 border border-black px-2 py-1.5">Marks Obtained</th>
+              <th className="w-12 border border-black px-2 py-1.5">{m.srNo}</th>
+              <th className="border border-black px-2 py-1.5 text-start">{m.subjects}</th>
+              <th className="w-24 border border-black px-2 py-1.5">{m.fullMarks}</th>
+              <th className="w-24 border border-black px-2 py-1.5">{m.marksObtained}</th>
+              <th className="w-16 border border-black px-2 py-1.5">{m.grade}</th>
             </tr>
           </thead>
           <tbody>
@@ -277,14 +271,17 @@ function ResultCardSheet({
                     {/* AB is the register's own notation for an absence; an
                         unmarked paper stays blank, exactly like a hand-ruled
                         card, rather than printing a zero nobody awarded. */}
-                    {cell?.is_absent ? "AB" : (cell?.marks_obtained ?? "")}
+                    {cell?.is_absent ? m.absent : (cell?.marks_obtained ?? "")}
+                  </td>
+                  <td className="border border-black px-2 py-1 text-center font-medium">
+                    {cell?.grade ?? ""}
                   </td>
                 </tr>
               );
             })}
             <tr className="font-bold">
               <td className="border border-black px-2 py-1.5 text-center" colSpan={2}>
-                Total
+                {m.total}
               </td>
               <td className="border border-black px-2 py-1.5 text-center tabular-nums">
                 {row.total_max}
@@ -292,37 +289,40 @@ function ResultCardSheet({
               <td className="border border-black px-2 py-1.5 text-center tabular-nums">
                 {row.total_obtained}
               </td>
+              <td className="border border-black px-2 py-1.5 text-center">{row.grade ?? ""}</td>
             </tr>
           </tbody>
         </table>
 
-        {/* The verdict strip: percentage, board grade, pass/fail. */}
+        {/* The verdict strip: percentage, grade on the campus scale, pass/fail. */}
         <div className="mt-4 flex items-stretch gap-4 text-sm">
           <div className="flex-1 border border-black p-2 text-center">
-            <p className="text-xs font-semibold uppercase">Percentage</p>
+            <p className="text-xs font-semibold uppercase">{m.percentage}</p>
             <p className="text-lg font-bold tabular-nums">{row.percentage}%</p>
           </div>
           <div className="flex-1 border border-black p-2 text-center">
-            <p className="text-xs font-semibold uppercase">Grade</p>
+            <p className="text-xs font-semibold uppercase">{m.grade}</p>
             <p className="text-lg font-bold">{grade}</p>
           </div>
           <div className="flex-1 border border-black p-2 text-center">
-            <p className="text-xs font-semibold uppercase">Result</p>
+            <p className="text-xs font-semibold uppercase">{m.result}</p>
             <p className="text-lg font-bold" style={{ color: passed ? primary : "#b91c1c" }}>
-              {passed ? "PASS" : "FAIL"}
+              {passed ? m.pass : m.fail}
             </p>
           </div>
           <div className="flex-[2] border border-black p-2 text-center">
-            <p className="text-xs font-semibold uppercase">Remarks</p>
+            <p className="text-xs font-semibold uppercase">{m.remarks}</p>
             <p className="text-lg font-bold">
-              {failedPapers > 0
-                ? `Failed in ${failedPapers} subject${failedPapers === 1 ? "" : "s"}`
-                : remarks}
+              {failedPapers === 1
+                ? m.failedInOne
+                : failedPapers > 1
+                  ? fill(m.failedInMany, { count: failedPapers })
+                  : remarks}
             </p>
           </div>
         </div>
 
-        <BlankField label="General Remarks" value="" className="mt-5 text-sm" />
+        <BlankField label={m.generalRemarks} value="" className="mt-5 text-sm" />
 
         {/* Signatures — the two hands every Pakistani result card is signed
             by, with room under each ruled line. */}
@@ -330,13 +330,13 @@ function ResultCardSheet({
           <div className="w-48 text-center">
             <div className="border-b border-black" />
             <p className="mt-1 font-semibold" style={{ color: primary }}>
-              Teacher&apos;s Signature
+              {m.teacherSignature}
             </p>
           </div>
           <div className="w-48 text-center">
             <div className="border-b border-black" />
             <p className="mt-1 font-semibold" style={{ color: primary }}>
-              Principal
+              {m.principal}
             </p>
           </div>
         </div>
@@ -372,6 +372,7 @@ export function StudentResultDialog({
   school: CardSchool | null;
   onClose: () => void;
 }) {
+  const m = useCatalog(examsMessages).studentResult;
   const open = Boolean(student && classId);
   const results = useExamResults(examId, open ? classId : null);
 
@@ -396,7 +397,7 @@ export function StudentResultDialog({
         <ResultCardPrintStyle />
 
         <DialogHeader>
-          <DialogTitle>{student?.full_name ?? "Result"}</DialogTitle>
+          <DialogTitle>{student?.full_name ?? m.fallbackTitle}</DialogTitle>
           <DialogDescription>
             {examName}
             {student?.class_name ? ` — ${student.class_name}` : ""}
@@ -412,9 +413,7 @@ export function StudentResultDialog({
         {results.data && !row ? (
           // Seated in the class but on no marked sheet — possible when marks
           // were entered before a transfer. Missing data, not a zero.
-          <p className="text-sm text-muted-foreground">
-            No marks recorded for this student in {examName}.
-          </p>
+          <p className="text-sm text-muted-foreground">{fill(m.noMarks, { exam: examName })}</p>
         ) : null}
 
         {results.data && row ? (
@@ -423,10 +422,10 @@ export function StudentResultDialog({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead className="w-28 text-right">Marks</TableHead>
-                    <TableHead className="w-20 text-right">Pass at</TableHead>
-                    <TableHead className="w-24 text-right">Status</TableHead>
+                    <TableHead>{m.colSubject}</TableHead>
+                    <TableHead className="w-28 text-end">{m.colMarks}</TableHead>
+                    <TableHead className="w-20 text-end">{m.colPassAt}</TableHead>
+                    <TableHead className="w-24 text-end">{m.colStatus}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -449,7 +448,7 @@ export function StudentResultDialog({
                         </TableCell>
                         <TableCell
                           className={cn(
-                            "text-right tabular-nums",
+                            "text-end tabular-nums",
                             (failed || cell?.is_absent) && "text-destructive",
                           )}
                         >
@@ -459,21 +458,21 @@ export function StudentResultDialog({
                               ? `${cell.marks_obtained}/${paper.max_marks}`
                               : "—"}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                        <TableCell className="text-end tabular-nums text-muted-foreground">
                           {paper.pass_marks ?? "—"}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           {!marked ? (
                             // The paper exists but no mark was entered: the
                             // totals below exclude it, so say so rather than
                             // leaving a blank that reads as "fine".
-                            <span className="text-xs text-muted-foreground">Not marked</span>
+                            <span className="text-xs text-muted-foreground">{m.notMarked}</span>
                           ) : cell?.is_absent ? (
-                            <span className="text-xs font-medium text-destructive">Absent</span>
+                            <span className="text-xs font-medium text-destructive">{m.absent}</span>
                           ) : failed ? (
-                            <span className="text-xs font-medium text-destructive">Failed</span>
+                            <span className="text-xs font-medium text-destructive">{m.failed}</span>
                           ) : paper.pass_marks !== null ? (
-                            <span className="text-xs font-medium text-success">Passed</span>
+                            <span className="text-xs font-medium text-success">{m.passed}</span>
                           ) : (
                             // No pass line declared — a number, not a verdict.
                             <span className="text-xs text-muted-foreground">—</span>
@@ -488,7 +487,11 @@ export function StudentResultDialog({
 
             <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
               <span className="text-muted-foreground">
-                Rank {row.rank} of {results.data.rows.length} in {results.data.class_name}
+                {fill(m.rankLine, {
+                  rank: row.rank,
+                  total: results.data.rows.length,
+                  className: results.data.class_name,
+                })}
               </span>
               <span className="tabular-nums">
                 <span className="font-medium">
@@ -496,6 +499,13 @@ export function StudentResultDialog({
                 </span>{" "}
                 <span className="text-muted-foreground">·</span>{" "}
                 <span className="font-medium">{row.percentage}%</span>
+                {row.grade ? (
+                  <>
+                    {" "}
+                    <span className="text-muted-foreground">·</span>{" "}
+                    <span className="font-semibold">{row.grade}</span>
+                  </>
+                ) : null}
               </span>
             </div>
 
@@ -514,16 +524,16 @@ export function StudentResultDialog({
         <DialogFooter>
           {student ? (
             <Button variant="outline" asChild>
-              <Link href={`/students/${student.id}`}>View profile</Link>
+              <Link href={`/students/${student.id}`}>{m.viewProfile}</Link>
             </Button>
           ) : null}
           {results.data && row ? (
             <Button variant="outline" onClick={() => window.print()}>
               <Printer className="size-4" aria-hidden />
-              Print result card
+              {m.print}
             </Button>
           ) : null}
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{m.close}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

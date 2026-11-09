@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { studentsMessages } from "@/lib/i18n/modules/students";
+import { getCatalog } from "@/lib/i18n/server";
 import { StudentDetailView } from "./student-detail-view";
 
-export const metadata: Metadata = { title: "Student" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(studentsMessages)).meta.student };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -49,6 +53,8 @@ export default async function StudentDetailPage({
         PERMISSIONS.guardianUpdate,
       )}
       canTogglePortal={hasPermission(user, PERMISSIONS.guardianUpdate)}
+      canPortalCredentials={hasPermission(user, PERMISSIONS.guardianPortal)}
+      canDeleteGuardians={hasPermission(user, PERMISSIONS.guardianDelete)}
     />
   );
 }

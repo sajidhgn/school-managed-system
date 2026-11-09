@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 
 import { BillingAutomationPanel } from "@/components/fees/billing-automation-panel";
 import { ConcessionsPanel } from "@/components/fees/concessions-panel";
+import { LateFeePanel } from "@/components/fees/late-fee-panel";
 import { SiblingDiscountsPanel } from "@/components/fees/sibling-discounts-panel";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState, TableCardSkeleton } from "@/components/data-states";
@@ -51,16 +52,14 @@ import {
   useUpdateStationeryItem,
 } from "@/hooks/use-fees";
 import { currentAcademicYear } from "@/lib/academic-year";
-import {
-  FEE_RECURRENCE_LABELS,
-  FEE_STRUCTURE_STATUS_LABELS,
-  STATIONERY_CATEGORY_LABELS,
-  STATIONERY_UNIT_LABELS,
-  label,
-  unitLabel,
-  type FeeHeadRead,
-  type StationeryItemRead,
-} from "@/lib/api/types";
+import { label, type FeeHeadRead, type StationeryItemRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesSetupMessages } from "@/lib/i18n/modules/fees-setup";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
+
+/** The units an article can be sold by, in picker order. Labels come from `useLabels`. */
+const STATIONERY_UNITS = ["piece", "dozen", "pack", "set", "pair", "ream"] as const;
 
 /**
  * What the campus charges.
@@ -85,6 +84,7 @@ import {
  *   half-priced structure that then gets activated bills the wrong money.
  */
 export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
+  const m = useCatalog(feesSetupMessages).page;
   // Controlled so the Siblings tab can send someone to Concessions when no scheme
   // exists yet to pick.
   const [tab, setTab] = React.useState("heads");
@@ -94,28 +94,28 @@ export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
         href="/fees"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" aria-hidden />
-        Fees
+        <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
+        {m.back}
       </Link>
 
-      <PageHeader
-        title="Charges &amp; structures"
-        description="Define what this campus charges and sells, then price it per class and year."
-      />
+      <PageHeader title={m.title} description={m.description} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="heads">Fee heads</TabsTrigger>
-          <TabsTrigger value="stationery">Stationery</TabsTrigger>
-          <TabsTrigger value="structures">Structures</TabsTrigger>
+          <TabsTrigger value="heads">{m.tabHeads}</TabsTrigger>
+          <TabsTrigger value="stationery">{m.tabStationery}</TabsTrigger>
+          <TabsTrigger value="structures">{m.tabStructures}</TabsTrigger>
           {/* What comes off a structure's price: the schemes, then the rule that
               proposes the sibling ones per family. */}
-          <TabsTrigger value="concessions">Concessions</TabsTrigger>
-          <TabsTrigger value="siblings">Siblings</TabsTrigger>
+          <TabsTrigger value="concessions">{m.tabConcessions}</TabsTrigger>
+          <TabsTrigger value="siblings">{m.tabSiblings}</TabsTrigger>
+          {/* What is ADDED when a family pays late — billed under a head, so it
+              comes after the heads it depends on. */}
+          <TabsTrigger value="late-fees">{m.tabLateFees}</TabsTrigger>
           {/* LAST, because it is the only tab that depends on all three: automation
               bills the structures, which price the two catalogs. A school that opens
               it first has nothing for it to run. */}
-          <TabsTrigger value="automation">Automation</TabsTrigger>
+          <TabsTrigger value="automation">{m.tabAutomation}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="heads" className="mt-5">
@@ -136,6 +136,9 @@ export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
             onOpenConcessions={() => setTab("concessions")}
           />
         </TabsContent>
+        <TabsContent value="late-fees" className="mt-5">
+          <LateFeePanel academicYear={currentAcademicYear()} canIssue={canIssue} />
+        </TabsContent>
         <TabsContent value="automation" className="mt-5">
           <BillingAutomationPanel academicYear={currentAcademicYear()} canIssue={canIssue} />
         </TabsContent>
@@ -149,6 +152,8 @@ export function FeeSetupView({ canIssue }: { canIssue: boolean }) {
 // ---------------------------------------------------------------------------
 
 function FeeHeadsPanel() {
+  const { heads: m, common: c } = useCatalog(feesSetupMessages);
+  const L = useLabels();
   const heads = useFeeHeads({ size: 100 });
   const create = useCreateFeeHead();
   const remove = useDeleteFeeHead();
@@ -175,13 +180,10 @@ function FeeHeadsPanel() {
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          The charges this campus can bill. A head is only a name and a rhythm — the
-          amount belongs to a structure.
-        </p>
+        <p className="text-sm text-muted-foreground">{m.intro}</p>
         <Button size="sm" onClick={() => setAdding(true)}>
           <Plus className="size-4" aria-hidden />
-          New head
+          {m.newHead}
         </Button>
       </div>
 
@@ -192,18 +194,18 @@ function FeeHeadsPanel() {
           <ErrorState error={heads.error} onRetry={() => void heads.refetch()} />
         ) : heads.data.items.length === 0 ? (
           <EmptyState
-            title="No fee heads yet"
-            description="Add Tuition, Transport, Examination — whatever this campus charges for."
-            action={<Button onClick={() => setAdding(true)}>Add the first head</Button>}
+            title={m.emptyTitle}
+            description={m.emptyDescription}
+            action={<Button onClick={() => setAdding(true)}>{m.addFirst}</Button>}
           />
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Charged</TableHead>
+                  <TableHead>{c.code}</TableHead>
+                  <TableHead>{c.name}</TableHead>
+                  <TableHead>{m.colCharged}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -215,18 +217,18 @@ function FeeHeadsPanel() {
                       {head.name}
                       {head.is_refundable ? (
                         <Badge variant="neutral" className="ms-2">
-                          Refundable
+                          {m.refundable}
                         </Badge>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {label(FEE_RECURRENCE_LABELS, head.recurrence)}
+                      {label(L.feeRecurrence, head.recurrence)}
                     </TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label={`Delete ${head.name}`}
+                        aria-label={fill(c.deleteNamed, { name: head.name })}
                         onClick={() => setDeleting(head)}
                       >
                         <Trash2 className="size-4" aria-hidden />
@@ -244,14 +246,12 @@ function FeeHeadsPanel() {
         <DialogContent>
           <form onSubmit={submit} className="grid gap-4" noValidate>
             <DialogHeader>
-              <DialogTitle>New fee head</DialogTitle>
-              <DialogDescription>
-                The code appears on challans and cannot be reused at this campus.
-              </DialogDescription>
+              <DialogTitle>{m.dialogTitle}</DialogTitle>
+              <DialogDescription>{m.dialogDescription}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Code</span>
+                <span className="font-medium">{c.code}</span>
                 <Input
                   value={code}
                   onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -260,38 +260,35 @@ function FeeHeadsPanel() {
                 />
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Name</span>
+                <span className="font-medium">{c.name}</span>
                 <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="Tuition fee"
+                  placeholder={m.namePlaceholder}
                   required
                 />
               </label>
             </div>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Charged</span>
+              <span className="font-medium">{m.charged}</span>
               <NativeSelect
                 value={recurrence}
                 onChange={(event) => setRecurrence(event.target.value)}
               >
-                {Object.entries(FEE_RECURRENCE_LABELS).map(([value, text]) => (
+                {Object.entries(L.feeRecurrence).map(([value, text]) => (
                   <option key={value} value={value}>
                     {text}
                   </option>
                 ))}
               </NativeSelect>
-              <span className="text-xs text-muted-foreground">
-                Descriptive for now — it tells whoever generates challans what rhythm this
-                charge belongs to. It does not schedule anything on its own.
-              </span>
+              <span className="text-xs text-muted-foreground">{m.chargedHelp}</span>
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAdding(false)}>
-                Cancel
+                {c.cancel}
               </Button>
               <Button type="submit" disabled={create.isPending || !code.trim() || !name.trim()}>
-                {create.isPending ? "Adding…" : "Add head"}
+                {create.isPending ? c.adding : m.addHead}
               </Button>
             </DialogFooter>
           </form>
@@ -301,9 +298,9 @@ function FeeHeadsPanel() {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(next) => !next && setDeleting(null)}
-        title={`Delete ${deleting?.name ?? ""}?`}
-        description="Only possible while no structure prices it and no challan has ever billed it. Once it has been billed the head is part of the record and stays."
-        confirmLabel="Delete"
+        title={fill(c.deleteTitle, { name: deleting?.name ?? "" })}
+        description={m.deleteDescription}
+        confirmLabel={c.delete}
         onConfirm={async () => {
           if (!deleting) return;
           await remove.mutateAsync(deleting.id);
@@ -332,6 +329,8 @@ function FeeHeadsPanel() {
  *   who needs to know it.
  */
 function StationeryPanel() {
+  const { stationery: m, common: c } = useCatalog(feesSetupMessages);
+  const L = useLabels();
   const items = useStationeryItems({ size: 100 });
   const create = useCreateStationeryItem();
   const update = useUpdateStationeryItem();
@@ -366,13 +365,10 @@ function StationeryPanel() {
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Copies, pencils, books, uniform — anything sold by the piece. The price here is
-          per unit; how many a student gets is decided on the structure or the challan.
-        </p>
+        <p className="text-sm text-muted-foreground">{m.intro}</p>
         <Button size="sm" onClick={() => setAdding(true)}>
           <Plus className="size-4" aria-hidden />
-          New item
+          {m.newItem}
         </Button>
       </div>
 
@@ -383,19 +379,19 @@ function StationeryPanel() {
           <ErrorState error={items.error} onRetry={() => void items.refetch()} />
         ) : items.data.items.length === 0 ? (
           <EmptyState
-            title="Nothing in the catalog yet"
-            description="Add the copies, pencils and books this campus charges for."
-            action={<Button onClick={() => setAdding(true)}>Add the first item</Button>}
+            title={m.emptyTitle}
+            description={m.emptyDescription}
+            action={<Button onClick={() => setAdding(true)}>{m.addFirst}</Button>}
           />
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Group</TableHead>
-                  <TableHead className="text-end">Price per unit</TableHead>
+                  <TableHead>{c.code}</TableHead>
+                  <TableHead>{m.colItem}</TableHead>
+                  <TableHead>{m.colGroup}</TableHead>
+                  <TableHead className="text-end">{m.colPrice}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -407,17 +403,17 @@ function StationeryPanel() {
                       {item.name}
                       {item.is_active ? null : (
                         <Badge variant="neutral" className="ms-2">
-                          Retired
+                          {c.retired}
                         </Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {label(STATIONERY_CATEGORY_LABELS, item.category)}
+                      {label(L.stationeryCategory, item.category)}
                     </TableCell>
                     <TableCell className="text-end tabular-nums">
                       {money.format(Number(item.unit_price))}
                       <span className="ms-1 text-xs text-muted-foreground">
-                        / {label(STATIONERY_UNIT_LABELS, item.unit)}
+                        {fill(m.perUnit, { unit: L.unit(item.unit, 1) })}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -434,12 +430,12 @@ function StationeryPanel() {
                             })
                           }
                         >
-                          {item.is_active ? "Retire" : "Restore"}
+                          {item.is_active ? c.retire : c.restore}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Delete ${item.name}`}
+                          aria-label={fill(c.deleteNamed, { name: item.name })}
                           onClick={() => setDeleting(item)}
                         >
                           <Trash2 className="size-4" aria-hidden />
@@ -454,25 +450,18 @@ function StationeryPanel() {
         )}
       </Card>
 
-      <p className="mt-3 text-xs text-muted-foreground">
-        Changing a price here changes what the next challan charges. Challans already
-        generated keep the price they were generated at — a bill in a parent&rsquo;s hands is
-        never restated.
-      </p>
+      <p className="mt-3 text-xs text-muted-foreground">{m.repriceNote}</p>
 
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent>
           <form onSubmit={submit} className="grid gap-4" noValidate>
             <DialogHeader>
-              <DialogTitle>New stationery item</DialogTitle>
-              <DialogDescription>
-                The name is what a parent reads on the challan, so make it specific —
-                &ldquo;Copy (Register, 100 pages)&rdquo; rather than &ldquo;Copy&rdquo;.
-              </DialogDescription>
+              <DialogTitle>{m.dialogTitle}</DialogTitle>
+              <DialogDescription>{m.dialogDescription}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Code</span>
+                <span className="font-medium">{c.code}</span>
                 <Input
                   value={code}
                   onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -481,23 +470,23 @@ function StationeryPanel() {
                 />
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Name</span>
+                <span className="font-medium">{c.name}</span>
                 <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="Copy (Register, 100 pages)"
+                  placeholder={m.namePlaceholder}
                   required
                 />
               </label>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Group</span>
+                <span className="font-medium">{m.group}</span>
                 <NativeSelect
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
                 >
-                  {Object.entries(STATIONERY_CATEGORY_LABELS).map(([value, text]) => (
+                  {Object.entries(L.stationeryCategory).map(([value, text]) => (
                     <option key={value} value={value}>
                       {text}
                     </option>
@@ -505,17 +494,17 @@ function StationeryPanel() {
                 </NativeSelect>
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Sold by the</span>
+                <span className="font-medium">{m.soldBy}</span>
                 <NativeSelect value={unit} onChange={(event) => setUnit(event.target.value)}>
-                  {Object.entries(STATIONERY_UNIT_LABELS).map(([value, text]) => (
+                  {STATIONERY_UNITS.map((value) => (
                     <option key={value} value={value}>
-                      {text}
+                      {L.unit(value, 1)}
                     </option>
                   ))}
                 </NativeSelect>
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Price per unit</span>
+                <span className="font-medium">{m.pricePerUnit}</span>
                 <Input
                   value={price}
                   onChange={(event) => setPrice(event.target.value)}
@@ -525,19 +514,16 @@ function StationeryPanel() {
                 />
               </label>
             </div>
-            <p className="text-xs text-muted-foreground">
-              The unit matters on the printed challan: three pencils and three dozen
-              pencils differ by twelve, and the parent finds out at the counter.
-            </p>
+            <p className="text-xs text-muted-foreground">{m.unitHelp}</p>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAdding(false)}>
-                Cancel
+                {c.cancel}
               </Button>
               <Button
                 type="submit"
                 disabled={create.isPending || !code.trim() || !name.trim() || !price.trim()}
               >
-                {create.isPending ? "Adding…" : "Add item"}
+                {create.isPending ? c.adding : m.addItem}
               </Button>
             </DialogFooter>
           </form>
@@ -547,9 +533,9 @@ function StationeryPanel() {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(next) => !next && setDeleting(null)}
-        title={`Delete ${deleting?.name ?? ""}?`}
-        description="Only possible while no structure and no challan has ever charged it. Once it has been sold the item is part of the record — retire it instead."
-        confirmLabel="Delete"
+        title={fill(c.deleteTitle, { name: deleting?.name ?? "" })}
+        description={m.deleteDescription}
+        confirmLabel={c.delete}
         onConfirm={async () => {
           if (!deleting) return;
           await remove.mutateAsync(deleting.id);
@@ -565,6 +551,8 @@ function StationeryPanel() {
 // ---------------------------------------------------------------------------
 
 function StructuresPanel() {
+  const { structures: m, common: c } = useCatalog(feesSetupMessages);
+  const L = useLabels();
   const structures = useFeeStructures({ size: 100 });
   const classes = useClassSummary();
   const heads = useFeeHeads({ size: 100 });
@@ -594,21 +582,15 @@ function StructuresPanel() {
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          One structure per class per academic year. It has to be activated before it can
-          bill anybody.
-        </p>
+        <p className="text-sm text-muted-foreground">{m.intro}</p>
         <Button size="sm" onClick={() => setAdding(true)} disabled={noHeads}>
           <Plus className="size-4" aria-hidden />
-          New structure
+          {m.newStructure}
         </Button>
       </div>
 
       {noHeads ? (
-        <p className="mb-3 rounded-md bg-warning/15 px-4 py-3 text-sm">
-          Add at least one fee head first — a structure is a price list, and there is
-          nothing yet to price.
-        </p>
+        <p className="mb-3 rounded-md bg-warning/15 px-4 py-3 text-sm">{m.noHeads}</p>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1.4fr]">
@@ -618,10 +600,7 @@ function StructuresPanel() {
           ) : structures.isError ? (
             <ErrorState error={structures.error} onRetry={() => void structures.refetch()} />
           ) : structures.data.items.length === 0 ? (
-            <EmptyState
-              title="No structures yet"
-              description="Create one per class, per year."
-            />
+            <EmptyState title={m.emptyTitle} description={m.emptyDescription} />
           ) : (
             <ul className="divide-y divide-border">
               {structures.data.items.map((structure) => (
@@ -641,7 +620,7 @@ function StructuresPanel() {
                       </span>
                     </span>
                     <Badge variant={structure.status === "active" ? "success" : "neutral"}>
-                      {label(FEE_STRUCTURE_STATUS_LABELS, structure.status)}
+                      {label(L.structureStatus, structure.status)}
                     </Badge>
                   </button>
                 </li>
@@ -657,19 +636,17 @@ function StructuresPanel() {
         <DialogContent>
           <form onSubmit={submit} className="grid gap-4" noValidate>
             <DialogHeader>
-              <DialogTitle>New fee structure</DialogTitle>
-              <DialogDescription>
-                Prices one class for one academic year. You add the amounts next.
-              </DialogDescription>
+              <DialogTitle>{m.dialogTitle}</DialogTitle>
+              <DialogDescription>{m.dialogDescription}</DialogDescription>
             </DialogHeader>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Class</span>
+              <span className="font-medium">{m.class}</span>
               <NativeSelect
                 value={className}
                 onChange={(event) => setClassName(event.target.value)}
                 required
               >
-                <option value="">Choose a class…</option>
+                <option value="">{m.chooseClass}</option>
                 {(classes.data ?? []).map((cls) => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name}
@@ -678,7 +655,7 @@ function StructuresPanel() {
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Academic year</span>
+              <span className="font-medium">{m.academicYear}</span>
               <Input
                 value={year}
                 onChange={(event) => setYear(event.target.value)}
@@ -687,23 +664,23 @@ function StructuresPanel() {
               />
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Name</span>
+              <span className="font-medium">{c.name}</span>
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Grade 5 — 2026-2027"
+                placeholder={m.namePlaceholder}
                 required
               />
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAdding(false)}>
-                Cancel
+                {c.cancel}
               </Button>
               <Button
                 type="submit"
                 disabled={create.isPending || !className || !year.trim() || !name.trim()}
               >
-                {create.isPending ? "Creating…" : "Create"}
+                {create.isPending ? m.creating : m.create}
               </Button>
             </DialogFooter>
           </form>
@@ -729,6 +706,8 @@ function StructuresPanel() {
  *   tripled.
  */
 function StructureDetail({ structureId }: { structureId: string | null }) {
+  const { structures: m, common: c } = useCatalog(feesSetupMessages);
+  const L = useLabels();
   const structure = useFeeStructure(structureId);
   const heads = useFeeHeads({ size: 100 });
   const stationery = useStationeryItems({ size: 100, active_only: true });
@@ -746,7 +725,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
   if (!structureId) {
     return (
       <Card className="grid place-items-center p-10 text-center text-sm text-muted-foreground">
-        Choose a structure to price it.
+        {m.choosePrompt}
       </Card>
     );
   }
@@ -810,27 +789,27 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
             onClick={() => activate.mutate(data.id)}
           >
             <Check className="size-4" aria-hidden />
-            Activate
+            {m.activate}
           </Button>
         ) : (
           <Badge variant={data.status === "active" ? "success" : "neutral"}>
-            {label(FEE_STRUCTURE_STATUS_LABELS, data.status)}
+            {label(L.structureStatus, data.status)}
           </Badge>
         )}
       </div>
 
       {data.items.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-          Nothing priced yet. A structure with no lines cannot be activated.
+          {m.nothingPriced}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Line</TableHead>
-                <TableHead className="text-end">Qty</TableHead>
-                <TableHead className="text-end">Amount</TableHead>
+                <TableHead>{m.colLine}</TableHead>
+                <TableHead className="text-end">{c.qty}</TableHead>
+                <TableHead className="text-end">{c.amount}</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -844,7 +823,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
                       {item.name}
                       {isStationery ? (
                         <Badge variant="neutral" className="ms-2">
-                          Stationery
+                          {m.stationeryBadge}
                         </Badge>
                       ) : null}
                     </TableCell>
@@ -852,9 +831,11 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
                         rather than a "1" the reader would try to interpret. */}
                     <TableCell className="text-end text-sm tabular-nums text-muted-foreground">
                       {isStationery
-                        ? `${qty} ${unitLabel(item.unit, qty)} × ${money.format(
-                            Number(item.unit_price),
-                          )}`
+                        ? fill(c.working, {
+                            qty,
+                            unit: L.unit(item.unit, qty),
+                            price: money.format(Number(item.unit_price)),
+                          })
                         : "—"}
                     </TableCell>
                     <TableCell className="text-end tabular-nums">
@@ -864,7 +845,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label={`Remove ${item.name}`}
+                        aria-label={fill(c.removeNamed, { name: item.name })}
                         onClick={() =>
                           isStationery
                             ? removeStationery.mutate({
@@ -887,7 +868,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
                 <>
                   <TableRow>
                     <TableCell colSpan={2} className="text-sm text-muted-foreground">
-                      Fees
+                      {m.fees}
                     </TableCell>
                     <TableCell className="text-end text-sm tabular-nums text-muted-foreground">
                       {money.format(Number(data.fee_total))}
@@ -896,7 +877,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
                   </TableRow>
                   <TableRow>
                     <TableCell colSpan={2} className="text-sm text-muted-foreground">
-                      Stationery
+                      {m.stationery}
                     </TableCell>
                     <TableCell className="text-end text-sm tabular-nums text-muted-foreground">
                       {money.format(Number(data.stationery_total))}
@@ -908,7 +889,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
 
               <TableRow>
                 <TableCell colSpan={2} className="font-medium">
-                  Total
+                  {c.total}
                 </TableCell>
                 <TableCell className="text-end font-semibold tabular-nums">
                   {money.format(Number(data.total))}
@@ -926,9 +907,9 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
           className="flex flex-wrap items-end gap-2 border-t border-border p-4"
         >
           <label className="grid flex-1 gap-1.5 text-sm">
-            <span className="text-xs font-medium">Fee head</span>
+            <span className="text-xs font-medium">{m.feeHead}</span>
             <NativeSelect value={headId} onChange={(event) => setHeadId(event.target.value)}>
-              <option value="">Choose…</option>
+              <option value="">{c.choose}</option>
               {availableHeads.map((head) => (
                 <option key={head.id} value={head.id}>
                   {head.name}
@@ -937,7 +918,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
             </NativeSelect>
           </label>
           <label className="grid w-32 gap-1.5 text-sm">
-            <span className="text-xs font-medium">Amount</span>
+            <span className="text-xs font-medium">{c.amount}</span>
             <Input
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -946,7 +927,7 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
             />
           </label>
           <Button type="submit" variant="outline" disabled={setItem.isPending || !headId}>
-            Add line
+            {m.addLine}
           </Button>
         </form>
       ) : null}
@@ -957,19 +938,22 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
           className="flex flex-wrap items-end gap-2 border-t border-border bg-muted/30 p-4"
         >
           <label className="grid flex-1 gap-1.5 text-sm">
-            <span className="text-xs font-medium">Stationery</span>
+            <span className="text-xs font-medium">{m.stationery}</span>
             <NativeSelect value={itemId} onChange={(event) => setItemId(event.target.value)}>
-              <option value="">Choose…</option>
+              <option value="">{c.choose}</option>
               {availableItems.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} — {money.format(Number(item.unit_price))} /{" "}
-                  {label(STATIONERY_UNIT_LABELS, item.unit)}
+                  {fill(c.option, {
+                    name: item.name,
+                    price: money.format(Number(item.unit_price)),
+                    unit: L.unit(item.unit, 1),
+                  })}
                 </option>
               ))}
             </NativeSelect>
           </label>
           <label className="grid w-24 gap-1.5 text-sm">
-            <span className="text-xs font-medium">Qty</span>
+            <span className="text-xs font-medium">{c.qty}</span>
             <Input
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
@@ -982,12 +966,9 @@ function StructureDetail({ structureId }: { structureId: string | null }) {
             variant="outline"
             disabled={setStationery.isPending || !itemId || !quantity.trim()}
           >
-            Add item
+            {m.addItem}
           </Button>
-          <p className="w-full text-xs text-muted-foreground">
-            Every student in this class is billed this quantity. One student taking extra
-            is charged on their own challan while it is still a draft.
-          </p>
+          <p className="w-full text-xs text-muted-foreground">{m.stationeryHelp}</p>
         </form>
       ) : null}
     </Card>

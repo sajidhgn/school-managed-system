@@ -3,9 +3,15 @@ import { redirect } from "next/navigation";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { getCatalog } from "@/lib/i18n/server";
 import { WhatsAppView } from "./whatsapp-view";
 
-export const metadata: Metadata = { title: "WhatsApp" };
+export async function generateMetadata(): Promise<Metadata> {
+  const m = await getCatalog(whatsappMessages);
+  return { title: m.meta.title };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

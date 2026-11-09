@@ -3,9 +3,14 @@ import { redirect } from "next/navigation";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { getCatalog } from "@/lib/i18n/server";
 import { BookDetailView } from "./book-detail-view";
 
-export const metadata: Metadata = { title: "Book" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(booksMessages)).meta.book };
+}
+
 export const dynamic = "force-dynamic";
 
 /** One book: its chapter list, each chapter's uploads, the agent's report, and search. */

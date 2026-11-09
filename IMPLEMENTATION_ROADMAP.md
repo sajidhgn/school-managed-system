@@ -1,6 +1,6 @@
 # SchoolYar implementation status and delivery guide
 
-Last audited: 2026-10-28 (foundation sections unchanged since 2026-08-24)
+Last audited: 2026-11-09 (foundation sections unchanged since 2026-08-24)
 
 This document tracks implementation against `educloud-core-spec.md`. The core spec
 is the source of truth for product behavior; this file records what the repository
@@ -41,6 +41,16 @@ At the end of the foundation implementation:
   inspection.
 - The sample invoice PDF rendered as a valid one-page A4 document and passed visual
   inspection.
+
+Re-verified 2026-11-09, after the work recorded under "Completed 2026-11-09":
+
+- Backend Ruff lint and format pass (283 files); strict mypy passes (189 files).
+- The complete backend suite passes: 575 tests against real PostgreSQL (run with
+  `TZ=UTC`; four attendance/absence tests compare against the machine's local date
+  and fail between local midnight and UTC midnight on a machine east of UTC).
+- Alembic upgrades to `9a1c3e5b7d2f` and downgrades one step cleanly.
+- Frontend ESLint, TypeScript and the production build pass; all four Playwright
+  tests pass against the test database.
 
 ## Phase-by-phase status
 
@@ -508,11 +518,14 @@ Recorded here so this file matches the code. Each has its own tests; the module 
 are the source of truth for behaviour.
 
 - **Exams** (`app/modules/exams`): exams, papers per class and subject, marks, a
-  ranked class result sheet, a printable result card, and a draft/published status.
+  ranked class result sheet, a printable result card, a draft/published status, and
+  (2026-11-09) a per-campus grading scale -- see "Completed 2026-11-09" below.
   No module spec exists yet -- checklist item 11 below still applies.
 - **Textbook library** (`docs/modules/books.md`): AI-read book details, chapter
-  uploads, page extraction and semantic search over pgvector. An uncommitted change
-  in progress makes books platform-wide with a shelf per campus (`e5b7d9f1a3c5`).
+  uploads, page extraction and semantic search over pgvector. Books are
+  platform-wide with a shelf per campus (`e5b7d9f1a3c5`). Library-wide search and
+  "Ask the library" (answers written only from the books, with page citations)
+  have a screen at `/books/ask` since 2026-11-09.
 - **Question bank and test papers** (`app/modules/papers`), including Arabic papers.
 - **WhatsApp** (`docs/modules/whatsapp.md`): class groups, the monthly fee notice,
   custom messages, the outbox, and the WAHA gateway; the **diary agent**
@@ -544,6 +557,63 @@ notifications and whether the parent may see the child's records.
 - **Sibling fee discounts** use this registry to find families (see Fees above).
 
 Pending: a run against a real WAHA gateway.
+
+### Completed 2026-11-09 -- backend features that had no screen
+
+An audit on 2026-11-09 matched every OpenAPI operation against the frontend and found
+backend features no screen reached. Each now has one, verified in a browser against
+the PostgreSQL test database:
+
+- **Resend verification email** -- a fixed public handler
+  (`/api/public/resend-verification`, blocked in the generic BFF) and one component
+  used on the signup confirmation, on a login refused with `EMAIL_NOT_VERIFIED`, and
+  on a failed `/verify-email` link. One answer for every address, as the API intends.
+- **Voucher register CSV export** -- "Export CSV" on the fees register, carrying the
+  register's own year, description and status filters.
+- **One-off charges** -- a fee head, amount and printed note on a DRAFT challan, and
+  removal of any fee line from a draft (the per-student way to waive a class charge).
+- **Late-fee rules** -- Fees -> Charges & structures -> Late fees: the year's rule
+  (fixed or percent, grace days, once/weekly/monthly with a required cap, minimum
+  balance), removal, and "Apply late fees now" for `fee:issue`.
+- **Student account statement** -- the running ledger on the student page with the
+  balance (negative shown as "in credit") and "Adjust balance" for `fee:void`.
+- **Guardian editing** -- Edit on each parent: details; relationship and pickup /
+  emergency / notification flags for this child; the sign-in number and portal switch
+  (`guardian:portal`, now in `PERMISSIONS`); linking a sibling (which is what sibling
+  fee discounts read); removing them from a child, and the record with its last child.
+- **Admissions queue** -- `/students/admissions`: applications oldest first, Admit
+  (optionally seated in a section; the plan seat is taken here) or Decline, plus the
+  public form link. Linked from the Students page and the dashboard tile.
+- **Grading scale** -- new table `exam_grading_scales` (migration `9a1c3e5b7d2f`,
+  forced RLS, one JSONB document of bands per campus). Every campus starts on the
+  legacy board scale the printed result card already used (A+ from 80, F under 33);
+  a principal (`grade:manage` + `school:update`) replaces or resets it from Exams ->
+  Grading scale. The result sheet, the printed result card and the parent portal all
+  grade through `exams/grading.py::band_for`; the lowest band is the card's FAIL
+  band. 15 PostgreSQL tests in `test_exam_grading.py`, plus portal coverage.
+- **Ask the library** -- `/books/ask`: questions answered only from the campus's
+  books, with numbered citations linked to the source passages, and passage search
+  across every book. Linked from Books and from each book's search card.
+
+- **Urdu on every school-facing screen** -- previously the academic modules were
+  English-only while the marketing site promised "every screen in Urdu". Module
+  strings now live in per-module catalogs, `frontend/src/lib/i18n/modules/*.ts`
+  (`defineCatalog({ en, ur })`, read with `useCatalog()` / `getCatalog()`), where a
+  missing Urdu key is a type error, as in `messages.ts`. Shared enum labels are in
+  `modules/labels.ts` (`useLabels()`); backend-owned permission descriptions and the
+  seeded role names are translated by code in `modules/permissions.ts`, falling back
+  to the API's English. Interpolation goes through `fill()` / `fillNodes()` in
+  `lib/i18n/format.ts`, never concatenation; `ltr()` keeps codes such as "2026-001"
+  and "FV-2026-00004" readable inside Urdu sentences, and `formatDate()` isolates
+  dates the same way. Letter-spacing is switched off on Urdu pages (it breaks the
+  joins). Deliberately still English: the super-admin console (an operator tool),
+  the challan PDF and its on-screen preview (the PDF font has no Urdu glyphs), the
+  content of generated test papers (follows the paper's own language), WhatsApp's
+  own menu names, raw audit action codes, and data typed by users.
+
+Also on 2026-11-09: the backend `ruff format --check` CI gate, which eight older files
+failed, passes again, and the Playwright platform-login test (broken by the
+show-password toggle matching `/password/`) passes again.
 
 ### Guidance for every future school module
 

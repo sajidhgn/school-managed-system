@@ -13,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { StudentListRow } from "@/lib/api/types";
+import { studentsCardMessages } from "@/lib/i18n/modules/students-card";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import {
   CardPrintStyle,
   StudentCardBackView,
@@ -40,6 +42,7 @@ export function StudentIdCardDialog({
   student: StudentListRow | null;
   school: CardSchool | null;
 }) {
+  const m = useCatalog(studentsCardMessages).dialog;
   if (!student) return null;
 
   return (
@@ -48,19 +51,15 @@ export function StudentIdCardDialog({
         <CardPrintStyle />
 
         <DialogHeader>
-          <DialogTitle>Student card</DialogTitle>
-          <DialogDescription>
-            Standard ID card size (CR80, 85.6 × 53.98 mm — the same as a bank card).
-            Print at 100% scale on card stock, trim both faces along the border and
-            laminate back-to-back.
-          </DialogDescription>
+          <DialogTitle>{m.title}</DialogTitle>
+          <DialogDescription>{m.description}</DialogDescription>
         </DialogHeader>
 
         {/* Both faces print from this sheet — the print stylesheet shows the
             sheet alone and hides the Front/Back captions. */}
         <div className="student-id-card-sheet grid gap-4">
           <div className="grid gap-1">
-            <p className="card-side-label text-center text-xs text-muted-foreground">Front</p>
+            <p className="card-side-label text-center text-xs text-muted-foreground">{m.front}</p>
             <StudentCardView
               student={student}
               school={school}
@@ -68,7 +67,7 @@ export function StudentIdCardDialog({
             />
           </div>
           <div className="grid gap-1">
-            <p className="card-side-label text-center text-xs text-muted-foreground">Back</p>
+            <p className="card-side-label text-center text-xs text-muted-foreground">{m.back}</p>
             <StudentCardBackView
               student={student}
               school={school}
@@ -79,11 +78,11 @@ export function StudentIdCardDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {m.close}
           </Button>
           <Button onClick={() => window.print()}>
             <Printer className="size-4" aria-hidden />
-            Print card
+            {m.print}
           </Button>
         </DialogFooter>
       </DialogContent>

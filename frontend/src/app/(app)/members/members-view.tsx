@@ -45,7 +45,6 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ApiError } from "@/lib/api/errors";
 import { members as membersApi } from "@/lib/api/resources";
 import {
-  MEMBER_STATUS_LABELS,
   PERMISSIONS,
   label,
   type InvitationRead,
@@ -56,6 +55,11 @@ import {
   type SchoolRead,
   type UsageItem,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useRbacText } from "@/lib/i18n/modules/permissions";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /**
  * The staff table across every branch: add, change role, suspend, remove.
@@ -132,6 +136,9 @@ export function MembersView({
   initialInviteOpen?: boolean;
 }) {
   const { t } = useTranslations();
+  const m = useCatalog(adminMessages).members;
+  const rbac = useRbacText();
+  const L = useLabels();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -326,7 +333,7 @@ export function MembersView({
                   <SelectItem value={ALL}>{t.members.allRoles}</SelectItem>
                   {roleChoices.map((role) => (
                     <SelectItem key={role.code} value={role.code}>
-                      {role.name}
+                      {rbac.roleName(role.code, role.name)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -373,7 +380,7 @@ export function MembersView({
                   <TableHead>{t.common.name}</TableHead>
                   {isOrgLevel ? <TableHead>{t.members.branch}</TableHead> : null}
                   <TableHead>{t.common.role}</TableHead>
-                  <TableHead>Classes assigned</TableHead>
+                  <TableHead>{m.colClasses}</TableHead>
                   <TableHead>{t.common.status}</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -401,7 +408,7 @@ export function MembersView({
                           )}
                         </TableCell>
                       ) : null}
-                      <TableCell>{member.role_name}</TableCell>
+                      <TableCell>{rbac.roleName(member.role_code, member.role_name)}</TableCell>
                       <TableCell>
                         {member.assigned_classes && member.assigned_classes.length > 0 ? (
                           <div className="flex max-w-xs flex-wrap gap-1">
@@ -409,7 +416,7 @@ export function MembersView({
                               <Badge
                                 key={i}
                                 variant={a.section_name ? "default" : "neutral"}
-                                title={a.section_name ? "Class teacher" : "Subject teacher"}
+                                title={a.section_name ? m.classTeacher : m.subjectTeacher}
                               >
                                 {a.class_name}
                                 {a.section_name ? ` – ${a.section_name}` : ""}
@@ -423,7 +430,7 @@ export function MembersView({
                       </TableCell>
                       <TableCell>
                         <Badge variant={member.status === "active" ? "success" : "destructive"}>
-                          {label(MEMBER_STATUS_LABELS, member.status)}
+                          {label(L.memberStatus, member.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -434,13 +441,13 @@ export function MembersView({
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" disabled={busy !== null}>
                                 <MoreHorizontal className="size-4" aria-hidden />
-                                <span className="sr-only">Actions for {member.full_name}</span>
+                                <span className="sr-only">{fill(m.actionsFor, { name: member.full_name })}</span>
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
                               <Can permission={PERMISSIONS.memberUpdate}>
                                 <DropdownMenuItem onSelect={() => setEditing(member)}>
-                                  Edit member
+                                  {m.editMember}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 {canAssignBranches ? (
@@ -450,7 +457,7 @@ export function MembersView({
                                       setAssigning(member);
                                     }}
                                   >
-                                    Assign school branches
+                                    {m.assignBranches}
                                   </DropdownMenuItem>
                                 ) : null}
                                 {rolesFor(member)
@@ -464,12 +471,12 @@ export function MembersView({
                                             membersApi.update(branchId, member.membership_id, {
                                               role_id: role.id,
                                             }),
-                                          `${member.full_name} is now ${role.name}.`,
+                                          fill(m.nowRole, { name: member.full_name, role: rbac.roleName(role.code, role.name) }),
                                           member.membership_id,
                                         )
                                       }
                                     >
-                                      {t.members.changeRoleTo} {role.name}
+                                      {fill(m.changeRoleTo, { role: rbac.roleName(role.code, role.name) })}
                                     </DropdownMenuItem>
                                   ))}
                                 <DropdownMenuSeparator />
@@ -484,8 +491,8 @@ export function MembersView({
                                           suspended: member.status === "active",
                                         }),
                                       member.status === "active"
-                                        ? `${member.full_name} is suspended.`
-                                        : `${member.full_name} is active again.`,
+                                        ? fill(m.suspended, { name: member.full_name })
+                                        : fill(m.reactivated, { name: member.full_name }),
                                       member.membership_id,
                                     )
                                   }
@@ -536,15 +543,15 @@ export function MembersView({
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={`Remove ${removing?.full_name}?`}
+        title={fill(m.removeTitle, { name: removing?.full_name ?? "" })}
         description={t.members.removeBody}
-        confirmLabel="Remove"
+        confirmLabel={m.remove}
         variant="destructive"
         onConfirm={async () => {
           if (!removing) return;
           await act(
             () => membersApi.remove(branchOf(removing), removing.membership_id),
-            `${removing.full_name} was removed.`,
+            fill(m.removed, { name: removing.full_name }),
             removing.membership_id,
           );
           setRemoving(null);
@@ -554,9 +561,9 @@ export function MembersView({
       <Dialog open={assigning !== null} onOpenChange={(open) => !open && setAssigning(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign school branches</DialogTitle>
+            <DialogTitle>{m.assignBranches}</DialogTitle>
             <DialogDescription>
-              Add {assigning?.full_name} to one or more branches. Existing branch access is preserved.
+              {fill(m.assignDescription, { name: assigning?.full_name ?? "" })}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
@@ -571,11 +578,11 @@ export function MembersView({
               </label>
             ))}
             {schools.filter((school) => school.id !== assigning?.school_id && school.status === "active").length === 0 ? (
-              <p className="text-sm text-muted-foreground">There are no other active school branches.</p>
+              <p className="text-sm text-muted-foreground">{m.noOtherBranches}</p>
             ) : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAssigning(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setAssigning(null)}>{m.cancel}</Button>
             <Button
               disabled={!assigning || selectedBranches.length === 0 || busy !== null}
               onClick={async () => {
@@ -587,13 +594,16 @@ export function MembersView({
                       assigning.membership_id,
                       selectedBranches,
                     ),
-                  `${assigning.full_name} was assigned to ${selectedBranches.length} additional branch${selectedBranches.length === 1 ? "" : "es"}.`,
+                  fill(selectedBranches.length === 1 ? m.assigned.one : m.assigned.other, {
+                    name: assigning.full_name,
+                    count: selectedBranches.length,
+                  }),
                   assigning.membership_id,
                 );
                 setAssigning(null);
               }}
             >
-              Assign branches
+              {m.assign}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -16,6 +16,7 @@ export async function forwardPublicMutation(
   backendPath:
     | "/auth/forgot-password"
     | "/auth/reset-password"
+    | "/auth/resend-verification"
     | "/students/admissions"
     | "/guardian/auth/request-code",
 ): Promise<NextResponse> {

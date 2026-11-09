@@ -15,6 +15,8 @@ import type {
   PaperSectionRead,
   QuestionType,
 } from "@/lib/api/types";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import {
   isObjective,
@@ -150,6 +152,9 @@ export function PaperPrintView({
   paperId: string;
   schoolName: string | null;
 }) {
+  // The toolbar is the app's, in the viewer's language; the sheet below is the
+  // paper's, in its own (`TEXT`).
+  const m = useCatalog(papersMessages).print;
   const paper = usePaper(paperId);
   const [withKey, setWithKey] = React.useState(false);
   const [withLines, setWithLines] = React.useState(true);
@@ -170,7 +175,7 @@ export function PaperPrintView({
           href={`/papers/${data.id}` as Route}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> Back to the paper
+          <ArrowLeft className="size-4 rtl:rotate-180" /> {m.back}
         </Link>
         <div className="ms-auto flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm">
@@ -179,7 +184,7 @@ export function PaperPrintView({
               checked={withLines}
               onChange={(event) => setWithLines(event.target.checked)}
             />
-            Answer lines
+            {m.answerLines}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -187,7 +192,7 @@ export function PaperPrintView({
               checked={withKey}
               onChange={(event) => setWithKey(event.target.checked)}
             />
-            Answer key
+            {m.answerKey}
           </label>
           <Button
             disabled={busy || !sections.length}
@@ -198,23 +203,19 @@ export function PaperPrintView({
               window.print();
             }}
           >
-            <Printer /> Print
+            <Printer /> {m.print}
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground print:hidden">
-        To get a PDF, choose &ldquo;Save as PDF&rdquo; as the printer. Turn off the browser&apos;s
-        headers and footers in the print dialog for a clean page.
-      </p>
+      <p className="text-xs text-muted-foreground print:hidden">{m.pdfHint}</p>
 
       {busy ? (
         <p className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> The questions are still being written. This
-          page updates by itself.
+          <Loader2 className="size-4 animate-spin" /> {m.busy}
         </p>
       ) : !sections.length ? (
         <p className="py-16 text-center text-sm text-muted-foreground">
-          This paper has no questions to print.
+          {m.empty}
         </p>
       ) : (
         <>

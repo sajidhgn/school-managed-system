@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import type { ClassCreate, SectionCreate } from "@/lib/api/types";
+import type { Translation } from "@/lib/i18n/catalog";
+import type { classesMessages } from "@/lib/i18n/modules/classes";
 
 /**
  * Class and section form schemas.
@@ -9,43 +11,48 @@ import type { ClassCreate, SectionCreate } from "@/lib/api/types";
  * a cleared `<input type="number">` yields `""`, which coercion turns into `0` —
  * silently capping a section at zero seats instead of leaving it uncapped.
  * Parsing happens once, explicitly, in the payload builders below.
+ *
+ * The schemas are built from the viewer's validation messages
+ * (`classesMessages.validation`), so a form error reads in their language.
  */
+
+type ValidationMessages = Translation<(typeof classesMessages)["en"]>["validation"];
 
 const WHOLE_NUMBER = /^\d+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const classFormSchema = z.object({
-  name: z.string().trim().min(1, "Class name is required").max(80, "Keep this under 80 characters"),
-  level: z
-    .string()
-    .trim()
-    .min(1, "Level is required")
-    .refine((value) => WHOLE_NUMBER.test(value), "Level must be a whole number")
-    .refine((value) => Number(value) <= 100, "Level must be 100 or below"),
-});
-export type ClassFormValues = z.infer<typeof classFormSchema>;
+export function createClassFormSchema(m: ValidationMessages) {
+  return z.object({
+    name: z.string().trim().min(1, m.classNameRequired).max(80, m.under80),
+    level: z
+      .string()
+      .trim()
+      .min(1, m.levelRequired)
+      .refine((value) => WHOLE_NUMBER.test(value), m.levelWhole)
+      .refine((value) => Number(value) <= 100, m.levelMax),
+  });
+}
+export type ClassFormValues = z.infer<ReturnType<typeof createClassFormSchema>>;
 
-export const sectionFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Section name is required")
-    .max(40, "Keep this under 40 characters"),
-  capacity: z
-    .string()
-    .trim()
-    .refine((value) => value === "" || WHOLE_NUMBER.test(value), "Capacity must be a whole number")
-    .refine((value) => value === "" || Number(value) >= 1, "Capacity must be at least 1"),
-  // Kept as a guard, not as a prompt. The field is a picker now, so the only values
-  // it can produce are a teacher's user id or "" -- but this schema is also what
-  // `toSectionPayload` is typed against, and a malformed id should fail here rather
-  // than travel to the API and come back as a foreign key error.
-  class_teacher_id: z
-    .string()
-    .trim()
-    .refine((value) => value === "" || UUID.test(value), "Select a teacher from the list"),
-});
-export type SectionFormValues = z.infer<typeof sectionFormSchema>;
+export function createSectionFormSchema(m: ValidationMessages) {
+  return z.object({
+    name: z.string().trim().min(1, m.sectionNameRequired).max(40, m.under40),
+    capacity: z
+      .string()
+      .trim()
+      .refine((value) => value === "" || WHOLE_NUMBER.test(value), m.capacityWhole)
+      .refine((value) => value === "" || Number(value) >= 1, m.capacityMin),
+    // Kept as a guard, not as a prompt. The field is a picker now, so the only values
+    // it can produce are a teacher's user id or "" -- but this schema is also what
+    // `toSectionPayload` is typed against, and a malformed id should fail here rather
+    // than travel to the API and come back as a foreign key error.
+    class_teacher_id: z
+      .string()
+      .trim()
+      .refine((value) => value === "" || UUID.test(value), m.selectTeacher),
+  });
+}
+export type SectionFormValues = z.infer<ReturnType<typeof createSectionFormSchema>>;
 
 export function toClassPayload(values: ClassFormValues): ClassCreate {
   return { name: values.name.trim(), level: Number(values.level) };

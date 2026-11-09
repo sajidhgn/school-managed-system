@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Copy, MessageCircle, Plus } from "lucide-react";
+import { Check, Copy, MessageCircle, Pencil, Plus } from "lucide-react";
 
 import { Field } from "@/components/form/field";
 import { Badge } from "@/components/ui/badge";
@@ -9,17 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { fillNodes } from "@/lib/i18n/format";
+import { GuardianEditDialog } from "./guardian-edit-dialog";
 import {
   useGrantPortalAccess,
   useSetChildPortalAccess,
   useStudentGuardians,
 } from "@/hooks/use-guardians";
-import {
-  GUARDIAN_RELATIONSHIP_LABELS,
-  type GuardianRelationship,
-  type StudentGuardianRead,
-  type StudentRead,
-} from "@/lib/api/types";
+import type { GuardianRelationship, StudentGuardianRead, StudentRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { studentsGuardiansMessages } from "@/lib/i18n/modules/students-guardians";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /**
  * Who may sign in to the parent portal for this child.
@@ -41,19 +42,24 @@ function phoneKey(phone: string | null | undefined): string {
   return (phone ?? "").replace(/\D/g, "").slice(-10);
 }
 
-const RELATIONSHIPS = Object.keys(GUARDIAN_RELATIONSHIP_LABELS) as GuardianRelationship[];
-
 export function ParentPortalCard({
   student,
   canGrant,
   canToggle,
+  canPortal,
+  canDelete,
 }: {
   student: StudentRead;
   /** `guardian:create` and `guardian:update`. */
   canGrant: boolean;
-  /** `guardian:update`: turning one child's access off and on. */
+  /** `guardian:update`: turning one child's access off and on, and editing the parent. */
   canToggle: boolean;
+  /** `guardian:portal`: the sign-in number and the portal switch. */
+  canPortal: boolean;
+  /** `guardian:delete`: removing a record once its last child is unlinked. */
+  canDelete: boolean;
 }) {
+  const m = useCatalog(studentsGuardiansMessages).portal;
   const query = useStudentGuardians(student.id);
   const guardians = query.data ?? [];
 
@@ -72,19 +78,24 @@ export function ParentPortalCard({
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <CardTitle>Parent portal</CardTitle>
+        <CardTitle>{m.title}</CardTitle>
         <CopyPortalLink />
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Parents sign in at <span className="font-medium text-foreground">/parent</span> with a
-          code sent to their WhatsApp from this campus&apos;s number.
+          {fillNodes(m.intro, {
+            path: (
+              <bdi className="font-medium text-foreground" dir="ltr">
+                /parent
+              </bdi>
+            ),
+          })}
         </p>
 
         {query.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{m.loading}</p>
         ) : query.isError ? (
-          <p className="text-sm text-destructive">Couldn&apos;t load this student&apos;s parents.</p>
+          <p className="text-sm text-destructive">{m.loadFailed}</p>
         ) : (
           <ul className="space-y-3">
             {guardians.map((guardian) => (
@@ -93,6 +104,8 @@ export function ParentPortalCard({
                 guardian={guardian}
                 studentId={student.id}
                 canToggle={canToggle}
+                canPortal={canPortal}
+                canDelete={canDelete}
               />
             ))}
           </ul>
@@ -111,7 +124,9 @@ export function ParentPortalCard({
         ) : canGrant && query.isSuccess ? (
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
             <Plus />
-            {suggestion ? `Give ${suggestion.name || suggestion.phone} access` : "Add a parent"}
+            {suggestion
+              ? fill(m.giveAccessTo, { name: suggestion.name || suggestion.phone })
+              : m.addParent}
           </Button>
         ) : null}
       </CardContent>
@@ -123,17 +138,24 @@ function GuardianRow({
   guardian,
   studentId,
   canToggle,
+  canPortal,
+  canDelete,
 }: {
   guardian: StudentGuardianRead;
   studentId: string;
   canToggle: boolean;
+  canPortal: boolean;
+  canDelete: boolean;
 }) {
+  const m = useCatalog(studentsGuardiansMessages).portal;
+  const L = useLabels();
   const toggle = useSetChildPortalAccess(studentId);
+  const [editing, setEditing] = React.useState(false);
   const canSignIn = guardian.can_view_results && guardian.portal_enabled;
   const relationship =
     guardian.relationship_type === "other"
       ? guardian.relationship_label
-      : GUARDIAN_RELATIONSHIP_LABELS[guardian.relationship_type];
+      : L.relationship[guardian.relationship_type];
 
   return (
     <li className="space-y-2 rounded-lg border border-border p-3">
@@ -141,7 +163,7 @@ function GuardianRow({
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{guardian.full_name}</p>
           <p className="text-xs text-muted-foreground">
-            {[relationship, guardian.is_primary_contact ? "Primary contact" : null]
+            {[relationship, guardian.is_primary_contact ? m.primaryContact : null]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -150,25 +172,43 @@ function GuardianRow({
           </p>
         </div>
         <Badge variant={canSignIn ? "success" : "neutral"}>
-          {canSignIn ? "Can sign in" : "Off"}
+          {canSignIn ? m.canSignIn : m.off}
         </Badge>
       </div>
 
       {!guardian.portal_enabled ? (
-        <p className="text-xs text-muted-foreground">
-          An administrator has turned the portal off for this parent.
-        </p>
-      ) : canToggle ? (
-        <Button
-          variant="outline"
-          size="sm"
-          loading={toggle.isPending}
-          onClick={() =>
-            toggle.mutate({ guardianId: guardian.guardian_id, canView: !guardian.can_view_results })
-          }
-        >
-          {guardian.can_view_results ? "Turn off" : "Turn on"}
+        <p className="text-xs text-muted-foreground">{m.portalOffByAdmin}</p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {guardian.portal_enabled && canToggle ? (
+          <Button
+            variant="outline"
+            size="sm"
+            loading={toggle.isPending}
+            onClick={() =>
+              toggle.mutate({ guardianId: guardian.guardian_id, canView: !guardian.can_view_results })
+            }
+          >
+            {guardian.can_view_results ? m.turnOff : m.turnOn}
+          </Button>
+        ) : null}
+        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          <Pencil />
+          {canToggle || canPortal ? m.edit : m.view}
         </Button>
+      </div>
+
+      {editing ? (
+        <GuardianEditDialog
+          open={editing}
+          onOpenChange={setEditing}
+          guardian={guardian}
+          studentId={studentId}
+          canUpdate={canToggle}
+          canPortal={canPortal}
+          canDelete={canDelete}
+        />
       ) : null}
     </li>
   );
@@ -189,6 +229,9 @@ function GrantForm({
   onDone: () => void;
   onCancel?: () => void;
 }) {
+  const m = useCatalog(studentsGuardiansMessages).grant;
+  const L = useLabels();
+  const relationships = Object.keys(L.relationship) as GuardianRelationship[];
   const grant = useGrantPortalAccess(studentId);
   const [name, setName] = React.useState(initialName);
   const [phone, setPhone] = React.useState(initialPhone);
@@ -200,11 +243,11 @@ function GrantForm({
     event.preventDefault();
     setError(null);
     if (!name.trim() || phone.replace(/\D/g, "").length < 7 || !relationship) {
-      setError("Enter the parent's name, WhatsApp number and relationship.");
+      setError(m.missingFields);
       return;
     }
     if (relationship === "other" && !label.trim()) {
-      setError("Describe the relationship.");
+      setError(m.describeRelationship);
       return;
     }
     try {
@@ -223,16 +266,12 @@ function GrantForm({
   return (
     <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-dashed border-border p-3">
       <p className="text-sm font-medium">
-        {fromRecord ? "Turn on for the number on this record" : "Give a parent access"}
+        {fromRecord ? m.fromRecordTitle : m.newTitle}
       </p>
-      <Field label="Parent's name" htmlFor="portal_name">
+      <Field label={m.parentName} htmlFor="portal_name">
         <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
       </Field>
-      <Field
-        label="WhatsApp number"
-        htmlFor="portal_phone"
-        hint="The sign-in code is sent here on WhatsApp."
-      >
+      <Field label={m.whatsappNumber} htmlFor="portal_phone" hint={m.whatsappHint}>
         <Input
           type="tel"
           dir="ltr"
@@ -242,27 +281,27 @@ function GrantForm({
           autoComplete="off"
         />
       </Field>
-      <Field label="Relationship" htmlFor="portal_relationship">
+      <Field label={m.relationship} htmlFor="portal_relationship">
         <NativeSelect
           value={relationship}
           onChange={(e) => setRelationship(e.target.value as GuardianRelationship | "")}
         >
           <option value="" disabled>
-            Choose…
+            {m.choose}
           </option>
-          {RELATIONSHIPS.map((value) => (
+          {relationships.map((value) => (
             <option key={value} value={value}>
-              {GUARDIAN_RELATIONSHIP_LABELS[value]}
+              {L.relationship[value]}
             </option>
           ))}
         </NativeSelect>
       </Field>
       {relationship === "other" ? (
-        <Field label="Relationship to the student" htmlFor="portal_label">
+        <Field label={m.relationshipToStudent} htmlFor="portal_label">
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="e.g. Step-father"
+            placeholder={m.relationshipPlaceholder}
           />
         </Field>
       ) : null}
@@ -270,11 +309,11 @@ function GrantForm({
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" loading={grant.isPending}>
           <MessageCircle />
-          Give portal access
+          {m.submit}
         </Button>
         {onCancel ? (
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
+            {m.cancel}
           </Button>
         ) : null}
       </div>
@@ -284,6 +323,7 @@ function GrantForm({
 
 /** Copies the full sign-in link, ready to paste into a WhatsApp chat with the parent. */
 function CopyPortalLink() {
+  const m = useCatalog(studentsGuardiansMessages).portal;
   const [copied, setCopied] = React.useState(false);
 
   async function copy() {
@@ -299,7 +339,7 @@ function CopyPortalLink() {
   return (
     <Button variant="ghost" size="sm" onClick={copy}>
       {copied ? <Check /> : <Copy />}
-      {copied ? "Copied" : "Copy link"}
+      {copied ? m.copied : m.copyLink}
     </Button>
   );
 }

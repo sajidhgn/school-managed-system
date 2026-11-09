@@ -3,8 +3,13 @@ import type { Metadata } from "next";
 import { ClassesView } from "./classes-view";
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { classesMessages } from "@/lib/i18n/modules/classes";
+import { getCatalog } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Classes" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(classesMessages)).meta.title };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

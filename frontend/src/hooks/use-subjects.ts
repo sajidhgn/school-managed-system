@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/components/ui/use-toast";
 import { errorMessage } from "@/lib/api/errors";
+import { subjectsMessages } from "@/lib/i18n/modules/subjects";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { queryKeys } from "@/lib/api/query-keys";
 import { subjectsApi, type SubjectListParams } from "@/lib/api/resources/subjects";
 import type {
@@ -30,27 +32,29 @@ export function useCurriculum(classId: string | null) {
 }
 
 export function useCreateSubject() {
+  const m = useCatalog(subjectsMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: SubjectCreate) => subjectsApi.create(body),
     onSuccess: (subject) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.subjects.all });
-      toast.success("Subject created", `${subject.code} — ${subject.name}`);
+      toast.success(m.created, `${subject.code} — ${subject.name}`);
     },
-    onError: (error) => toast.error("Couldn't create the subject", errorMessage(error)),
+    onError: (error) => toast.error(m.createFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateSubject() {
+  const m = useCatalog(subjectsMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: SubjectUpdate }) =>
       subjectsApi.update(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.subjects.all });
-      toast.success("Subject updated");
+      toast.success(m.updated);
     },
-    onError: (error) => toast.error("Couldn't update the subject", errorMessage(error)),
+    onError: (error) => toast.error(m.updateFailed, errorMessage(error)),
   });
 }
 
@@ -63,51 +67,55 @@ export function useUpdateSubject() {
  * rather than replaced with a generic failure.
  */
 export function useDeleteSubject() {
+  const m = useCatalog(subjectsMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => subjectsApi.remove(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.subjects.all });
-      toast.success("Subject deleted");
+      toast.success(m.deleted);
     },
-    onError: (error) => toast.error("Couldn't delete the subject", errorMessage(error)),
+    onError: (error) => toast.error(m.deleteFailed, errorMessage(error)),
   });
 }
 
 export function useAddToCurriculum() {
+  const m = useCatalog(subjectsMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ classId, body }: { classId: string; body: ClassSubjectCreate }) =>
       subjectsApi.curriculum.add(classId, body),
     onSuccess: (link) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.curriculum(link.class_id) });
-      toast.success("Added to curriculum", link.subject_name);
+      toast.success(m.addedToCurriculum, link.subject_name);
     },
-    onError: (error) => toast.error("Couldn't add the subject", errorMessage(error)),
+    onError: (error) => toast.error(m.addFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateCurriculumEntry() {
+  const m = useCatalog(subjectsMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ linkId, body }: { linkId: string; body: ClassSubjectUpdate }) =>
       subjectsApi.curriculum.update(linkId, body),
     onSuccess: (link) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.curriculum(link.class_id) });
-      toast.success("Curriculum updated");
+      toast.success(m.curriculumUpdated);
     },
-    onError: (error) => toast.error("Couldn't update the curriculum", errorMessage(error)),
+    onError: (error) => toast.error(m.curriculumUpdateFailed, errorMessage(error)),
   });
 }
 
 export function useRemoveFromCurriculum(classId: string) {
+  const m = useCatalog(subjectsMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (linkId: string) => subjectsApi.curriculum.remove(linkId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.curriculum(classId) });
-      toast.success("Removed from curriculum");
+      toast.success(m.removedFromCurriculum);
     },
-    onError: (error) => toast.error("Couldn't remove the subject", errorMessage(error)),
+    onError: (error) => toast.error(m.removeFailed, errorMessage(error)),
   });
 }

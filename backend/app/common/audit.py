@@ -193,6 +193,8 @@ class AuditAction:
     EXAM_PAPER_UPDATED = "exam_paper.updated"
     EXAM_PAPER_REMOVED = "exam_paper.removed"
     EXAM_MARKS_ENTERED = "exam.marks_entered"
+    EXAM_GRADING_SCALE_SET = "exam.grading_scale_set"
+    EXAM_GRADING_SCALE_DELETED = "exam.grading_scale_deleted"
 
     # --- Enrollment history --------------------------------------------------
     #

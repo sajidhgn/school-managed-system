@@ -20,12 +20,12 @@ import { useCreateExam, useUpdateExam } from "@/hooks/use-exams";
 import { queryKeys } from "@/lib/api/query-keys";
 import { calendarApi } from "@/lib/api/resources/calendar";
 import type { ExamRead, ExamStatus } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { examsMessages } from "@/lib/i18n/modules/exams";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
-export const EXAM_STATUS_LABELS: Record<ExamStatus, string> = {
-  scheduled: "Scheduled",
-  completed: "Completed",
-  published: "Published",
-};
+/** Every status, in the order the select offers them. */
+const EXAM_STATUSES: readonly ExamStatus[] = ["scheduled", "completed", "published"];
 
 /**
  * Create or edit an exam.
@@ -43,6 +43,7 @@ export function ExamFormDialog({
   onOpenChange: (open: boolean) => void;
   exam: ExamRead | null;
 }) {
+  const { form: m, status: statusLabel } = useCatalog(examsMessages);
   const create = useCreateExam();
   const update = useUpdateExam();
 
@@ -101,32 +102,29 @@ export function ExamFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{exam ? `Edit ${exam.name}` : "New exam"}</DialogTitle>
-          <DialogDescription>
-            Name the exam for its session (e.g. &quot;Mid-Term 2026-27&quot;) — names are
-            unique per school, so recurring exams carry their year.
-          </DialogDescription>
+          <DialogTitle>{exam ? fill(m.editTitle, { name: exam.name }) : m.newTitle}</DialogTitle>
+          <DialogDescription>{m.description}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="exam-name">Name</Label>
+            <Label htmlFor="exam-name">{m.name}</Label>
             <Input
               id="exam-name"
               value={name}
-              placeholder="Mid-Term 2026-27"
+              placeholder={m.namePlaceholder}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
           {termGroups.length > 0 ? (
             <div className="grid gap-1.5">
-              <Label htmlFor="exam-term">Term</Label>
+              <Label htmlFor="exam-term">{m.term}</Label>
               <NativeSelect
                 id="exam-term"
                 value={termId}
                 onChange={(event) => setTermId(event.target.value)}
               >
-                <option value="">No term</option>
+                <option value="">{m.noTerm}</option>
                 {termGroups.map(({ year, terms }) => (
                   <optgroup key={year.id} label={year.name}>
                     {terms.map((term) => (
@@ -137,14 +135,12 @@ export function ExamFormDialog({
                   </optgroup>
                 ))}
               </NativeSelect>
-              <p className="text-xs text-muted-foreground">
-                The reporting period this exam belongs to, from the Academic year page.
-              </p>
+              <p className="text-xs text-muted-foreground">{m.termHint}</p>
             </div>
           ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="exam-start">Starts</Label>
+              <Label htmlFor="exam-start">{m.starts}</Label>
               <Input
                 id="exam-start"
                 type="date"
@@ -153,7 +149,7 @@ export function ExamFormDialog({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="exam-end">Ends</Label>
+              <Label htmlFor="exam-end">{m.ends}</Label>
               <Input
                 id="exam-end"
                 type="date"
@@ -164,15 +160,15 @@ export function ExamFormDialog({
           </div>
           {exam ? (
             <div className="grid gap-1.5">
-              <Label htmlFor="exam-status">Status</Label>
+              <Label htmlFor="exam-status">{m.status}</Label>
               <NativeSelect
                 id="exam-status"
                 value={status}
                 onChange={(event) => setStatus(event.target.value as ExamStatus)}
               >
-                {(Object.keys(EXAM_STATUS_LABELS) as ExamStatus[]).map((value) => (
+                {EXAM_STATUSES.map((value) => (
                   <option key={value} value={value}>
-                    {EXAM_STATUS_LABELS[value]}
+                    {statusLabel[value]}
                   </option>
                 ))}
               </NativeSelect>
@@ -182,10 +178,10 @@ export function ExamFormDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button onClick={save} disabled={saving || !name.trim()}>
-            {saving ? "Saving…" : exam ? "Save changes" : "Create exam"}
+            {saving ? m.saving : exam ? m.saveChanges : m.create}
           </Button>
         </DialogFooter>
       </DialogContent>

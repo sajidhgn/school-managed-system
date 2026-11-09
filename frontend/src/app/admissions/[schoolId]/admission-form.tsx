@@ -23,7 +23,10 @@ import {
   toNullable,
   type AdmissionFormValues,
 } from "@/lib/validation/students";
-import { GENDER_LABELS, type AdmissionResponse, type StudentAdmissionRequest } from "@/lib/api/types";
+import type { AdmissionResponse, StudentAdmissionRequest } from "@/lib/api/types";
+import { localizeFieldError, studentsMessages } from "@/lib/i18n/modules/students";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 const EMPTY: AdmissionFormValues = {
   first_name: "",
@@ -45,6 +48,7 @@ const NONE = "__none__";
 const TOUCH = "h-11 text-base";
 
 function Shell({ children }: { children: React.ReactNode }) {
+  const m = useCatalog(studentsMessages).apply;
   return (
     <div className="min-h-svh bg-muted/40">
       <div className="mx-auto w-full max-w-xl px-4 py-10 sm:px-6 sm:py-14">
@@ -52,7 +56,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <School className="size-4.5" />
           </div>
-          <span className="text-sm font-semibold">School Management</span>
+          <span className="text-sm font-semibold">{m.brand}</span>
         </div>
         <main id="main">{children}</main>
       </div>
@@ -68,6 +72,8 @@ function Shell({ children }: { children: React.ReactNode }) {
  * navigation to speak of.
  */
 export function AdmissionForm({ schoolId }: { schoolId: string }) {
+  const { apply: m, validation } = useCatalog(studentsMessages);
+  const L = useLabels();
   const [submitted, setSubmitted] = React.useState<AdmissionResponse | null>(null);
   const [unknownSchool, setUnknownSchool] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -77,6 +83,9 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
     resolver: zodResolver(admissionFormSchema),
     defaultValues: EMPTY,
   });
+  const errors = form.formState.errors;
+  const fieldError = (name: keyof AdmissionFormValues) =>
+    localizeFieldError(errors[name], validation);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setFormError(null);
@@ -127,10 +136,9 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
           <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-full bg-muted">
             <SearchX className="size-5 text-muted-foreground" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">We couldn&apos;t find this school</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{m.unknownTitle}</h1>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-            This admissions link may be out of date or mistyped. Please check with the school for
-            their current application link — your details have not been submitted.
+            {m.unknownBody}
           </p>
         </div>
       </Shell>
@@ -145,7 +153,7 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
             <CheckCircle2 className="size-6 text-success" />
           </div>
 
-          <h1 className="text-2xl font-semibold tracking-tight">Application received</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{m.receivedTitle}</h1>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
             {submitted.detail}
           </p>
@@ -154,7 +162,7 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
               needs to keep, so it outranks everything else visually. */}
           <div className="mt-7 rounded-lg border border-border bg-muted/50 px-5 py-6">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Your reference number
+              {m.referenceLabel}
             </p>
             <p className="mt-2 select-all break-all font-mono text-3xl font-semibold tracking-tight">
               {submitted.admission_number}
@@ -166,14 +174,11 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
               onClick={() => void copyReference(submitted.admission_number)}
             >
               <Copy />
-              {copied ? "Copied" : "Copy number"}
+              {copied ? m.copied : m.copyNumber}
             </Button>
           </div>
 
-          <p className="mt-6 text-sm text-muted-foreground">
-            Write this down or take a screenshot. Quote it whenever you contact the school about
-            this application.
-          </p>
+          <p className="mt-6 text-sm text-muted-foreground">{m.keepReference}</p>
         </div>
       </Shell>
     );
@@ -183,11 +188,8 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
     <Shell>
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Admissions application</h1>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Tell us about the student and how to reach you. It takes about three minutes, and the
-            school will contact you after reviewing the application.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">{m.title}</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">{m.intro}</p>
         </header>
 
         <Separator className="my-6" />
@@ -196,12 +198,12 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
           <FormError message={formError} />
 
           <section className="space-y-4">
-            <h2 className="text-sm font-semibold">Student details</h2>
+            <h2 className="text-sm font-semibold">{m.studentDetails}</h2>
 
             <Field
-              label="First name"
+              label={m.firstName}
               htmlFor="first_name"
-              error={form.formState.errors.first_name}
+              error={fieldError("first_name")}
               required
             >
               <Input
@@ -213,9 +215,9 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
             </Field>
 
             <Field
-              label="Last name"
+              label={m.lastName}
               htmlFor="last_name"
-              error={form.formState.errors.last_name}
+              error={fieldError("last_name")}
               required
             >
               <Input
@@ -226,14 +228,14 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
             </Field>
 
             <Field
-              label="Date of birth"
+              label={m.dateOfBirth}
               htmlFor="date_of_birth"
-              error={form.formState.errors.date_of_birth}
+              error={fieldError("date_of_birth")}
             >
               <Input type="date" className={TOUCH} {...form.register("date_of_birth")} />
             </Field>
 
-            <Field label="Gender" htmlFor="gender" error={form.formState.errors.gender}>
+            <Field label={m.gender} htmlFor="gender" error={fieldError("gender")}>
               <Controller
                 control={form.control}
                 name="gender"
@@ -243,11 +245,11 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
                     onValueChange={(value) => field.onChange(value === NONE ? "" : value)}
                   >
                     <SelectTrigger id="gender" className={TOUCH}>
-                      <SelectValue placeholder="Prefer not to say" />
+                      <SelectValue placeholder={m.preferNotToSay} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NONE}>Prefer not to say</SelectItem>
-                      {Object.entries(GENDER_LABELS).map(([value, label]) => (
+                      <SelectItem value={NONE}>{m.preferNotToSay}</SelectItem>
+                      {Object.entries(L.gender).map(([value, label]) => (
                         <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
@@ -258,7 +260,7 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
               />
             </Field>
 
-            <Field label="Home address" htmlFor="address" error={form.formState.errors.address}>
+            <Field label={m.homeAddress} htmlFor="address" error={fieldError("address")}>
               <Textarea rows={3} className="text-base" {...form.register("address")} />
             </Field>
           </section>
@@ -266,22 +268,22 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
           <Separator />
 
           <section className="space-y-4">
-            <h2 className="text-sm font-semibold">Parent or guardian</h2>
+            <h2 className="text-sm font-semibold">{m.parentSection}</h2>
 
             <Field
-              label="Full name"
+              label={m.fullName}
               htmlFor="guardian_name"
-              error={form.formState.errors.guardian_name}
+              error={fieldError("guardian_name")}
               required
             >
               <Input className={TOUCH} autoComplete="name" {...form.register("guardian_name")} />
             </Field>
 
             <Field
-              label="Phone number"
+              label={m.phone}
               htmlFor="guardian_phone"
-              error={form.formState.errors.guardian_phone}
-              hint="The school will use this to contact you about the application."
+              error={fieldError("guardian_phone")}
+              hint={m.phoneHint}
               required
             >
               <Input
@@ -294,10 +296,10 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
             </Field>
 
             <Field
-              label="Email address"
+              label={m.email}
               htmlFor="guardian_email"
-              error={form.formState.errors.guardian_email}
-              hint="Optional."
+              error={fieldError("guardian_email")}
+              hint={m.optional}
             >
               <Input
                 type="email"
@@ -312,23 +314,21 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
           <Separator />
 
           <section className="space-y-4">
-            <h2 className="text-sm font-semibold">Emergency contact</h2>
-            <p className="text-sm text-muted-foreground">
-              Someone else the school can call if you can&apos;t be reached. Optional.
-            </p>
+            <h2 className="text-sm font-semibold">{m.emergencySection}</h2>
+            <p className="text-sm text-muted-foreground">{m.emergencyIntro}</p>
 
             <Field
-              label="Full name"
+              label={m.fullName}
               htmlFor="emergency_contact_name"
-              error={form.formState.errors.emergency_contact_name}
+              error={fieldError("emergency_contact_name")}
             >
               <Input className={TOUCH} {...form.register("emergency_contact_name")} />
             </Field>
 
             <Field
-              label="Phone number"
+              label={m.phone}
               htmlFor="emergency_contact_phone"
-              error={form.formState.errors.emergency_contact_phone}
+              error={fieldError("emergency_contact_phone")}
             >
               <Input
                 type="tel"
@@ -344,12 +344,12 @@ export function AdmissionForm({ schoolId }: { schoolId: string }) {
             className="h-12 w-full text-base"
             loading={form.formState.isSubmitting}
           >
-            Submit application
+            {m.submit}
           </Button>
 
           <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
             <Lock className="size-3" />
-            Your details are sent directly to the school.
+            {m.privacy}
           </p>
         </form>
       </div>

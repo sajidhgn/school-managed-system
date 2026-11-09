@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { examsMessages } from "@/lib/i18n/modules/exams";
+import { getCatalog } from "@/lib/i18n/server";
 import { ExamsView } from "./exams-view";
 
-export const metadata: Metadata = { title: "Exams" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(examsMessages)).meta.list };
+}
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -17,5 +22,11 @@ export const dynamic = "force-dynamic";
  */
 export default async function ExamsPage() {
   const { user } = await requireSchoolContext();
-  return <ExamsView canManage={hasPermission(user, PERMISSIONS.gradeManage)} />;
+  return (
+    <ExamsView
+      canManage={hasPermission(user, PERMISSIONS.gradeManage)}
+      // The grading scale is campus policy: marking rights alone do not change it.
+      canSetGrading={hasPermission(user, PERMISSIONS.gradeManage, PERMISSIONS.schoolUpdate)}
+    />
+  );
 }

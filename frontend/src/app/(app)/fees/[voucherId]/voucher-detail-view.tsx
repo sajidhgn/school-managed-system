@@ -7,6 +7,8 @@ import { ArrowLeft, Ban, Printer, Send, Trash2, Undo2, Wallet } from "lucide-rea
 import { RecordPaymentDialog } from "@/components/fees/record-payment-dialog";
 import { ReasonDialog } from "@/components/fees/reason-dialog";
 import { AddChargeForm } from "@/components/fees/add-charge-form";
+import { AddFeeChargeForm } from "@/components/fees/add-fee-charge-form";
+import { fillNodes } from "@/lib/i18n/format";
 import { ErrorState, PageSpinner } from "@/components/data-states";
 import { PageHeader } from "@/components/page-header";
 import { VoucherStatusBadge } from "@/components/status-badge";
@@ -22,18 +24,18 @@ import {
 } from "@/components/ui/table";
 import {
   useIssueVoucher,
+  useRemoveVoucherFeeCharge,
   useRemoveVoucherStationery,
   useReversePayment,
   useVoidVoucher,
   useVoucher,
 } from "@/hooks/use-fees";
 import { feesApi } from "@/lib/api/resources/fees";
-import {
-  PAYMENT_METHOD_LABELS,
-  label,
-  unitLabel,
-  type VoucherItemRead,
-} from "@/lib/api/types";
+import { label, type VoucherItemRead } from "@/lib/api/types";
+import { fill, ltr } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 /**
@@ -67,11 +69,14 @@ export function VoucherDetailView({
   canCollect: boolean;
   canVoid: boolean;
 }) {
+  const m = useCatalog(feesMessages).voucher;
+  const L = useLabels();
   const voucher = useVoucher(voucherId);
   const issue = useIssueVoucher();
   const voidVoucher = useVoidVoucher();
   const reverse = useReversePayment();
   const removeCharge = useRemoveVoucherStationery();
+  const removeFeeLine = useRemoveVoucherFeeCharge();
 
   const [collecting, setCollecting] = React.useState(false);
   const [voiding, setVoiding] = React.useState(false);
@@ -106,13 +111,17 @@ export function VoucherDetailView({
         href="/fees"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" aria-hidden />
-        Fees
+        <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
+        {m.back}
       </Link>
 
       <PageHeader
         title={data.student_name}
-        description={`${data.admission_number} · challan ${data.voucher_number} · ${data.period_label}`}
+        description={fill(m.headerDescription, {
+          admission: ltr(data.admission_number),
+          number: ltr(data.voucher_number),
+          period: data.period_label,
+        })}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <VoucherStatusBadge status={data.status} />
@@ -124,7 +133,7 @@ export function VoucherDetailView({
             <Button variant="outline" size="sm" asChild>
               <a href={feesApi.vouchers.pdfUrl(data.id)} target="_blank" rel="noreferrer">
                 <Printer className="size-4" aria-hidden />
-                Print challan
+                {m.printChallan}
               </a>
             </Button>
 
@@ -135,21 +144,21 @@ export function VoucherDetailView({
                 onClick={() => issue.mutate(data.id)}
               >
                 <Send className="size-4" aria-hidden />
-                Issue
+                {m.issue}
               </Button>
             ) : null}
 
             {!isDraft && !isVoid && !settled && canCollect ? (
               <Button size="sm" onClick={() => setCollecting(true)}>
                 <Wallet className="size-4" aria-hidden />
-                Record payment
+                {m.recordPayment}
               </Button>
             ) : null}
 
             {!isVoid && canVoid ? (
               <Button variant="ghost" size="sm" onClick={() => setVoiding(true)}>
                 <Ban className="size-4" aria-hidden />
-                Void
+                {m.void}
               </Button>
             ) : null}
           </div>
@@ -158,18 +167,18 @@ export function VoucherDetailView({
 
       {isVoid ? (
         <p className="mb-6 rounded-md bg-muted px-4 py-3 text-sm">
-          <span className="font-medium">This challan was voided</span>
-          {data.voided_at ? ` on ${formatDateTime(data.voided_at)}` : ""}.
-          {data.void_reason ? ` Reason: ${data.void_reason}` : ""} It no longer counts
-          towards billed or outstanding, and the student can be billed again for this
-          period.
+          <span className="font-medium">
+            {data.voided_at
+              ? fill(m.voidedOn, { date: formatDateTime(data.voided_at) })
+              : m.voided}
+          </span>
+          {data.void_reason ? ` ${fill(m.voidReason, { reason: data.void_reason })}` : ""}{" "}
+          {m.voidedBody}
         </p>
       ) : null}
 
       {isDraft ? (
-        <p className="mb-6 rounded-md bg-warning/15 px-4 py-3 text-sm">
-          This is a draft. It bills nothing and collects nothing until it is issued.
-        </p>
+        <p className="mb-6 rounded-md bg-warning/15 px-4 py-3 text-sm">{m.draftNotice}</p>
       ) : null}
 
       {/* THE ONLY ANSWER TO "WHY IS THIS ONE VOID?" THAT DOES NOT NEED A PHONE CALL.
@@ -180,32 +189,30 @@ export function VoucherDetailView({
           has been cancelled yet — the reservation is visible before it bites. */}
       {data.superseded_by_voucher_id ? (
         <p className="mb-6 rounded-md bg-muted px-4 py-3 text-sm">
-          <span className="font-medium">
-            {isVoid ? "Carried onto a later challan" : "Reserved by a later challan"}
-          </span>{" "}
-          {isVoid
-            ? "What was owed here is billed on"
-            : "This is still payable. It will be cancelled, and what is owed here billed on,"}{" "}
-          <Link
-            href={`/fees/${data.superseded_by_voucher_id}`}
-            className="font-medium underline underline-offset-2"
-          >
-            {data.superseded_by_voucher_number ?? "the newer challan"}
-          </Link>
-          {isVoid ? "." : " when that challan is issued."}
+          <span className="font-medium">{isVoid ? m.carriedTitle : m.reservedTitle}</span>{" "}
+          {fillNodes(isVoid ? m.carriedBody : m.reservedBody, {
+            link: (
+              <Link
+                href={`/fees/${data.superseded_by_voucher_id}`}
+                className="font-medium underline underline-offset-2"
+              >
+                {data.superseded_by_voucher_number ?? m.newerChallan}
+              </Link>
+            ),
+          })}
         </p>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         {/* --- What was billed ------------------------------------------- */}
         <Card className="overflow-hidden p-0">
-          <h2 className="border-b border-border px-5 py-3 text-sm font-medium">Charges</h2>
+          <h2 className="border-b border-border px-5 py-3 text-sm font-medium">{m.charges}</h2>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Line</TableHead>
-                  <TableHead className="text-end">Amount</TableHead>
+                  <TableHead>{m.colLine}</TableHead>
+                  <TableHead className="text-end">{m.colAmount}</TableHead>
                   {/* The remove column exists only while the bill is still being
                       assembled, so an issued challan cannot even suggest an edit. */}
                   {isDraft && canIssue ? <TableHead className="w-10" /> : null}
@@ -215,7 +222,7 @@ export function VoucherDetailView({
                 {data.items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      <ChargeDescription item={item} />
+                      <ChargeDescription item={item} working={m.stationeryWorking} />
                     </TableCell>
                     <TableCell className="text-end tabular-nums">
                       {money.format(Number(item.amount))}
@@ -226,13 +233,28 @@ export function VoucherDetailView({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`Remove ${item.line_name}`}
+                            aria-label={fill(m.removeNamed, { name: item.line_name })}
                             disabled={removeCharge.isPending}
                             onClick={() =>
                               removeCharge.mutate({
                                 id: data.id,
                                 stationeryItemId: item.stationery_item_id!,
                               })
+                            }
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                          </Button>
+                        ) : item.head_id ? (
+                          // A fee line, from the structure or a one-off charge. Taking it
+                          // off a DRAFT is how "not paying the exam fee this term" is
+                          // said without touching the structure the class bills from.
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={fill(m.removeNamed, { name: item.line_name })}
+                            disabled={removeFeeLine.isPending}
+                            onClick={() =>
+                              removeFeeLine.mutate({ id: data.id, headId: item.head_id! })
                             }
                           >
                             <Trash2 className="size-4" aria-hidden />
@@ -250,18 +272,32 @@ export function VoucherDetailView({
               Draft only. An issued bill is in a parent's hands and is never
               restated — the API refuses it too, this just does not offer it. */}
           {isDraft && canIssue ? (
-            <AddChargeForm
-              voucherId={data.id}
-              alreadyCharged={new Set(
-                data.items.map((item) => item.stationery_item_id).filter(Boolean) as string[],
-              )}
-            />
+            <>
+              <AddFeeChargeForm
+                voucherId={data.id}
+                currency={data.currency}
+                chargedHeadIds={
+                  new Set(
+                    data.items
+                      .filter((item) => item.line_type === "fee")
+                      .map((item) => item.head_id)
+                      .filter(Boolean) as string[],
+                  )
+                }
+              />
+              <AddChargeForm
+                voucherId={data.id}
+                alreadyCharged={new Set(
+                  data.items.map((item) => item.stationery_item_id).filter(Boolean) as string[],
+                )}
+              />
+            </>
           ) : null}
           <dl className="grid gap-2 border-t border-border px-5 py-4 text-sm">
-            <Row term="Total" value={money.format(Number(data.total))} strong />
-            <Row term="Received" value={money.format(Number(data.paid_total))} />
+            <Row term={m.total} value={money.format(Number(data.total))} strong />
+            <Row term={m.received} value={money.format(Number(data.paid_total))} />
             <Row
-              term="Outstanding"
+              term={m.outstanding}
               value={money.format(outstanding)}
               strong
               tone={outstanding > 0 ? "owed" : "clear"}
@@ -271,33 +307,31 @@ export function VoucherDetailView({
 
         {/* --- Dates ------------------------------------------------------- */}
         <Card className="p-5">
-          <h2 className="text-sm font-medium">Dates</h2>
+          <h2 className="text-sm font-medium">{m.dates}</h2>
           <dl className="mt-3 grid gap-2 text-sm">
-            <Row term="Issued on" value={formatDate(data.issue_date)} />
-            <Row term="Due" value={formatDate(data.due_date)} />
-            <Row term="Academic year" value={data.academic_year} />
-            <Row term="Description" value={data.period_label} />
-            {data.paid_at ? <Row term="Settled" value={formatDateTime(data.paid_at)} /> : null}
+            <Row term={m.issuedOn} value={formatDate(data.issue_date)} />
+            <Row term={m.due} value={formatDate(data.due_date)} />
+            <Row term={m.academicYear} value={data.academic_year} />
+            <Row term={m.description} value={data.period_label} />
+            {data.paid_at ? <Row term={m.settled} value={formatDateTime(data.paid_at)} /> : null}
           </dl>
         </Card>
       </div>
 
       {/* --- Receipts ------------------------------------------------------ */}
       <Card className="mt-4 overflow-hidden p-0">
-        <h2 className="border-b border-border px-5 py-3 text-sm font-medium">Receipts</h2>
+        <h2 className="border-b border-border px-5 py-3 text-sm font-medium">{m.receipts}</h2>
         {data.payments.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-            Nothing received against this challan yet.
-          </p>
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground">{m.noReceipts}</p>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Receipt</TableHead>
-                  <TableHead>Received</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead className="text-end">Amount</TableHead>
+                  <TableHead>{m.colReceipt}</TableHead>
+                  <TableHead>{m.colReceived}</TableHead>
+                  <TableHead>{m.colMethod}</TableHead>
+                  <TableHead className="text-end">{m.colAmount}</TableHead>
                   {canVoid ? <TableHead className="w-10" /> : null}
                 </TableRow>
               </TableHeader>
@@ -310,7 +344,7 @@ export function VoucherDetailView({
                         {payment.receipt_number}
                         {reversed ? (
                           <span className="ms-2 font-sans text-xs text-destructive">
-                            Reversed
+                            {m.reversed}
                           </span>
                         ) : null}
                       </TableCell>
@@ -318,7 +352,7 @@ export function VoucherDetailView({
                         {formatDate(payment.received_on)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {label(PAYMENT_METHOD_LABELS, payment.method)}
+                        {label(L.paymentMethod, payment.method)}
                         {payment.reference ? (
                           <span className="block text-xs text-muted-foreground">
                             {payment.reference}
@@ -336,7 +370,9 @@ export function VoucherDetailView({
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label={`Reverse receipt ${payment.receipt_number}`}
+                              aria-label={fill(m.reverseNamed, {
+                                receipt: payment.receipt_number,
+                              })}
                               onClick={() =>
                                 setReversing({
                                   id: payment.id,
@@ -373,9 +409,9 @@ export function VoucherDetailView({
       <ReasonDialog
         open={voiding}
         onOpenChange={setVoiding}
-        title="Void this challan?"
-        description="It stops counting towards billed and outstanding, and the student can be billed again for this period. Receipts already recorded against it are kept."
-        confirmLabel="Void challan"
+        title={m.voidTitle}
+        description={m.voidDescription}
+        confirmLabel={m.voidConfirm}
         reason={voidReason}
         onReasonChange={setVoidReason}
         busy={voidVoucher.isPending}
@@ -389,9 +425,9 @@ export function VoucherDetailView({
       <ReasonDialog
         open={reversing !== null}
         onOpenChange={(next) => !next && setReversing(null)}
-        title={`Reverse receipt ${reversing?.receipt ?? ""}?`}
-        description="The receipt stays on the challan, struck through, and the amount goes back to outstanding. Both the original and this reversal keep the name of who recorded them."
-        confirmLabel="Reverse receipt"
+        title={fill(m.reverseTitle, { receipt: reversing?.receipt ?? "" })}
+        description={m.reverseDescription}
+        confirmLabel={m.reverseConfirm}
         reason={reverseReason}
         onReasonChange={setReverseReason}
         busy={reverse.isPending}
@@ -445,7 +481,8 @@ function Row({
  * wording — which is why the unit comes from `unit_label` on the line rather than
  * from the item it points at.
  */
-function ChargeDescription({ item }: { item: VoucherItemRead }) {
+function ChargeDescription({ item, working }: { item: VoucherItemRead; working: string }) {
+  const { unit } = useLabels();
   if (item.line_type !== "stationery") return <>{item.line_name}</>;
 
   const quantity = Number(item.quantity);
@@ -459,7 +496,11 @@ function ChargeDescription({ item }: { item: VoucherItemRead }) {
     <>
       {item.line_name}
       <span className="ms-2 text-xs text-muted-foreground">
-        {quantity} {unitLabel(item.unit_label, quantity)} × {money.format(Number(item.unit_price))}
+        {fill(working, {
+          qty: quantity,
+          unit: unit(item.unit_label, quantity),
+          price: money.format(Number(item.unit_price)),
+        })}
       </span>
     </>
   );

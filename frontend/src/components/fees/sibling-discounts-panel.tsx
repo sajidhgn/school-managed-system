@@ -5,7 +5,7 @@ import { Users } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState } from "@/components/data-states";
-import { concessionRate } from "@/components/fees/concessions-panel";
+import { useConcessionRate } from "@/components/fees/concessions-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,20 +20,28 @@ import {
   useSiblingRule,
 } from "@/hooks/use-fees";
 import {
-  GUARDIAN_RELATIONSHIP_LABELS,
+  label,
   type FeeSiblingRuleRead,
   type SiblingAction,
   type SiblingFamily,
   type SiblingMember,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesSetupMessages } from "@/lib/i18n/modules/fees-setup";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /** The actions a person can apply from this screen. */
 const ACTIONABLE: ReadonlySet<SiblingAction> = new Set(["apply", "change", "remove"]);
 
-function ordinal(position: number): string {
+/**
+ * Which of the catalog's `position` forms a place in the family takes. The rule is
+ * English's (1st, 2nd, 3rd, 11th…); Urdu gives all four the same wording.
+ */
+function ordinalKey(position: number): "st" | "nd" | "rd" | "th" {
   const tens = position % 100;
-  if (tens >= 11 && tens <= 13) return `${position}th`;
-  return `${position}${{ 1: "st", 2: "nd", 3: "rd" }[position % 10] ?? "th"}`;
+  if (tens >= 11 && tens <= 13) return "th";
+  return ({ 1: "st", 2: "nd", 3: "rd" } as const)[position % 10] ?? "th";
 }
 
 /**
@@ -106,6 +114,8 @@ function RuleCard({
   rule: FeeSiblingRuleRead | null;
   onOpenConcessions: () => void;
 }) {
+  const { siblings: m, common: c } = useCatalog(feesSetupMessages);
+  const concessionRate = useConcessionRate();
   const heads = useFeeHeads({ size: 100 });
   const concessions = useConcessions({ size: 100 });
   const save = useSetSiblingRule();
@@ -141,7 +151,7 @@ function RuleCard({
 
   const schemeOptions = activeSchemes.map((scheme) => (
     <option key={scheme.id} value={scheme.id}>
-      {scheme.name} · {concessionRate(scheme)}
+      {fill(m.schemeOption, { name: scheme.name, rate: concessionRate(scheme) })}
     </option>
   ));
 
@@ -149,32 +159,31 @@ function RuleCard({
     <Card className="overflow-hidden p-0">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <div className="min-w-0">
-          <h3 className="font-medium">Sibling discount rule</h3>
-          <p className="text-sm text-muted-foreground">
-            The child in the family&rsquo;s highest class pays in full. Each younger child
-            gets the scheme for their position.
-          </p>
+          <h3 className="font-medium">{m.ruleTitle}</h3>
+          <p className="text-sm text-muted-foreground">{m.ruleIntro}</p>
         </div>
-        <Badge variant={rule ? "success" : "neutral"}>{rule ? "On" : "Not set up"}</Badge>
+        <Badge variant={rule ? "success" : "neutral"}>
+          {rule ? c.statusOn : c.statusNotSetUp}
+        </Badge>
       </div>
 
       {noSchemes ? (
         <EmptyState
           icon={Users}
-          title="Create the discount schemes first"
-          description="Add a scheme for each position you discount, e.g. Sibling 2nd child 10% and Sibling 3rd child 15%. Then pick them here."
-          action={<Button onClick={onOpenConcessions}>Go to concessions</Button>}
+          title={m.noSchemesTitle}
+          description={m.noSchemesDescription}
+          action={<Button onClick={onOpenConcessions}>{m.goToConcessions}</Button>}
         />
       ) : (
         <form onSubmit={submit} className="grid gap-5 p-5">
           <label className="grid gap-1.5 text-sm sm:max-w-xs">
-            <span className="font-medium">Discount comes off</span>
+            <span className="font-medium">{m.discountComesOff}</span>
             <NativeSelect
               value={headId}
               onChange={(event) => setForm({ ...form, headId: event.target.value })}
             >
               <option value="" disabled>
-                Choose a fee head
+                {m.chooseHead}
               </option>
               {activeHeads.map((head) => (
                 <option key={head.id} value={head.id}>
@@ -186,52 +195,49 @@ function RuleCard({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">2nd child</span>
+              <span className="font-medium">{m.second}</span>
               <NativeSelect
                 value={form.second}
                 onChange={(event) => setForm({ ...form, second: event.target.value })}
               >
                 <option value="" disabled>
-                  Choose a scheme
+                  {m.chooseScheme}
                 </option>
                 {schemeOptions}
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">3rd child</span>
+              <span className="font-medium">{m.third}</span>
               <NativeSelect
                 value={form.third}
                 onChange={(event) => setForm({ ...form, third: event.target.value })}
               >
-                <option value="">Same as 2nd child</option>
+                <option value="">{m.sameAsSecond}</option>
                 {schemeOptions}
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">4th child and later</span>
+              <span className="font-medium">{m.later}</span>
               <NativeSelect
                 value={form.later}
                 onChange={(event) => setForm({ ...form, later: event.target.value })}
               >
-                <option value="">Same as 3rd child</option>
+                <option value="">{m.sameAsThird}</option>
                 {schemeOptions}
               </NativeSelect>
             </label>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Brothers and sisters are children who share a father, mother or legal guardian
-            on their student pages, at any campus. Saving changes no child&rsquo;s fees.
-          </p>
+          <p className="text-xs text-muted-foreground">{m.ruleHelp}</p>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             {rule ? (
               <Button type="button" variant="outline" onClick={() => setConfirmingOff(true)}>
-                Turn off
+                {m.turnOff}
               </Button>
             ) : null}
             <Button type="submit" disabled={save.isPending || !headId || !form.second}>
-              {save.isPending ? "Saving…" : rule ? "Save rule" : "Turn on"}
+              {save.isPending ? c.saving : rule ? m.saveRule : m.turnOn}
             </Button>
           </div>
         </form>
@@ -240,9 +246,9 @@ function RuleCard({
       <ConfirmDialog
         open={confirmingOff}
         onOpenChange={setConfirmingOff}
-        title="Turn the sibling rule off?"
-        description="The review stops. Children already on a sibling scheme keep it until you take them off from their student page."
-        confirmLabel="Turn off"
+        title={m.offTitle}
+        description={m.offDescription}
+        confirmLabel={m.turnOff}
         loading={remove.isPending}
         onConfirm={async () => {
           await remove.mutateAsync();
@@ -258,6 +264,8 @@ function RuleCard({
 // ---------------------------------------------------------------------------
 
 function ReviewCard({ academicYear }: { academicYear: string }) {
+  const m = useCatalog(feesSetupMessages).siblings;
+  const L = useLabels();
   const review = useSiblingReview(academicYear, true);
   const apply = useApplySiblings();
 
@@ -302,17 +310,20 @@ function ReviewCard({ academicYear }: { academicYear: string }) {
     <Card className="overflow-hidden p-0">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <div className="min-w-0">
-          <h3 className="font-medium">Families · {data.academic_year}</h3>
+          <h3 className="font-medium">{fill(m.familiesTitle, { year: data.academic_year })}</h3>
           <p className="text-sm text-muted-foreground">
-            {data.families.length} famil{data.families.length === 1 ? "y" : "ies"} with a
-            child at this campus. Changes apply from the next challan generated.
+            {fill(data.families.length === 1 ? m.familiesOne : m.familiesMany, {
+              count: data.families.length,
+            })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {data.to_apply ? <Badge>{data.to_apply} to apply</Badge> : null}
-          {data.to_remove ? <Badge variant="warning">{data.to_remove} to take off</Badge> : null}
+          {data.to_apply ? <Badge>{fill(m.toApply, { count: data.to_apply })}</Badge> : null}
+          {data.to_remove ? (
+            <Badge variant="warning">{fill(m.toRemove, { count: data.to_remove })}</Badge>
+          ) : null}
           {data.conflicts ? (
-            <Badge variant="destructive">{data.conflicts} need a decision</Badge>
+            <Badge variant="destructive">{fill(m.conflicts, { count: data.conflicts })}</Badge>
           ) : null}
         </div>
       </div>
@@ -320,8 +331,8 @@ function ReviewCard({ academicYear }: { academicYear: string }) {
       {data.families.length === 0 && data.no_longer_eligible.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No families found yet"
-          description="Families appear when two children share a father, mother or legal guardian. Link parents from each student's page (Parent portal card)."
+          title={m.noFamiliesTitle}
+          description={m.noFamiliesDescription}
         />
       ) : (
         <div className="grid gap-4 p-5">
@@ -333,7 +344,7 @@ function ReviewCard({ academicYear }: { academicYear: string }) {
                 onChange={(event) => setOnlyActionable(event.target.checked)}
                 className="size-4 rounded border-input"
               />
-              Only families that need something done
+              {m.onlyActionable}
             </label>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -342,21 +353,21 @@ function ReviewCard({ academicYear }: { academicYear: string }) {
                 disabled={apply.isPending || selected.size === 0}
                 onClick={() => void run([...selected])}
               >
-                Apply selected ({selected.size})
+                {fill(m.applySelected, { count: selected.size })}
               </Button>
               <Button
                 size="sm"
                 disabled={apply.isPending || suggested.length === 0}
                 onClick={() => void run(suggested.map((m) => m.student_id))}
               >
-                {apply.isPending ? "Applying…" : `Apply all suggestions (${suggested.length})`}
+                {apply.isPending ? m.applying : fill(m.applyAll, { count: suggested.length })}
               </Button>
             </div>
           </div>
 
           {families.length === 0 && data.families.length > 0 ? (
             <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-              Every family is up to date.
+              {m.upToDate}
             </p>
           ) : null}
 
@@ -364,11 +375,13 @@ function ReviewCard({ academicYear }: { academicYear: string }) {
             <FamilyBlock
               key={family.members.map((m) => m.student_id).join(":")}
               title={family.guardians
-                .map(
-                  (g) =>
-                    `${g.full_name} (${g.relationships
-                      .map((r) => GUARDIAN_RELATIONSHIP_LABELS[r].toLowerCase())
-                      .join(", ")})`,
+                .map((g) =>
+                  fill(m.guardian, {
+                    name: g.full_name,
+                    relationships: g.relationships
+                      .map((r) => label(L.relationship, r).toLowerCase())
+                      .join(m.listSeparator),
+                  }),
                 )
                 .join(" · ")}
               members={family.members}
@@ -379,7 +392,7 @@ function ReviewCard({ academicYear }: { academicYear: string }) {
 
           {data.no_longer_eligible.length ? (
             <FamilyBlock
-              title="No longer eligible: no brother or sister enrolled now"
+              title={m.noLongerEligible}
               members={data.no_longer_eligible}
               selected={selected}
               onToggle={toggle}
@@ -402,6 +415,7 @@ function FamilyBlock({
   selected: Set<string>;
   onToggle: (studentId: string) => void;
 }) {
+  const m = useCatalog(feesSetupMessages).siblings;
   return (
     <section className="overflow-hidden rounded-lg border border-border">
       <h4 className="border-b border-border bg-muted/30 px-4 py-2 text-sm font-medium">
@@ -418,7 +432,7 @@ function FamilyBlock({
               {actionable ? (
                 <input
                   type="checkbox"
-                  aria-label={`Select ${member.student_name}`}
+                  aria-label={fill(m.selectNamed, { name: member.student_name })}
                   checked={selected.has(member.student_id)}
                   onChange={() => onToggle(member.student_id)}
                   className="mt-0.5 size-4 rounded border-input"
@@ -427,7 +441,9 @@ function FamilyBlock({
                 <span aria-hidden />
               )}
               <span className="hidden text-muted-foreground tabular-nums sm:block">
-                {member.position ? ordinal(member.position) : "—"}
+                {member.position
+                  ? fill(m.position[ordinalKey(member.position)], { n: member.position })
+                  : "—"}
               </span>
               <div className="min-w-0">
                 <p className="font-medium">
@@ -437,11 +453,16 @@ function FamilyBlock({
                   </span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {[member.class_name, member.section_name && `Section ${member.section_name}`]
+                  {[
+                    member.class_name,
+                    member.section_name && fill(m.section, { name: member.section_name }),
+                  ]
                     .filter(Boolean)
-                    .join(" · ") || "Not placed in a class"}
+                    .join(" · ") || m.notPlaced}
                   {member.at_this_campus ? null : ` · ${member.campus_name}`}
-                  {member.current && member.action !== "ok" ? ` · Now on ${member.current}` : null}
+                  {member.current && member.action !== "ok"
+                    ? ` · ${fill(m.nowOn, { scheme: member.current })}`
+                    : null}
                 </p>
                 {member.reason && member.action !== "full_fee" ? (
                   <p className="mt-1 text-xs text-muted-foreground">{member.reason}</p>
@@ -459,20 +480,21 @@ function FamilyBlock({
 }
 
 function ActionBadge({ member }: { member: SiblingMember }) {
+  const m = useCatalog(feesSetupMessages).siblings;
   const scheme = member.proposed_concession_name ?? "";
   switch (member.action) {
     case "full_fee":
-      return <Badge variant="neutral">Pays in full</Badge>;
+      return <Badge variant="neutral">{m.fullFee}</Badge>;
     case "apply":
-      return <Badge>Add {scheme}</Badge>;
+      return <Badge>{fill(m.apply, { scheme })}</Badge>;
     case "change":
-      return <Badge variant="warning">Move to {scheme}</Badge>;
+      return <Badge variant="warning">{fill(m.change, { scheme })}</Badge>;
     case "ok":
-      return <Badge variant="success">On {scheme}</Badge>;
+      return <Badge variant="success">{fill(m.ok, { scheme })}</Badge>;
     case "remove":
-      return <Badge variant="warning">Take off</Badge>;
+      return <Badge variant="warning">{m.remove}</Badge>;
     case "conflict":
-      return <Badge variant="destructive">Needs a decision</Badge>;
+      return <Badge variant="destructive">{m.conflict}</Badge>;
     case "other_campus":
       return <Badge variant="outline">{member.campus_name}</Badge>;
   }

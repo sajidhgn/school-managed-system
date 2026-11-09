@@ -12,7 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.common.schemas import BaseSchema
 from app.modules.exams.models import ExamStatus
@@ -174,6 +174,64 @@ class MarksUpsertResult(BaseSchema):
 
 
 # ---------------------------------------------------------------------------
+# Grading scale
+# ---------------------------------------------------------------------------
+
+
+class GradeBand(BaseSchema):
+    """One band: a percentage at or above `min_percent` earns `grade`."""
+
+    min_percent: Decimal = Field(ge=0, le=100, max_digits=5, decimal_places=2, examples=["80"])
+    grade: str = Field(min_length=1, max_length=8, examples=["A1"])
+    remark: str | None = Field(default=None, max_length=60, examples=["Exceptional"])
+
+    @field_validator("grade", "remark")
+    @classmethod
+    def _strip(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
+class GradingScaleInput(BaseSchema):
+    """The whole scale, replaced at once. See `ExamGradingScale` for why."""
+
+    bands: list[GradeBand] = Field(min_length=2, max_length=15)
+
+    @model_validator(mode="after")
+    def _complete_scale(self) -> GradingScaleInput:
+        """Every percentage from 0 to 100 must land in exactly one band.
+
+        Sorted highest first, so the stored order is the order a result is graded
+        in and the order the legend prints in, whatever order the form sent.
+        """
+        bands = sorted(self.bands, key=lambda band: band.min_percent, reverse=True)
+        if any(not band.grade for band in bands):
+            raise ValueError("Every band needs a grade.")
+        minimums = [band.min_percent for band in bands]
+        if len(set(minimums)) != len(minimums):
+            raise ValueError("Two bands start at the same percentage.")
+        grades = [band.grade.casefold() for band in bands]
+        if len(set(grades)) != len(grades):
+            raise ValueError("Each grade can appear only once.")
+        if bands[-1].min_percent != 0:
+            raise ValueError("The lowest band must start at 0%, so every result gets a grade.")
+        self.bands = bands
+        return self
+
+
+class GradingScaleRead(BaseSchema):
+    bands: list[GradeBand]
+    """Highest `min_percent` first."""
+    is_default: bool
+    """True while the campus is on the board scale it started with."""
+    id: UUID | None = None
+    updated_at: datetime | None = None
+    """When the campus last saved its own scale; None on the default."""
+
+
+# ---------------------------------------------------------------------------
 # Results
 # ---------------------------------------------------------------------------
 
@@ -184,6 +242,9 @@ class ResultCell(BaseSchema):
     paper_id: UUID
     marks_obtained: Decimal | None
     is_absent: bool
+    grade: str | None = None
+    """This paper's grade on the campus scale. None when the paper is unmarked or the
+    student was absent -- absent is not a grade."""
 
 
 class ExamResultRow(BaseSchema):
@@ -200,6 +261,11 @@ class ExamResultRow(BaseSchema):
     rank: int
     """1-based within the class, ties sharing a rank (standard competition
     ranking: two students on 91% are both 1st and the next is 3rd)."""
+    grade: str | None = None
+    """The overall grade for `percentage`. None when nothing has been marked for this
+    student yet -- no marks is not a 0%."""
+    remark: str | None = None
+    """The band's remark ("Excellent"), printed beside the grade on the card."""
 
 
 class ExamClassResults(BaseSchema):
@@ -210,3 +276,6 @@ class ExamClassResults(BaseSchema):
     class_name: str
     papers: list[ExamPaperRead]
     rows: list[ExamResultRow]
+    grading_scale: list[GradeBand]
+    """The bands the grades were computed with, highest first, for the legend. The
+    LAST band is the fail band: the result card prints FAIL for a result in it."""

@@ -24,6 +24,9 @@ import {
   type StudentAttendanceCalendar,
   type StudentAttendanceCalendarDay,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { STATUS_META, STATUS_ORDER, formatPct } from "./status";
 
@@ -41,7 +44,8 @@ import { STATUS_META, STATUS_ORDER, formatPct } from "./status";
  *
  * Used inline on the student's profile and inside `StudentAttendanceDialog` from the
  * per-student table, so the two can never show a child differently. The parent
- * portal renders the same `AttendanceCalendarView`, with its own translated labels.
+ * portal renders the same `AttendanceCalendarView`, with its own translated labels;
+ * the staff screens use `useAttendanceCalendarLabels()`, from the attendance catalog.
  */
 export function StudentAttendancePanel({ studentId }: { studentId: string }) {
   const query = useStudentAttendanceCalendar(studentId);
@@ -76,7 +80,10 @@ export interface AttendanceCalendarLabels {
   breakdown: string;
   previousMonth: string;
   nextMonth: string;
-  /** Prefix of the grid's accessible name, followed by the month. */
+  /**
+   * The grid's accessible name. With a `{month}` placeholder it is filled in;
+   * without one it is a prefix, followed by ", " and the month.
+   */
   gridLabel: string;
   registerOpen: string;
   registerOpenDay: string;
@@ -85,34 +92,36 @@ export interface AttendanceCalendarLabels {
   /** Monday first. */
   weekdays: string[];
   status: Record<AttendanceStatus, string>;
+  /**
+   * One character per status for the day cells and the legend. Optional: when
+   * omitted, the attendance catalog's letters for the viewer's language are used.
+   */
+  short?: Record<AttendanceStatus, string>;
 }
 
-export const ATTENDANCE_CALENDAR_LABELS: AttendanceCalendarLabels = {
-  locale: "en-PK",
-  yearSoFar: "Academic year so far",
-  noRegisters: "No submitted registers",
-  breakdown: "{absent} absent · {late} late · {half} half · {leave} leave",
-  previousMonth: "Previous month",
-  nextMonth: "Next month",
-  gridLabel: "Attendance",
-  registerOpen: "Register open",
-  registerOpenDay: "Register open, not submitted",
-  upcoming: "Upcoming",
-  noRegister: "No register",
-  weekdays: ["M", "T", "W", "T", "F", "S", "S"],
-  status: Object.fromEntries(
-    STATUS_ORDER.map((status) => [status, STATUS_META[status].label]),
-  ) as Record<AttendanceStatus, string>,
-};
+/** The calendar's words in the viewer's language, from the attendance catalog. */
+export function useAttendanceCalendarLabels(): AttendanceCalendarLabels {
+  const m = useCatalog(attendanceMessages);
+  return {
+    ...m.calendar,
+    locale: m.intlLocale,
+    weekdays: m.calendar.weekdays.split(" "),
+    status: m.status,
+    short: m.statusShort,
+  };
+}
 
 /** The calendar itself, given a year's data. Pages months locally. */
 export function AttendanceCalendarView({
   calendar,
-  labels = ATTENDANCE_CALENDAR_LABELS,
+  labels: given,
 }: {
   calendar: StudentAttendanceCalendar;
   labels?: AttendanceCalendarLabels;
 }) {
+  const own = useAttendanceCalendarLabels();
+  const labels: AttendanceCalendarLabels = given ?? own;
+  const short: Partial<Record<AttendanceStatus, string>> = given?.short ?? own.short ?? {};
   const [picked, setPicked] = React.useState<number | null>(null);
   const index = Math.min(picked ?? calendar.months.length - 1, calendar.months.length - 1);
   const month = calendar.months[index];
@@ -132,6 +141,9 @@ export function AttendanceCalendarView({
     month: "short",
   });
   const headers = labels.weekdays;
+  const gridLabel = labels.gridLabel.includes("{month}")
+    ? fill(labels.gridLabel, { month: monthName })
+    : `${labels.gridLabel}, ${monthName}`;
 
   return (
     <div className="space-y-4">
@@ -168,7 +180,7 @@ export function AttendanceCalendarView({
         <div
           className="grid grid-cols-7 gap-1"
           role="grid"
-          aria-label={`${labels.gridLabel}, ${monthName}`}
+          aria-label={gridLabel}
         >
           {headers.map((h, i) => (
             <div key={`h${i}`} className="pb-1 text-center text-[11px] text-muted-foreground" aria-hidden>
@@ -190,13 +202,14 @@ export function AttendanceCalendarView({
                 label={dayName.format(date)}
                 today={iso === calendar.today}
                 labels={labels}
+                short={short}
               />
             );
           })}
         </div>
       </div>
 
-      <Legend labels={labels} />
+      <Legend labels={labels} short={short} />
     </div>
   );
 }
@@ -218,11 +231,12 @@ function RateFigure({
       <p className="mt-1 text-xs text-muted-foreground">
         {rate.counted === 0 && counts.excused === 0
           ? labels.noRegisters
-          : labels.breakdown
-              .replace("{absent}", String(counts.absent))
-              .replace("{late}", String(counts.late))
-              .replace("{half}", String(counts.half_day))
-              .replace("{leave}", String(counts.excused))}
+          : fill(labels.breakdown, {
+              absent: counts.absent,
+              late: counts.late,
+              half: counts.half_day,
+              leave: counts.excused,
+            })}
       </p>
     </div>
   );
@@ -235,6 +249,7 @@ function DayCell({
   label,
   today,
   labels,
+  short,
 }: {
   day: number;
   entry: StudentAttendanceCalendarDay | undefined;
@@ -242,6 +257,7 @@ function DayCell({
   label: string;
   today: boolean;
   labels: AttendanceCalendarLabels;
+  short: Partial<Record<AttendanceStatus, string>>;
 }) {
   const status = entry?.register_state === "submitted" ? entry.status : null;
   const meta = status ? STATUS_META[status] : null;
@@ -267,12 +283,20 @@ function DayCell({
       )}
     >
       <span className={cn("leading-none", meta && "text-[10px] text-muted-foreground")}>{day}</span>
-      {meta ? <span className="mt-0.5 text-sm font-semibold leading-none">{meta.short}</span> : null}
+      {meta && status ? (
+        <span className="mt-0.5 text-sm font-semibold leading-none">{short[status]}</span>
+      ) : null}
     </div>
   );
 }
 
-function Legend({ labels }: { labels: AttendanceCalendarLabels }) {
+function Legend({
+  labels,
+  short,
+}: {
+  labels: AttendanceCalendarLabels;
+  short: Partial<Record<AttendanceStatus, string>>;
+}) {
   return (
     <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
       {STATUS_ORDER.map((status) => {
@@ -283,7 +307,7 @@ function Legend({ labels }: { labels: AttendanceCalendarLabels }) {
               className={cn("grid size-4 place-items-center rounded-sm text-[10px] font-semibold text-foreground", meta.cell)}
               aria-hidden
             >
-              {meta.short}
+              {short[status]}
             </span>
             {labels.status[status]}
           </li>
@@ -305,13 +329,14 @@ export function StudentAttendanceDialog({
   student: { id: string; name: string; detail?: string } | null;
   onClose: () => void;
 }) {
+  const m = useCatalog(attendanceMessages).drill;
   return (
     <Dialog open={student !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{student?.name ?? "Attendance"}</DialogTitle>
+          <DialogTitle>{student?.name ?? m.title}</DialogTitle>
           <DialogDescription>
-            {student?.detail ? `${student.detail} · ` : ""}Submitted whole-day registers only.
+            {student?.detail ? fill(m.noteWithDetail, { detail: student.detail }) : m.note}
           </DialogDescription>
         </DialogHeader>
         {student ? <StudentAttendancePanel studentId={student.id} /> : null}
@@ -319,7 +344,7 @@ export function StudentAttendanceDialog({
           <DialogFooter>
             <Can permission={PERMISSIONS.studentRead}>
               <Button asChild variant="outline">
-                <Link href={`/students/${student.id}`}>Open profile</Link>
+                <Link href={`/students/${student.id}`}>{m.openProfile}</Link>
               </Button>
             </Can>
           </DialogFooter>

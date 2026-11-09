@@ -14,8 +14,12 @@ import {
 } from "@/lib/api/types";
 import { canAny } from "@/lib/auth/permissions";
 import { getActiveSchoolId, hasPermission, requireUser } from "@/lib/auth/session";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { getCatalog } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "School" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(adminMessages)).meta.school };
+}
 
 /**
  * One campus: its profile, and how much of the organization sits inside it.

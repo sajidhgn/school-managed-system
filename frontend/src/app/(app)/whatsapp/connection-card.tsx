@@ -16,19 +16,38 @@ import {
   useWhatsAppQr,
 } from "@/hooks/use-whatsapp";
 import type { WhatsAppConnectionRead } from "@/lib/api/types";
+import type { Translation } from "@/lib/i18n/catalog";
+import { fill } from "@/lib/i18n/format";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
-const STATUS_LABEL: Record<string, { label: string; variant: BadgeProps["variant"] }> = {
-  STOPPED: { label: "Not connected", variant: "neutral" },
-  STARTING: { label: "Starting…", variant: "warning" },
-  SCAN_QR_CODE: { label: "Waiting for scan", variant: "warning" },
-  WORKING: { label: "Connected", variant: "success" },
-  FAILED: { label: "Failed", variant: "destructive" },
+import { fillNodes } from "@/lib/i18n/format";
+
+type ConnectionMessages = Translation<(typeof whatsappMessages)["en"]>["connection"];
+type GatewayStatus = keyof ConnectionMessages["status"];
+
+/** Gateway session states; the words are `connection.status` in the catalog. */
+const STATUS_VARIANT: Record<GatewayStatus, BadgeProps["variant"]> = {
+  STOPPED: "neutral",
+  STARTING: "warning",
+  SCAN_QR_CODE: "warning",
+  WORKING: "success",
+  FAILED: "destructive",
 };
 
-function statusBadge(connection: WhatsAppConnectionRead) {
-  if (!connection.configured) return { label: "Not set up", variant: "neutral" as const };
-  if (!connection.status) return STATUS_LABEL.STOPPED;
-  return STATUS_LABEL[connection.status] ?? { label: connection.status, variant: "outline" as const };
+function isGatewayStatus(value: string): value is GatewayStatus {
+  return value in STATUS_VARIANT;
+}
+
+function statusBadge(
+  connection: WhatsAppConnectionRead,
+  m: ConnectionMessages,
+): { label: string; variant: BadgeProps["variant"] } {
+  if (!connection.configured) return { label: m.notSetUp, variant: "neutral" };
+  const status = connection.status || "STOPPED";
+  // An unknown state is shown as the gateway names it.
+  if (!isGatewayStatus(status)) return { label: status, variant: "outline" };
+  return { label: m.status[status], variant: STATUS_VARIANT[status] };
 }
 
 /** "923001234567@c.us" → "+923001234567". */
@@ -43,6 +62,7 @@ export function formatWhatsAppNumber(phone: string): string {
  * queues (fee notices, messages, diaries) goes out from this number.
  */
 export function ConnectionCard({ canManage }: { canManage: boolean }) {
+  const m = useCatalog(whatsappMessages).connection;
   const connection = useWhatsAppConnection();
   const connect = useConnectWhatsApp();
   const disconnect = useDisconnectWhatsApp();
@@ -52,7 +72,7 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
   const status = data?.status ?? null;
   const qr = useWhatsAppQr(canManage && !!data?.configured && status === "SCAN_QR_CODE");
 
-  const badge = data ? statusBadge(data) : null;
+  const badge = data ? statusBadge(data, m) : null;
   const pending = status === "STARTING" || status === "SCAN_QR_CODE";
   const working = status === "WORKING";
 
@@ -61,7 +81,7 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
       <CardHeader className="flex flex-row items-center justify-between gap-4">
         <CardTitle className="flex items-center gap-2">
           <Smartphone className="h-4 w-4" aria-hidden />
-          School WhatsApp number
+          {m.title}
         </CardTitle>
         {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
       </CardHeader>
@@ -72,17 +92,17 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
           <ErrorState error={connection.error} onRetry={() => void connection.refetch()} />
         ) : !data ? null : !data.configured ? (
           <p className="text-sm text-muted-foreground">
-            Messages are sent through the server&apos;s configured WhatsApp provider (
-            <code className="rounded bg-muted px-1">{data.backend}</code>). To link the
-            school&apos;s own number here by scanning a QR code, the server administrator sets{" "}
-            <code className="rounded bg-muted px-1">WHATSAPP_BACKEND=waha</code>.
+            {fillNodes(m.notConfigured, {
+              backend: <code className="rounded bg-muted px-1">{data.backend}</code>,
+              env: <code className="rounded bg-muted px-1">WHATSAPP_BACKEND=waha</code>,
+            })}
           </p>
         ) : working ? (
           <>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <div className="text-lg font-medium" dir="ltr">
-                  {data.phone ? formatWhatsAppNumber(data.phone) : "Linked"}
+                  {data.phone ? formatWhatsAppNumber(data.phone) : m.linkedFallback}
                 </div>
                 {data.push_name && (
                   <div className="text-sm text-muted-foreground">{data.push_name}</div>
@@ -91,7 +111,7 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
               {canManage && (
                 <Button variant="outline" onClick={() => setConfirmOpen(true)}>
                   <Power className="h-4 w-4" aria-hidden />
-                  Disconnect
+                  {m.disconnect}
                 </Button>
               )}
             </div>
@@ -99,11 +119,9 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
               <div className="flex gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
                 <p>
-                  {data.unresolved_groups} group{data.unresolved_groups === 1 ? " isn't" : "s aren't"}{" "}
-                  reachable yet. The school&apos;s number must be a member of{" "}
-                  {data.unresolved_groups === 1 ? "that group" : "those groups"} — the gateway
-                  tries to join through the invite link; if that keeps failing, ask a group admin to
-                  add the school&apos;s number.
+                  {fill(data.unresolved_groups === 1 ? m.unresolvedOne : m.unresolvedOther, {
+                    count: data.unresolved_groups,
+                  })}
                 </p>
               </div>
             )}
@@ -116,7 +134,7 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
                   // eslint-disable-next-line @next/next/no-img-element -- a data: URI, nothing to optimise
                   <img
                     src={`data:${qr.data.mimetype};base64,${qr.data.data}`}
-                    alt="WhatsApp pairing QR code"
+                    alt={m.qrAlt}
                     className="size-full"
                   />
                 ) : (
@@ -124,14 +142,8 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
                 )}
               </div>
               <div className="space-y-3 text-sm">
-                <p>
-                  On the school&apos;s phone: <strong>WhatsApp → Linked devices → Link a device</strong>,
-                  then scan this code.
-                </p>
-                <p className="text-muted-foreground">
-                  The code refreshes by itself every few seconds. This page updates once the phone
-                  is linked.
-                </p>
+                <p>{fillNodes(m.pairSteps, { path: <strong>{m.pairPath}</strong> })}</p>
+                <p className="text-muted-foreground">{m.qrRefresh}</p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -139,32 +151,28 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
                   onClick={() => connect.mutate()}
                 >
                   <RotateCw className="h-4 w-4" aria-hidden />
-                  Restart
+                  {m.restart}
                 </Button>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Waiting for an administrator to scan the QR code on the school&apos;s phone.
-            </p>
+            <p className="text-sm text-muted-foreground">{m.waitingAdmin}</p>
           )
         ) : pending ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
-            Starting the WhatsApp session…
+            {m.starting}
           </p>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="max-w-prose text-sm text-muted-foreground">
-              {status === "FAILED"
-                ? "The WhatsApp session stopped working. Connect again to get a new QR code."
-                : "Link the school's WhatsApp number so fee notices, messages and diaries go out from it."}
-              {!canManage && " Ask an administrator to connect it."}
+              {status === "FAILED" ? m.failed : m.intro}
+              {!canManage && ` ${m.askAdmin}`}
             </p>
             {canManage && (
               <Button loading={connect.isPending} onClick={() => connect.mutate()}>
                 <PlugZap className="h-4 w-4" aria-hidden />
-                Connect WhatsApp
+                {m.connect}
               </Button>
             )}
           </div>
@@ -174,9 +182,9 @@ export function ConnectionCard({ canManage }: { canManage: boolean }) {
         <ConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
-          title="Disconnect WhatsApp?"
-          description="The school's number is logged out of the gateway. Fee notices, messages and diaries can't be sent until it is connected again."
-          confirmLabel="Disconnect"
+          title={m.confirmTitle}
+          description={m.confirmDescription}
+          confirmLabel={m.disconnect}
           loading={disconnect.isPending}
           onConfirm={() => disconnect.mutate(undefined, { onSuccess: () => setConfirmOpen(false) })}
         />

@@ -3,8 +3,12 @@ import type { Metadata } from "next";
 import { VoucherDetailView } from "./voucher-detail-view";
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { getCatalog } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Challan" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(feesMessages)).voucher.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 export default async function VoucherPage({

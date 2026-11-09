@@ -41,6 +41,10 @@ import type {
   SectionAttendanceAnalytics,
   TermRead,
 } from "@/lib/api/types";
+import type { Translation } from "@/lib/i18n/catalog";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,6 +72,8 @@ const THRESHOLDS = [60, 70, 75, 80, 85, 90];
 
 type SortKey = "class" | "rate" | "change" | "coverage" | "at_risk";
 
+type CsvMessages = Translation<(typeof attendanceMessages)["en"]>["csv"];
+
 /** The term containing today, else the most recent one that has started. */
 function currentTerm(terms: TermRead[] | undefined, today: string): TermRead | null {
   if (!terms?.length) return null;
@@ -80,6 +86,7 @@ function currentTerm(terms: TermRead[] | undefined, today: string): TermRead | n
 }
 
 export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean }) {
+  const { analytics: m, csv } = useCatalog(attendanceMessages);
   const today = todayIso();
   const [preset, setPreset] = React.useState<Preset>("30");
   const [custom, setCustom] = React.useState({ from: shiftIso(today, -29), to: today });
@@ -115,13 +122,13 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Attendance analytics"
-        description="How each class is attending, whether registers are being marked, and who needs a call home."
+        title={m.title}
+        description={m.description}
         actions={
           data && data.sections.length > 0 ? (
-            <Button variant="outline" onClick={() => exportSections(data)}>
+            <Button variant="outline" onClick={() => exportSections(data, csv)}>
               <Download />
-              Export CSV
+              {m.exportCsv}
             </Button>
           ) : null
         }
@@ -132,7 +139,7 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="range-preset" className="text-xs">
-            Range
+            {m.range}
           </Label>
           <NativeSelect
             id="range-preset"
@@ -140,18 +147,18 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
             onChange={(e) => setPreset(e.target.value as Preset)}
             className="w-40"
           >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            {term ? <option value="term">This term ({term.name})</option> : null}
-            <option value="custom">Custom range</option>
+            <option value="7">{m.last7}</option>
+            <option value="30">{m.last30}</option>
+            <option value="90">{m.last90}</option>
+            {term ? <option value="term">{fill(m.thisTerm, { name: term.name })}</option> : null}
+            <option value="custom">{m.customRange}</option>
           </NativeSelect>
         </div>
         {preset === "custom" ? (
           <>
             <div className="space-y-1">
               <Label htmlFor="range-from" className="text-xs">
-                From
+                {m.from}
               </Label>
               <Input
                 id="range-from"
@@ -164,7 +171,7 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
             </div>
             <div className="space-y-1">
               <Label htmlFor="range-to" className="text-xs">
-                To
+                {m.to}
               </Label>
               <Input
                 id="range-to"
@@ -180,7 +187,7 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
         ) : null}
         <div className="space-y-1">
           <Label htmlFor="class-filter" className="text-xs">
-            Class
+            {m.class}
           </Label>
           <NativeSelect
             id="class-filter"
@@ -188,7 +195,7 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
             onChange={(e) => setClassId(e.target.value)}
             className="w-44"
           >
-            <option value="">All classes</option>
+            <option value="">{m.allClasses}</option>
             {data?.classes.map((c) => (
               <option key={c.class_id} value={c.class_id}>
                 {c.class_name}
@@ -198,7 +205,7 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
         </div>
         <div className="space-y-1">
           <Label htmlFor="threshold" className="text-xs">
-            At risk below
+            {m.atRiskBelow}
           </Label>
           <NativeSelect
             id="threshold"
@@ -226,18 +233,14 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
 
           {data.summary.counted === 0 ? (
             <Card>
-              <EmptyState
-                icon={CalendarDays}
-                title="No submitted registers in this range"
-                description="Rates appear once whole-day registers are submitted. Drafts and lesson registers are not counted."
-              />
+              <EmptyState icon={CalendarDays} title={m.noRegisters} description={m.noRegistersHint} />
             </Card>
           ) : (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <Card>
                 <CardHeader>
-                  <CardTitle>Daily attendance</CardTitle>
-                  <CardDescription>Each school day in the range, as a percentage.</CardDescription>
+                  <CardTitle>{m.dailyTitle}</CardTitle>
+                  <CardDescription>{m.dailyHint}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <TrendChart days={data.days} />
@@ -245,8 +248,8 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>By day of the week</CardTitle>
-                  <CardDescription>Difference from the overall rate for the range.</CardDescription>
+                  <CardTitle>{m.weekdayTitle}</CardTitle>
+                  <CardDescription>{m.weekdayHint}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <WeekdayPattern weekdays={data.weekdays} overall={data.summary.percentage} />
@@ -270,24 +273,25 @@ export function AnalyticsView({ canReadCalendar }: { canReadCalendar: boolean })
 // ---------------------------------------------------------------------------
 
 function Headline({ data }: { data: AttendanceAnalytics }) {
+  const m = useCatalog(attendanceMessages).analytics;
   const { headline } = data;
   const items = [
-    { label: "Today", rate: headline.today.percentage },
-    { label: "This month", rate: headline.this_month.percentage },
-    { label: "Last month", rate: headline.previous_month.percentage },
-    { label: "Academic year", rate: headline.year_to_date?.percentage ?? null },
+    { key: "today", label: m.today, rate: headline.today.percentage },
+    { key: "this_month", label: m.thisMonth, rate: headline.this_month.percentage },
+    { key: "last_month", label: m.lastMonth, rate: headline.previous_month.percentage },
+    { key: "year", label: m.academicYear, rate: headline.year_to_date?.percentage ?? null },
   ];
   return (
-    <section aria-label="Attendance at a glance" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+    <section aria-label={m.glance} className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
       {items.map((item) => (
-        <div key={item.label} className="bg-card px-4 py-3">
+        <div key={item.key} className="bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">{item.label}</p>
           <p className="mt-0.5 text-xl font-semibold">{formatPct(item.rate)}</p>
-          {item.label === "This month" ? (
+          {item.key === "this_month" ? (
             <TrendDelta
               now={headline.this_month.percentage}
               before={headline.previous_month.percentage}
-              suffix="vs last month"
+              template={m.vsLastMonth}
             />
           ) : null}
         </div>
@@ -297,6 +301,7 @@ function Headline({ data }: { data: AttendanceAnalytics }) {
 }
 
 function KpiTiles({ data }: { data: AttendanceAnalytics }) {
+  const m = useCatalog(attendanceMessages).analytics;
   const { summary } = data;
   const days =
     (new Date(`${data.to_date}T00:00:00`).getTime() - new Date(`${data.from_date}T00:00:00`).getTime()) /
@@ -304,23 +309,26 @@ function KpiTiles({ data }: { data: AttendanceAnalytics }) {
     1;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Tile label="Attendance rate" value={formatPct(summary.percentage)}>
+      <Tile label={m.rate} value={formatPct(summary.percentage)}>
         <TrendDelta
           now={summary.percentage}
           before={summary.previous_percentage}
-          suffix={`vs previous ${days} days`}
+          template={fill(m.vsPreviousDays, { days, delta: "{delta}" })}
         />
       </Tile>
-      <Tile label="School days" value={String(summary.school_days)}>
-        Days on which at least one register was submitted.
+      <Tile label={m.schoolDays} value={String(summary.school_days)}>
+        {m.schoolDaysHint}
       </Tile>
-      <Tile label="Marking coverage" value={formatPct(summary.coverage_percentage, 0)}>
+      <Tile label={m.coverage} value={formatPct(summary.coverage_percentage, 0)}>
         {summary.registers_expected > 0
-          ? `${summary.registers_submitted} of ${summary.registers_expected} registers submitted.`
-          : "Nothing to measure against yet."}
+          ? fill(m.coverageHint, {
+              submitted: summary.registers_submitted,
+              expected: summary.registers_expected,
+            })
+          : m.coverageNone}
       </Tile>
-      <Tile label="Students at risk" value={String(summary.at_risk_students)}>
-        Below {data.threshold}% with {data.min_sessions}+ registers counted.
+      <Tile label={m.atRisk} value={String(summary.at_risk_students)}>
+        {fill(m.atRiskHint, { threshold: data.threshold, min: data.min_sessions })}
       </Tile>
     </div>
   );
@@ -363,6 +371,7 @@ function nullsLast(a: number | null | undefined, b: number | null | undefined): 
 }
 
 function SectionsTable({ data }: { data: AttendanceAnalytics }) {
+  const m = useCatalog(attendanceMessages).analytics;
   const [sort, setSort] = React.useState<{ key: SortKey; desc: boolean }>({ key: "class", desc: false });
   const rows = React.useMemo(() => {
     const sorted = [...data.sections].sort(SORTERS[sort.key]);
@@ -398,28 +407,32 @@ function SectionsTable({ data }: { data: AttendanceAnalytics }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sections</CardTitle>
+        <CardTitle>{m.sectionsTitle}</CardTitle>
         <CardDescription>
-          {data.from_date} to {data.to_date}. Change is against {data.previous_from_date} to{" "}
-          {data.previous_to_date}. Coverage counts registers submitted on the{" "}
-          {data.summary.school_days} school day{data.summary.school_days === 1 ? "" : "s"}.
+          {fill(data.summary.school_days === 1 ? m.sectionsDescOne : m.sectionsDescOther, {
+            from: data.from_date,
+            to: data.to_date,
+            prevFrom: data.previous_from_date,
+            prevTo: data.previous_to_date,
+            days: data.summary.school_days,
+          })}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-0">
         {rows.length === 0 ? (
-          <EmptyState title="No sections to show" description="Create a class and a section, or pick another class." />
+          <EmptyState title={m.noSections} description={m.noSectionsHint} />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                {header("class", "Section")}
-                <TableHead>Today</TableHead>
-                {header("rate", "Attendance", "min-w-44")}
-                {header("change", "Change")}
-                {header("coverage", "Coverage")}
-                <TableHead className="text-end">Absences</TableHead>
-                {header("at_risk", "At risk", "text-end")}
-                <TableHead className="text-end">Students</TableHead>
+                {header("class", m.colSection)}
+                <TableHead>{m.colToday}</TableHead>
+                {header("rate", m.colAttendance, "min-w-44")}
+                {header("change", m.colChange)}
+                {header("coverage", m.colCoverage)}
+                <TableHead className="text-end">{m.colAbsences}</TableHead>
+                {header("at_risk", m.colAtRisk, "text-end")}
+                <TableHead className="text-end">{m.colStudents}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -435,7 +448,7 @@ function SectionsTable({ data }: { data: AttendanceAnalytics }) {
                         {label}
                       </Link>
                       <p className="text-xs text-muted-foreground">
-                        {row.class_teacher_name ?? "No class teacher"}
+                        {row.class_teacher_name ?? m.noTeacher}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -453,8 +466,10 @@ function SectionsTable({ data }: { data: AttendanceAnalytics }) {
                         {row.registers_submitted}/{data.summary.school_days}
                       </span>
                       {row.registers_draft > 0 ? (
-                        <Badge variant="neutral" className="ms-1.5" title="Registers opened but never submitted">
-                          {row.registers_draft} draft{row.registers_draft === 1 ? "" : "s"}
+                        <Badge variant="neutral" className="ms-1.5" title={m.draftTitle}>
+                          {fill(row.registers_draft === 1 ? m.draftsOne : m.draftsOther, {
+                            count: row.registers_draft,
+                          })}
                         </Badge>
                       ) : null}
                     </TableCell>
@@ -488,26 +503,27 @@ function sortValue(row: SectionAttendanceAnalytics, key: SortKey): number | null
   return 0;
 }
 
-function exportSections(data: AttendanceAnalytics) {
+/** The headings follow the viewer's language; the cells stay raw values, enums included. */
+function exportSections(data: AttendanceAnalytics, csv: CsvMessages) {
   const header = [
-    "Class",
-    "Section",
-    "Class teacher",
-    "Students on roll",
-    "Attendance %",
-    "Previous period %",
-    "Change (pts)",
-    "Present",
-    "Late",
-    "Half day",
-    "Absent",
-    "Excused",
-    "Registers submitted",
-    "Registers in draft",
-    "School days",
-    "Coverage %",
-    "Today",
-    "At risk",
+    csv.class,
+    csv.section,
+    csv.classTeacher,
+    csv.studentsOnRoll,
+    csv.attendancePct,
+    csv.previousPct,
+    csv.change,
+    csv.present,
+    csv.late,
+    csv.halfDay,
+    csv.absent,
+    csv.excused,
+    csv.registersSubmitted,
+    csv.registersDraft,
+    csv.schoolDays,
+    csv.coveragePct,
+    csv.today,
+    csv.atRisk,
   ];
   const rows = data.sections.map((r) => {
     const delta = deltaPoints(r.percentage, r.previous_percentage);
@@ -546,35 +562,37 @@ function AtRisk({
   data: AttendanceAnalytics;
   onOpen: (student: { id: string; name: string; detail?: string }) => void;
 }) {
+  const m = useCatalog(attendanceMessages).analytics;
   const total = data.summary.at_risk_students;
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Students at risk</CardTitle>
+        <CardTitle>{m.atRiskTitle}</CardTitle>
         <CardDescription>
-          Below {data.threshold}% over the range, with at least {data.min_sessions} registers counted
-          so one bad day does not flag a child. Lowest first.
-          {total > data.at_risk.length ? ` Showing the ${data.at_risk.length} lowest of ${total}.` : ""}
+          {fill(m.atRiskDesc, { threshold: data.threshold, min: data.min_sessions })}
+          {total > data.at_risk.length
+            ? ` ${fill(m.atRiskShowing, { shown: data.at_risk.length, total })}`
+            : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-0">
         {data.at_risk.length === 0 ? (
-          <EmptyState title="Nobody below the threshold" description="No student in this range is under it with enough registers counted." />
+          <EmptyState title={m.nobodyAtRisk} description={m.nobodyAtRiskHint} />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead className="text-end">Attendance</TableHead>
-                <TableHead className="text-end">Absent</TableHead>
-                <TableHead>Current run</TableHead>
+                <TableHead>{m.colStudent}</TableHead>
+                <TableHead>{m.colClass}</TableHead>
+                <TableHead className="text-end">{m.colAttendance}</TableHead>
+                <TableHead className="text-end">{m.colAbsent}</TableHead>
+                <TableHead>{m.colRun}</TableHead>
                 <TableHead className="w-28" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.at_risk.map((s) => {
-                const placement = s.class_name ? `${s.class_name} · ${s.section_name}` : "Unplaced";
+                const placement = s.class_name ? `${s.class_name} · ${s.section_name}` : m.unplaced;
                 return (
                   <TableRow key={s.student_id}>
                     <TableCell>
@@ -586,7 +604,9 @@ function AtRisk({
                     <TableCell className="whitespace-nowrap">
                       {placement}
                       {s.roll_number ? (
-                        <span className="ms-1.5 text-xs text-muted-foreground">Roll {s.roll_number}</span>
+                        <span className="ms-1.5 text-xs text-muted-foreground">
+                          {fill(m.roll, { roll: s.roll_number })}
+                        </span>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-end font-medium tabular-nums">
@@ -600,10 +620,10 @@ function AtRisk({
                       {s.absence_streak >= 2 ? (
                         <Badge variant="destructive">
                           <Flame className="size-3" aria-hidden />
-                          Absent {s.absence_streak} days running
+                          {fill(m.streak, { count: s.absence_streak })}
                         </Badge>
                       ) : s.absence_streak === 1 ? (
-                        <span className="text-xs text-muted-foreground">Absent last register</span>
+                        <span className="text-xs text-muted-foreground">{m.absentLast}</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -614,7 +634,7 @@ function AtRisk({
                         variant="outline"
                         onClick={() => onOpen({ id: s.student_id, name: s.full_name, detail: placement })}
                       >
-                        Calendar
+                        {m.calendar}
                       </Button>
                     </TableCell>
                   </TableRow>

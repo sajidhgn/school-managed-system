@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Field } from "@/components/form/field";
@@ -17,10 +17,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { roles as rolesApi } from "@/lib/api/resources";
 import type { PermissionCategory } from "@/lib/api/types";
-import { roleCreateSchema, type RoleCreateValues } from "@/lib/validation/rbac";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { createRoleSchema, type RoleCreateValues } from "@/lib/validation/rbac";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +51,9 @@ export function RoleFormDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslations();
+  const { roles: m, validation } = useCatalog(adminMessages);
+  const schema = useMemo(() => createRoleSchema(validation), [validation]);
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [formError, setFormError] = useState<string | null>(null);
@@ -54,7 +61,7 @@ export function RoleFormDialog({
   const held = new Set(actorPermissions);
 
   const form = useForm<RoleCreateValues>({
-    resolver: zodResolver(roleCreateSchema),
+    resolver: zodResolver(schema),
     defaultValues: { code: "", name: "", description: "", permissions: [] },
   });
 
@@ -67,7 +74,7 @@ export function RoleFormDialog({
         description: values.description || undefined,
         permissions: [...picked],
       });
-      toast({ title: `${values.name} created.` });
+      toast({ title: fill(m.created, { name: values.name }) });
       form.reset();
       setPicked(new Set());
       onOpenChange(false);
@@ -81,7 +88,7 @@ export function RoleFormDialog({
         setFormError(error.message);
         return;
       }
-      setFormError("Please try again.");
+      setFormError(t.common.tryAgain);
     }
   }
 
@@ -93,34 +100,32 @@ export function RoleFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New role</DialogTitle>
-          <DialogDescription>
-            Roles are specific to this school. You can only grant permissions you hold yourself.
-          </DialogDescription>
+          <DialogTitle>{t.roles.newRole}</DialogTitle>
+          <DialogDescription>{t.roles.onlyOwnPermissions}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Display name" htmlFor="name" error={form.formState.errors.name} required>
-              <Input placeholder="Head of Year" autoFocus {...form.register("name")} />
+            <Field label={t.roles.displayName} htmlFor="name" error={form.formState.errors.name} required>
+              <Input placeholder={m.namePlaceholder} autoFocus {...form.register("name")} />
             </Field>
             <Field
-              label="Code"
+              label={t.roles.code}
               htmlFor="code"
               error={form.formState.errors.code}
-              hint="Lowercase, no spaces — e.g. head_of_year"
+              hint={t.roles.codeHint}
               required
             >
               <Input placeholder="head_of_year" {...form.register("code")} />
             </Field>
           </div>
 
-          <Field label="Description" htmlFor="description" error={form.formState.errors.description}>
-            <Input placeholder="What this role is for" {...form.register("description")} />
+          <Field label={t.roles.description} htmlFor="description" error={form.formState.errors.description}>
+            <Input placeholder={t.roles.descriptionPlaceholder} {...form.register("description")} />
           </Field>
 
           <div>
-            <p className="mb-2 text-sm font-medium">Permissions</p>
+            <p className="mb-2 text-sm font-medium">{t.roles.permissions}</p>
             <div className="max-h-64 overflow-y-auto rounded-lg border border-border p-3">
               {schoolScoped.map((category) => (
                 <fieldset key={category.category} className="mb-3 last:mb-0">
@@ -140,7 +145,7 @@ export function RoleFormDialog({
                           title={
                             grantable
                               ? permission.description
-                              : "You cannot grant a permission you do not hold yourself."
+                              : t.roles.cannotGrant
                           }
                         >
                           <input
@@ -175,10 +180,10 @@ export function RoleFormDialog({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button type="submit" disabled={form.formState.isSubmitting}>
-              Create role
+              {m.createRole}
             </Button>
           </DialogFooter>
         </form>

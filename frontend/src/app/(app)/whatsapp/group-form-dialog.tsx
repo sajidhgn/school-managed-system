@@ -17,6 +17,8 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useSaveWhatsAppGroup, useWhatsAppConnection } from "@/hooks/use-whatsapp";
 import type { WhatsAppGroupRead } from "@/lib/api/types";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /** Link a new group, or edit one. The invite link is how the group is addressed. */
 export function GroupFormDialog({
@@ -28,6 +30,7 @@ export function GroupFormDialog({
   onOpenChange: (open: boolean) => void;
   group: WhatsAppGroupRead | null;
 }) {
+  const m = useCatalog(whatsappMessages).groupForm;
   const classes = useClassSummary();
   const save = useSaveWhatsAppGroup();
   const gateway = useWhatsAppConnection().data?.configured ?? false;
@@ -55,11 +58,8 @@ export function GroupFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{group ? "Edit group" : "Link a WhatsApp group"}</DialogTitle>
-          <DialogDescription>
-            In WhatsApp open the group → Group info → Invite via link → Copy link, and paste it
-            below. The school&apos;s WhatsApp number must be an admin of the group.
-          </DialogDescription>
+          <DialogTitle>{group ? m.editTitle : m.newTitle}</DialogTitle>
+          <DialogDescription>{m.description}</DialogDescription>
         </DialogHeader>
         <form
           id="wa-group-form"
@@ -84,7 +84,7 @@ export function GroupFormDialog({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="wa-class">Class</Label>
+              <Label htmlFor="wa-class">{m.class}</Label>
               <NativeSelect
                 id="wa-class"
                 required
@@ -95,7 +95,7 @@ export function GroupFormDialog({
                 }}
               >
                 <option value="" disabled>
-                  Choose a class
+                  {m.chooseClass}
                 </option>
                 {classes.data?.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -105,14 +105,14 @@ export function GroupFormDialog({
               </NativeSelect>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="wa-section">Section</Label>
+              <Label htmlFor="wa-section">{m.section}</Label>
               <NativeSelect
                 id="wa-section"
                 value={sectionId}
                 disabled={!classId}
                 onChange={(event) => setSectionId(event.target.value)}
               >
-                <option value="">Whole class</option>
+                <option value="">{m.wholeClass}</option>
                 {sections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -122,18 +122,18 @@ export function GroupFormDialog({
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="wa-name">Group name</Label>
+            <Label htmlFor="wa-name">{m.name}</Label>
             <Input
               id="wa-name"
               required
               maxLength={120}
               value={name}
-              placeholder="Grade 5-A Parents"
+              placeholder={m.namePlaceholder}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="wa-link">Invite link</Label>
+            <Label htmlFor="wa-link">{m.link}</Label>
             <Input
               id="wa-link"
               required
@@ -148,7 +148,7 @@ export function GroupFormDialog({
               checked={feeNotice}
               onChange={(event) => setFeeNotice(event.target.checked)}
             />
-            Send the monthly fee notice to this group
+            {m.feeNotice}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -156,22 +156,20 @@ export function GroupFormDialog({
               checked={active}
               onChange={(event) => setActive(event.target.checked)}
             />
-            Active (uncheck to pause all messages)
+            {m.active}
           </label>
           {gateway && group && !group.chat_id && (
             <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-xs">
-              Not reachable yet: the school&apos;s number isn&apos;t a member of this group. The
-              gateway tries to join through the invite link — check that the link is current, or
-              ask a group admin to add the school&apos;s number.
+              {m.unreachable}
             </p>
           )}
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button type="submit" form="wa-group-form" disabled={save.isPending}>
-            {group ? "Save" : "Link group"}
+            {group ? m.save : m.create}
           </Button>
         </DialogFooter>
       </DialogContent>

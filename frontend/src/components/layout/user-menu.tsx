@@ -7,6 +7,8 @@ import { useTheme } from "next-themes";
 import { useState } from "react";
 
 import { useTranslations } from "@/components/providers/i18n-provider";
+import { sharedMessages } from "@/lib/i18n/modules/shared";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { useRequiredSession } from "@/components/providers/session-provider";
 import {
   DropdownMenu,
@@ -54,6 +56,7 @@ export function UserMenu({
 }) {
   const user = useRequiredSession();
   const { t } = useTranslations();
+  const shared = useCatalog(sharedMessages);
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
@@ -98,7 +101,7 @@ export function UserMenu({
         <button
           type="button"
           className="grid size-9 cursor-pointer place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-2 ring-card transition-transform duration-250 ease-out-quart hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-ring data-[state=open]:scale-95"
-          aria-label="Account menu"
+          aria-label={shared.accountMenu}
         >
           <UserAvatar
             name={user.full_name}

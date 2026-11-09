@@ -32,6 +32,9 @@ import {
   useSetStudentFeeAssignment,
   useStudentFeeProfile,
 } from "@/hooks/use-fees";
+import { fill } from "@/lib/i18n/format";
+import { feesStudentMessages } from "@/lib/i18n/modules/fees-student";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /**
  * What THIS student is charged, as opposed to what their class is.
@@ -94,13 +97,15 @@ export function StudentFeeArrangement({
   /** `fee:manage`. Reading is `fee:read` — the panel above already gates that. */
   canManage: boolean;
 }) {
+  const { arrangement: m, deletion: deletionCopy } = useCatalog(feesStudentMessages);
   const profile = useStudentFeeProfile(studentId, academicYear);
   const heads = useFeeHeads({ size: 100 });
   const setAssignment = useSetStudentFeeAssignment();
   const removeAssignment = useRemoveStudentFeeAssignment();
   // Reaches PAST this student, into the structure their whole class is billed from.
   // Held here rather than only on the fee-setup screen because "delete this line"
-  // has to mean deleted — see `deletionCopy.structure` for what the operator is told.
+  // has to mean deleted — see `deletion.structure` in
+  // `lib/i18n/modules/fees-student.ts` for what the operator is told.
   const removeStructureItem = useRemoveStructureItem();
 
   const [adding, setAdding] = React.useState(false);
@@ -192,16 +197,16 @@ export function StudentFeeArrangement({
       <Card className="mt-3 overflow-hidden p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-medium">Fee arrangement</h3>
+            <h3 className="text-sm font-medium">{m.title}</h3>
             <p className="text-xs text-muted-foreground">
               {data.structure_name
-                ? `${data.structure_name} · ${academicYear}`
-                : `No fee structure for their class in ${academicYear}`}
+                ? fill(m.structureLine, { name: data.structure_name, year: academicYear })
+                : fill(m.noStructure, { year: academicYear })}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm tabular-nums">
-              <span className="text-muted-foreground">Per period </span>
+              <span className="text-muted-foreground">{m.perPeriod} </span>
               <span className="font-semibold">
                 {money.format(Number(data.effective_total))}
               </span>
@@ -216,7 +221,7 @@ export function StudentFeeArrangement({
                 }}
               >
                 <Plus className="size-4" aria-hidden />
-                Adjust
+                {m.adjust}
               </Button>
             ) : null}
           </div>
@@ -224,18 +229,16 @@ export function StudentFeeArrangement({
 
         {data.effective.length === 0 && excludedHeads.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-muted-foreground">
-            {data.structure_id
-              ? "Their class structure prices nothing yet."
-              : "Once their class has an active fee structure for this year, it appears here."}
+            {data.structure_id ? m.nothingPriced : m.noActiveStructure}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Fee head</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-end">Amount</TableHead>
+                  <TableHead>{m.colHead}</TableHead>
+                  <TableHead>{m.colSource}</TableHead>
+                  <TableHead className="text-end">{m.colAmount}</TableHead>
                   {canManage ? <TableHead className="w-12" /> : null}
                 </TableRow>
               </TableHeader>
@@ -262,12 +265,12 @@ export function StudentFeeArrangement({
                         <TableCell>
                           <Badge variant={own || overridden ? "success" : "neutral"}>
                             {own
-                              ? "This student"
+                              ? m.sourceStudent
                               : overridden
-                                ? "Custom rate"
+                                ? m.sourceOverride
                                 : discounted
-                                  ? "Concession"
-                                  : "Class"}
+                                  ? m.sourceDiscount
+                                  : m.sourceClass}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-end tabular-nums">
@@ -277,8 +280,10 @@ export function StudentFeeArrangement({
                               lower price is one nobody can see they were granted. */}
                           {discount > 0 ? (
                             <span className="block text-xs font-normal text-muted-foreground">
-                              {money.format(Number(line.amount))} less{" "}
-                              {money.format(discount)}
+                              {fill(m.lessDiscount, {
+                                gross: money.format(Number(line.amount)),
+                                discount: money.format(discount),
+                              })}
                               {line.concession_name ? ` · ${line.concession_name}` : ""}
                             </span>
                           ) : null}
@@ -291,7 +296,7 @@ export function StudentFeeArrangement({
                                   variant="ghost"
                                   size="icon"
                                   disabled={busy}
-                                  aria-label={`Actions for ${line.head_name}`}
+                                  aria-label={fill(m.actionsFor, { name: line.head_name })}
                                 >
                                   <MoreHorizontal aria-hidden />
                                 </Button>
@@ -319,7 +324,7 @@ export function StudentFeeArrangement({
                                       });
                                     }}
                                   >
-                                    {own ? "Edit amount" : "Edit rate for this student"}
+                                    {own ? m.editAmount : m.editRate}
                                   </DropdownMenuItem>
                                 )}
 
@@ -338,9 +343,7 @@ export function StudentFeeArrangement({
                                       })
                                     }
                                   >
-                                    {overridden
-                                      ? "Back to the class rate"
-                                      : "Delete the concession"}
+                                    {overridden ? m.backToClassRate : m.deleteConcession}
                                   </DropdownMenuItem>
                                 ) : null}
 
@@ -361,7 +364,7 @@ export function StudentFeeArrangement({
                                       })
                                     }
                                   >
-                                    Leave off this student&apos;s challans
+                                    {m.leaveOff}
                                   </DropdownMenuItem>
                                 )}
 
@@ -385,7 +388,7 @@ export function StudentFeeArrangement({
                                     })
                                   }
                                 >
-                                  {own ? "Delete this charge" : "Delete from the class structure"}
+                                  {own ? m.deleteCharge : m.deleteFromStructure}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -404,7 +407,7 @@ export function StudentFeeArrangement({
                               className="flex flex-wrap items-end gap-2"
                             >
                               <label className="grid w-32 gap-1.5 text-sm">
-                                <span className="text-xs font-medium">Amount</span>
+                                <span className="text-xs font-medium">{m.amount}</span>
                                 <Input
                                   autoFocus
                                   value={editing.amount}
@@ -416,13 +419,13 @@ export function StudentFeeArrangement({
                                 />
                               </label>
                               <label className="grid w-56 gap-1.5 text-sm">
-                                <span className="text-xs font-medium">Note</span>
+                                <span className="text-xs font-medium">{m.note}</span>
                                 <Input
                                   value={editing.note}
                                   onChange={(event) =>
                                     setEditing({ ...editing, note: event.target.value })
                                   }
-                                  placeholder="Route 4 — Gulberg"
+                                  placeholder={m.notePlaceholder}
                                 />
                               </label>
                               <Button
@@ -433,7 +436,7 @@ export function StudentFeeArrangement({
                                 disabled={!isValidAmount(editing.amount)}
                               >
                                 <Check className="size-4" aria-hidden />
-                                Save rate
+                                {m.saveRate}
                               </Button>
                               <Button
                                 type="button"
@@ -442,14 +445,16 @@ export function StudentFeeArrangement({
                                 onClick={() => setEditing(null)}
                               >
                                 <X className="size-4" aria-hidden />
-                                Cancel
+                                {m.cancel}
                               </Button>
                               <p className="w-full text-xs text-muted-foreground">
                                 {editing.mode === "override"
-                                  ? `Their class keeps paying ${money.format(Number(line.amount))} — this rate is ${data.student_name}'s alone.`
-                                  : "Only this student is charged this, at the rate you set."}{" "}
-                                Applies from the next challan generated; ones already
-                                issued never change.
+                                  ? fill(m.overrideHelp, {
+                                      amount: money.format(Number(line.amount)),
+                                      name: data.student_name,
+                                    })
+                                  : m.ownHelp}{" "}
+                                {m.appliesNext}
                               </p>
                             </form>
                           </TableCell>
@@ -466,7 +471,7 @@ export function StudentFeeArrangement({
                   <TableRow key={assignment.id} className="opacity-60">
                     <TableCell className="line-through">{assignment.head_name}</TableCell>
                     <TableCell>
-                      <Badge variant="neutral">Not charged</Badge>
+                      <Badge variant="neutral">{m.notCharged}</Badge>
                     </TableCell>
                     <TableCell className="text-end text-sm text-muted-foreground">—</TableCell>
                     {canManage ? (
@@ -477,7 +482,7 @@ export function StudentFeeArrangement({
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Charge ${assignment.head_name} again`}
+                          aria-label={fill(m.chargeAgain, { name: assignment.head_name })}
                           disabled={busy}
                           onClick={() =>
                             removeAssignment.mutate({
@@ -504,12 +509,12 @@ export function StudentFeeArrangement({
             className="flex flex-wrap items-end gap-2 border-t border-border bg-muted/30 p-4"
           >
             <label className="grid flex-1 gap-1.5 text-sm">
-              <span className="text-xs font-medium">Fee head</span>
+              <span className="text-xs font-medium">{m.colHead}</span>
               <NativeSelect
                 value={headId}
                 onChange={(event) => setHeadId(event.target.value)}
               >
-                <option value="">Choose…</option>
+                <option value="">{m.choose}</option>
                 {available.map((head) => (
                   <option key={head.id} value={head.id}>
                     {head.name}
@@ -518,7 +523,7 @@ export function StudentFeeArrangement({
               </NativeSelect>
             </label>
             <label className="grid w-32 gap-1.5 text-sm">
-              <span className="text-xs font-medium">Amount</span>
+              <span className="text-xs font-medium">{m.amount}</span>
               <Input
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
@@ -527,11 +532,11 @@ export function StudentFeeArrangement({
               />
             </label>
             <label className="grid w-44 gap-1.5 text-sm">
-              <span className="text-xs font-medium">Note</span>
+              <span className="text-xs font-medium">{m.note}</span>
               <Input
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
-                placeholder="Route 4 — Gulberg"
+                placeholder={m.notePlaceholder}
               />
             </label>
             <Button
@@ -540,13 +545,9 @@ export function StudentFeeArrangement({
               loading={setAssignment.isPending}
               disabled={!headId || !isValidAmount(amount)}
             >
-              Add charge
+              {m.addCharge}
             </Button>
-            <p className="w-full text-xs text-muted-foreground">
-              Only this student is charged this, at the rate you set. Transport and
-              hostel are priced per student for a reason. Applies from the next challan
-              generated; ones already issued never change.
-            </p>
+            <p className="w-full text-xs text-muted-foreground">{m.addHelp}</p>
           </form>
         ) : null}
       </Card>
@@ -558,13 +559,19 @@ export function StudentFeeArrangement({
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={(next) => !next && setConfirming(null)}
-        title={confirming ? deletionCopy[confirming.kind].title(confirming.headName) : ""}
+        title={
+          confirming ? fill(deletionCopy[confirming.kind].title, { name: confirming.headName }) : ""
+        }
         description={
           confirming
-            ? deletionCopy[confirming.kind].description(data.structure_name)
+            ? confirming.kind === "structure"
+              ? fill(deletionCopy.structure.description, {
+                  structure: data.structure_name ?? deletionCopy.structure.structureFallback,
+                })
+              : deletionCopy[confirming.kind].description
             : undefined
         }
-        confirmLabel={confirming ? deletionCopy[confirming.kind].confirmLabel : "Confirm"}
+        confirmLabel={confirming ? deletionCopy[confirming.kind].confirm : m.confirm}
         variant={
           confirming?.kind === "override" || confirming?.kind === "discount"
             ? "default"
@@ -644,42 +651,6 @@ type PendingDeletion = {
   hasAssignment: boolean;
 };
 
-const deletionCopy = {
-  added: {
-    title: (name: string) => `Delete the ${name} charge?`,
-    description: () =>
-      "This charge belongs to this student alone, so deleting it affects nobody else. Challans already issued keep it; the next one generated will not have it.",
-    confirmLabel: "Delete charge",
-  },
-  override: {
-    title: (name: string) => `Put ${name} back on the class rate?`,
-    description: () =>
-      "The rate agreed for this student is deleted and they go back to paying what their class is charged. Applies from the next challan generated.",
-    confirmLabel: "Back to class rate",
-  },
-  discount: {
-    title: (name: string) => `Delete the concession on ${name}?`,
-    description: () =>
-      "The student goes back to paying this head in full from the next challan generated. Re-awarding it means picking the scheme again.",
-    confirmLabel: "Delete concession",
-  },
-  exclude: {
-    title: (name: string) => `Leave ${name} off this student's challans?`,
-    description: () =>
-      "Nothing is deleted — their class keeps being charged this and so does every other student in it. This one student's challans simply will not carry the line, rather than carrying it at zero. It stays off until somebody puts them back on it.",
-    confirmLabel: "Leave it off",
-  },
-  structure: {
-    title: (name: string) => `Delete ${name} from the class structure?`,
-    // THE WHOLE CLASS, SAID IN THOSE WORDS. This is the one action on the screen
-    // that reaches past the student whose page it is, and an operator who reads
-    // "delete" on a student's row will assume it does not — so the dialog names the
-    // structure and the reach before the button will do anything.
-    description: (structureName: string | null) =>
-      `This deletes the line from ${structureName ?? "the class fee structure"} for good, so EVERY student in that class stops being billed it — not just this one. Challans already issued keep their own copy and are unaffected. To take only this student off it, cancel and use "Leave off this student's challans" instead.`,
-    confirmLabel: "Delete from structure",
-  },
-} as const;
 
 /**
  * A blank box is not zero.

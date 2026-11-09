@@ -16,7 +16,3 @@ export function useAssignmentBound(): boolean {
   const { user } = useSession();
   return !!user && !can(user, PERMISSIONS.classViewAll);
 }
-
-export const UNASSIGNED_TITLE = "Nothing assigned to you yet";
-export const UNASSIGNED_DESCRIPTION =
-  "You see the classes you teach. Ask your principal to make you class teacher of a section or subject teacher for a class.";

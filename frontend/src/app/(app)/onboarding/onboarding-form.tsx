@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useTranslations } from "@/components/providers/i18n-provider";
@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/errors";
 import { authRequest } from "@/lib/api/client";
 import { schools } from "@/lib/api/resources";
-import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/schools";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { createSchoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/schools";
 
 /**
  * Create the organization's first school.
@@ -27,11 +29,13 @@ import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/sc
  */
 export function OnboardingForm() {
   const { t } = useTranslations();
+  const { validation } = useCatalog(adminMessages);
+  const schema = useMemo(() => createSchoolCreateSchema(validation), [validation]);
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<SchoolCreateValues>({
-    resolver: zodResolver(schoolCreateSchema),
+    resolver: zodResolver(schema),
     defaultValues: { name: "", code: "", city: "" },
   });
 

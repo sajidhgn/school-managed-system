@@ -42,8 +42,10 @@ from app.modules.academics.models import SchoolClass, Subject
 from app.modules.academics.repository import ClassRepository, SubjectRepository, TermRepository
 from app.modules.academics.service import AcademicsService
 from app.modules.academics.teaching_scope import teaches_subject
-from app.modules.exams.models import Exam, ExamMark, ExamPaper
+from app.modules.exams.grading import BOARD_SCALE, band_for, paper_percentage
+from app.modules.exams.models import Exam, ExamGradingScale, ExamMark, ExamPaper
 from app.modules.exams.repository import (
+    ExamGradingScaleRepository,
     ExamMarkRepository,
     ExamPaperRepository,
     ExamRepository,
@@ -58,6 +60,9 @@ from app.modules.exams.schemas import (
     ExamRead,
     ExamResultRow,
     ExamUpdate,
+    GradeBand,
+    GradingScaleInput,
+    GradingScaleRead,
     MarksUpsert,
     MarksUpsertResult,
     PaperMarksRead,
@@ -76,6 +81,7 @@ class ExamService:
         self.exams = ExamRepository(session)
         self.papers = ExamPaperRepository(session)
         self.marks = ExamMarkRepository(session)
+        self.grading_scales = ExamGradingScaleRepository(session)
         self.classes = ClassRepository(session)
         self.subjects = SubjectRepository(session)
         self.terms = TermRepository(session)
@@ -451,6 +457,7 @@ class ExamService:
 
         max_by_paper = {p.id: p.max_marks for p in papers}
         roster = await self.marks.class_roster(class_id, teacher_id=teacher_id)
+        bands = await self.current_bands()
 
         unranked = []
         for student in roster:
@@ -458,11 +465,19 @@ class ExamService:
             cells, obtained, max_counted = [], Decimal(0), 0
             for paper_read in papers:
                 mark = student_marks.get(paper_read.id)
+                paper_band = (
+                    band_for(
+                        paper_percentage(mark.marks_obtained, max_by_paper[paper_read.id]), bands
+                    )
+                    if mark is not None and mark.marks_obtained is not None and not mark.is_absent
+                    else None
+                )
                 cells.append(
                     ResultCell(
                         paper_id=paper_read.id,
                         marks_obtained=mark.marks_obtained if mark else None,
                         is_absent=mark.is_absent if mark else False,
+                        grade=paper_band.grade if paper_band else None,
                     )
                 )
                 if mark is not None:
@@ -482,6 +497,8 @@ class ExamService:
         rows: list[ExamResultRow] = []
         for index, (student, cells, obtained, max_counted, percentage) in enumerate(unranked):
             rank = rows[-1].rank if rows and rows[-1].percentage == percentage else index + 1
+            # Nothing marked yet is not a 0% -- it gets no grade, like no percentage.
+            overall = band_for(percentage, bands) if max_counted else None
             rows.append(
                 ExamResultRow(
                     student_id=student.id,
@@ -492,6 +509,8 @@ class ExamService:
                     total_max=max_counted,
                     percentage=percentage,
                     rank=rank,
+                    grade=overall.grade if overall else None,
+                    remark=overall.remark if overall else None,
                 )
             )
 
@@ -501,6 +520,76 @@ class ExamService:
             class_name=school_class.name,
             papers=papers,
             rows=rows,
+            grading_scale=bands,
+        )
+
+    # -- grading scale -------------------------------------------------------
+
+    async def current_bands(self) -> list[GradeBand]:
+        """This campus's bands, highest first: its own, or the board scale."""
+        scale = await self.grading_scales.get_current()
+        if scale is None:
+            return list(BOARD_SCALE)
+        return [GradeBand.model_validate(band) for band in scale.bands]
+
+    async def get_grading_scale(self) -> GradingScaleRead:
+        scale = await self.grading_scales.get_current()
+        if scale is None:
+            return GradingScaleRead(bands=list(BOARD_SCALE), is_default=True)
+        return self._to_scale_read(scale)
+
+    async def set_grading_scale(
+        self, payload: GradingScaleInput, *, actor_id: UUID
+    ) -> GradingScaleRead:
+        """Create or replace the campus scale. Every result sheet re-grades on its next
+        read; the marks themselves never change."""
+        bands = [band.model_dump(mode="json") for band in payload.bands]
+        existing = await self.grading_scales.get_current()
+        if existing is None:
+            scale = await self.grading_scales.create(
+                bands=bands,
+                organization_id=require_organization_id(),
+                school_id=require_school_id(),
+            )
+            before: dict[str, Any] | None = None
+        else:
+            before = {"bands": existing.bands}
+            scale = await self.grading_scales.update(existing, bands=bands)
+        await self._audit(
+            AuditAction.EXAM_GRADING_SCALE_SET,
+            entity_type="exam_grading_scale",
+            entity_id=scale.id,
+            actor_id=actor_id,
+            before=before,
+            after={"bands": bands},
+        )
+        logger.info("exam_grading_scale_set", scale_id=str(scale.id), bands=len(bands))
+        return self._to_scale_read(scale)
+
+    async def delete_grading_scale(self, *, actor_id: UUID) -> None:
+        """Go back to the board scale. Already on it: nothing to do, and nothing to
+        audit -- a reset that changed nothing is not an event."""
+        scale = await self.grading_scales.get_current()
+        if scale is None:
+            return
+        before = {"bands": scale.bands}
+        await self.grading_scales.hard_delete(scale.id)
+        await self._audit(
+            AuditAction.EXAM_GRADING_SCALE_DELETED,
+            entity_type="exam_grading_scale",
+            entity_id=scale.id,
+            actor_id=actor_id,
+            before=before,
+        )
+        logger.info("exam_grading_scale_reset", scale_id=str(scale.id))
+
+    @staticmethod
+    def _to_scale_read(scale: ExamGradingScale) -> GradingScaleRead:
+        return GradingScaleRead(
+            id=scale.id,
+            bands=[GradeBand.model_validate(band) for band in scale.bands],
+            is_default=False,
+            updated_at=scale.updated_at,
         )
 
     # -- internals -----------------------------------------------------------

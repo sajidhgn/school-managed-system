@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/components/ui/use-toast";
 import { errorMessage } from "@/lib/api/errors";
+import { fill } from "@/lib/i18n/format";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { queryKeys } from "@/lib/api/query-keys";
 import { booksApi } from "@/lib/api/resources/books";
 import {
@@ -101,18 +104,20 @@ function useEntryResult(paperId: string) {
 }
 
 export function useCreatePaper() {
+  const m = useCatalog(papersMessages).toast;
   const invalidate = useInvalidatePapers();
   return useMutation({
     mutationFn: (body: PaperCreate) => papersApi.create(body),
     onSuccess: (paper) => {
       invalidate();
-      toast.success("Paper queued", `${paper.title} — the questions are being written now.`);
+      toast.success(m.queued, fill(m.queuedDetail, { title: paper.title }));
     },
-    onError: (error) => toast.error("Couldn't create the paper", errorMessage(error)),
+    onError: (error) => toast.error(m.createFailed, errorMessage(error)),
   });
 }
 
 export function useUpdatePaper(paperId: string) {
+  const m = useCatalog(papersMessages).toast;
   const queryClient = useQueryClient();
   const invalidate = useInvalidatePapers();
   return useMutation({
@@ -120,25 +125,27 @@ export function useUpdatePaper(paperId: string) {
     onSuccess: (paper) => {
       queryClient.setQueryData(queryKeys.papers.detail(paperId), paper);
       invalidate();
-      toast.success("Paper updated", paper.title);
+      toast.success(m.updated, paper.title);
     },
-    onError: (error) => toast.error("Couldn't update the paper", errorMessage(error)),
+    onError: (error) => toast.error(m.updateFailed, errorMessage(error)),
   });
 }
 
 export function useDeletePaper() {
+  const m = useCatalog(papersMessages).toast;
   const invalidate = useInvalidatePapers();
   return useMutation({
     mutationFn: (id: string) => papersApi.remove(id),
     onSuccess: () => {
       invalidate();
-      toast.success("Paper deleted");
+      toast.success(m.deleted);
     },
-    onError: (error) => toast.error("Couldn't delete the paper", errorMessage(error)),
+    onError: (error) => toast.error(m.deleteFailed, errorMessage(error)),
   });
 }
 
 export function useRegeneratePaper(paperId: string) {
+  const m = useCatalog(papersMessages).toast;
   const queryClient = useQueryClient();
   const invalidate = useInvalidatePapers();
   return useMutation({
@@ -146,50 +153,54 @@ export function useRegeneratePaper(paperId: string) {
     onSuccess: (paper) => {
       queryClient.setQueryData(queryKeys.papers.detail(paperId), paper);
       invalidate();
-      toast.success("Paper queued again", "New questions are being written.");
+      toast.success(m.requeued, m.requeuedDetail);
     },
-    onError: (error) => toast.error("Couldn't regenerate the paper", errorMessage(error)),
+    onError: (error) => toast.error(m.regenerateFailed, errorMessage(error)),
   });
 }
 
 export function useAddPaperQuestion(paperId: string) {
+  const m = useCatalog(papersMessages).toast;
   const invalidate = useInvalidatePapers();
   return useMutation({
     mutationFn: (body: PaperQuestionAdd) => papersApi.addQuestion(paperId, body),
     onSuccess: () => {
       invalidate();
-      toast.success("Question added to the paper");
+      toast.success(m.questionAdded);
     },
-    onError: (error) => toast.error("Couldn't add the question", errorMessage(error)),
+    onError: (error) => toast.error(m.questionAddFailed, errorMessage(error)),
   });
 }
 
 export function useUpdatePaperQuestion(paperId: string) {
+  const m = useCatalog(papersMessages).toast;
   const onResult = useEntryResult(paperId);
   return useMutation({
     mutationFn: ({ entryId, body }: { entryId: string; body: QuestionUpdate }) =>
       papersApi.updateQuestion(paperId, entryId, body),
     onSuccess: (entry) => {
       onResult(entry);
-      toast.success("Question saved");
+      toast.success(m.questionSaved);
     },
-    onError: (error) => toast.error("Couldn't save the question", errorMessage(error)),
+    onError: (error) => toast.error(m.questionSaveFailed, errorMessage(error)),
   });
 }
 
 export function useRemovePaperQuestion(paperId: string) {
+  const m = useCatalog(papersMessages).toast;
   const invalidate = useInvalidatePapers();
   return useMutation({
     mutationFn: (entryId: string) => papersApi.removeQuestion(paperId, entryId),
     onSuccess: () => {
       invalidate();
-      toast.success("Question removed", "It stays in the question bank.");
+      toast.success(m.questionRemoved, m.questionRemovedDetail);
     },
-    onError: (error) => toast.error("Couldn't remove the question", errorMessage(error)),
+    onError: (error) => toast.error(m.questionRemoveFailed, errorMessage(error)),
   });
 }
 
 export function useReplacePaperQuestion(paperId: string) {
+  const m = useCatalog(papersMessages).toast;
   const onResult = useEntryResult(paperId);
   return useMutation({
     mutationFn: ({
@@ -201,8 +212,8 @@ export function useReplacePaperQuestion(paperId: string) {
     }) => papersApi.replaceQuestion(paperId, entryId, difficulty),
     onSuccess: (entry) => {
       onResult(entry);
-      toast.success("Question replaced", "The old one stays in the question bank.");
+      toast.success(m.questionReplaced, m.questionReplacedDetail);
     },
-    onError: (error) => toast.error("Couldn't replace the question", errorMessage(error)),
+    onError: (error) => toast.error(m.questionReplaceFailed, errorMessage(error)),
   });
 }

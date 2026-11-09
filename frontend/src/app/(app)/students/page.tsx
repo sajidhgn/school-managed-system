@@ -5,8 +5,12 @@ import { StudentsView } from "./students-view";
 import { serverGet } from "@/lib/api/server";
 import { PERMISSIONS, type OrganizationRead } from "@/lib/api/types";
 import { hasPermission, listSchools, requireSchoolContext } from "@/lib/auth/session";
+import { studentsMessages } from "@/lib/i18n/modules/students";
+import { getCatalog } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Students" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(studentsMessages)).meta.students };
+}
 export const dynamic = "force-dynamic";
 
 /**

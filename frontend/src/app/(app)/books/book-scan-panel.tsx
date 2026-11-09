@@ -4,6 +4,9 @@ import * as React from "react";
 import { FileText, Loader2, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { fill } from "@/lib/i18n/format";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_FILES = "application/pdf,image/jpeg,image/png,image/webp";
@@ -23,6 +26,7 @@ export function BookScanPanel({
   onFilesChange: (files: File[]) => void;
   reading: boolean;
 }) {
+  const m = useCatalog(booksMessages).scanPanel;
   const input = React.useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = React.useState(false);
 
@@ -67,12 +71,10 @@ export function BookScanPanel({
           <Upload className="size-5 text-muted-foreground" />
         )}
         <span className="font-medium">
-          {reading ? "Reading the pages…" : "Upload the cover and contents pages"}
+          {reading ? m.reading : m.upload}
         </span>
         <span className="max-w-md text-xs text-muted-foreground">
-          {reading
-            ? "The AI is reading the title, publisher, edition, class, subject and chapter list. This can take up to a minute."
-            : "Photos (JPEG, PNG or WebP) or a PDF of the book. Include the cover, the page with the edition and publisher, and every contents page. Drop files here or click to choose."}
+          {reading ? m.readingHint : m.uploadHint}
         </span>
         <input
           ref={input}
@@ -102,7 +104,7 @@ export function BookScanPanel({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Remove ${file.name}`}
+                aria-label={fill(m.removeFile, { name: file.name })}
                 disabled={reading}
                 onClick={() => onFilesChange(files.filter((f) => f !== file))}
               >
@@ -114,7 +116,7 @@ export function BookScanPanel({
       )}
       {files.length >= MAX_SCAN_FILES && (
         <p className="text-xs text-muted-foreground">
-          {MAX_SCAN_FILES} files at most — the cover and the contents pages are enough.
+          {fill(m.maxFiles, { max: MAX_SCAN_FILES })}
         </p>
       )}
     </div>

@@ -108,7 +108,9 @@ def upgrade() -> None:
         sa.Column("term_id", sa.UUID(), nullable=True),
         sa.Column("start_date", sa.Date(), nullable=True),
         sa.Column("end_date", sa.Date(), nullable=True),
-        sa.Column("status", _enum("scheduled", "completed", "published", name="status"), nullable=False),
+        sa.Column(
+            "status", _enum("scheduled", "completed", "published", name="status"), nullable=False
+        ),
         *_timestamps(),
         *_tenant_constraints("exams"),
         # SET NULL: deleting a term must not delete the marks sat in it.

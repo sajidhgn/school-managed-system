@@ -15,6 +15,9 @@ import {
 
 import { useTranslations } from "@/components/providers/i18n-provider";
 import type { AttendanceAnalytics, RegisterState, SchoolRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { MixBar } from "./analytics";
 
@@ -53,16 +56,14 @@ function pct(value: number | null | undefined, digits = 1): string {
   return value == null ? "—" : `${value.toFixed(digits)}%`;
 }
 
-function fill(template: string, values: Record<string, string | number>): string {
-  return Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), template);
-}
-
-function points(delta: number): string {
-  return `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)} pts`;
+/** A signed change in percentage points, in the viewer's words: "+2.5 pts". */
+function points(template: string, delta: number): string {
+  return fill(template, { delta: `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}` });
 }
 
 function OverviewCard({ data }: { data: AttendanceAnalytics }) {
   const { t } = useTranslations();
+  const pts = useCatalog(adminMessages).dashboard.points;
   const { headline } = data;
   const now = headline.this_month.percentage;
   const before = headline.previous_month.percentage;
@@ -99,7 +100,7 @@ function OverviewCard({ data }: { data: AttendanceAnalytics }) {
             ? now == null
               ? t.dashboard.noRate
               : t.dashboard.noLastMonth
-            : fill(t.dashboard.vsLastMonth, { delta: points(delta) })}
+            : fill(t.dashboard.vsLastMonth, { delta: points(pts, delta) })}
         </p>
       </div>
 
@@ -137,6 +138,7 @@ const SHOWN = 8;
 
 function ClassAttendanceCard({ data, schools }: { data: AttendanceAnalytics; schools: SchoolRead[] }) {
   const { t } = useTranslations();
+  const pts = useCatalog(adminMessages).dashboard.points;
   const stateLabel: Record<RegisterState, string> = {
     submitted: t.dashboard.registerSubmitted,
     draft: t.dashboard.registerDraft,
@@ -194,7 +196,7 @@ function ClassAttendanceCard({ data, schools }: { data: AttendanceAnalytics; sch
             const Trend = delta == null || flat ? Minus : delta > 0 ? ArrowUpRight : ArrowDownRight;
             const state = STATE_ICON[s.today_status];
             const trendText =
-              delta == null ? "" : fill(t.dashboard.vsPrevious30, { delta: points(delta) });
+              delta == null ? "" : fill(t.dashboard.vsPrevious30, { delta: points(pts, delta) });
             return (
               <li
                 key={s.section_id}

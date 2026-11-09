@@ -20,9 +20,14 @@ import {
   SCHOOL_ADMIN_PERMISSIONS,
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
-import { getTranslations } from "@/lib/i18n/server";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { labelsMessages } from "@/lib/i18n/modules/labels";
+import { getCatalog, getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.dashboard };
+}
 
 /**
  * The landing screen after sign-in.
@@ -37,7 +42,12 @@ export const metadata: Metadata = { title: "Dashboard" };
  * system look broken.
  */
 export default async function DashboardPage() {
-  const [user, t] = await Promise.all([requireUser(), getTranslations()]);
+  const [user, t, a, L] = await Promise.all([
+    requireUser(),
+    getTranslations(),
+    getCatalog(adminMessages),
+    getCatalog(labelsMessages),
+  ]);
   const schoolId = user.school_id;
 
   const [schools, usage, members, invitations, analytics, attendance] = await Promise.all([
@@ -75,7 +85,7 @@ export default async function DashboardPage() {
     <div className="mx-auto w-full max-w-6xl">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {t.dashboard.welcome}, {user.full_name.split(" ")[0]}
+          {fill(a.dashboard.welcomeNamed, { name: user.full_name.split(" ")[0] ?? "" })}
         </h1>
         <p className="mt-1 text-muted-foreground">
           {user.school_name
@@ -124,7 +134,14 @@ export default async function DashboardPage() {
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
             {t.dashboard.planUsage} · {usage.plan_code}
           </h2>
-          <UsageCard usage={usage} />
+          <UsageCard
+            usage={usage}
+            strings={{
+              labels: L.usage,
+              unlimited: a.usage.unlimited,
+              exhausted: t.billing.limitReached,
+            }}
+          />
         </section>
       ) : null}
 

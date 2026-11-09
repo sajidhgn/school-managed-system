@@ -40,6 +40,7 @@ const BLOCKED = new Set([
   "auth/context",
   "auth/forgot-password",
   "auth/reset-password",
+  "auth/resend-verification",
   "students/admissions",
   "platform/auth/login",
   "invitations/accept",

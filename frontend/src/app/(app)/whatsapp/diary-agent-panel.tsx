@@ -25,22 +25,34 @@ import {
   useSaveDiaryAgentSettings,
 } from "@/hooks/use-whatsapp";
 import { errorMessage } from "@/lib/api/errors";
-import type { DiaryAgentSettingsWrite, DiaryDraftStatus } from "@/lib/api/types";
+import { label, type DiaryAgentSettingsWrite, type DiaryDraftStatus } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { sharedMessages } from "@/lib/i18n/modules/shared";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
+import { fillNodes } from "@/lib/i18n/format";
 import { WhatsAppBubble } from "./whatsapp-text";
 
+/**
+ * What a teacher types to mark absentees over WhatsApp. A command for the agent,
+ * not UI text, so it is shown as written in every language.
+ */
+const ATTENDANCE_COMMAND_EXAMPLE = "Nursery-A absent 12, 13, 15";
+
 export function DiaryAgentPanel({ canManage }: { canManage: boolean }) {
+  const m = useCatalog(whatsappMessages).diary;
   return (
     <div className="space-y-6">
+      <p className="max-w-3xl text-sm text-muted-foreground">{m.intro}</p>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Teachers send a photo of the day&apos;s diary to the school&apos;s WhatsApp number. The agent
-        reads it, writes it in this format, shows the teacher a preview, and posts it to the class
-        group when they reply OK.
-      </p>
-      <p className="max-w-3xl text-sm text-muted-foreground">
-        Teachers can also take attendance on the same number: a message such as{" "}
-        <span className="font-medium text-foreground">Nursery-A absent 12, 13, 15</span> is matched
-        to the students&apos; names, shown back, and submitted to the register when they reply OK.
+        {fillNodes(m.attendance, {
+          example: (
+            <span className="font-medium text-foreground" dir="ltr">
+              {ATTENDANCE_COMMAND_EXAMPLE}
+            </span>
+          ),
+        })}
       </p>
       <DiaryFormatEditor canManage={canManage} />
       <RecentDiaries />
@@ -80,10 +92,11 @@ function PlaceholderChips({
   disabled: boolean;
   onInsert: (token: string) => void;
 }) {
+  const m = useCatalog(whatsappMessages).diary;
   if (!names.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-      <span className="me-1">Placeholders:</span>
+      <span className="me-1">{m.placeholders}</span>
       {names.map((name) => (
         <button
           key={name}
@@ -100,6 +113,7 @@ function PlaceholderChips({
 }
 
 function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
+  const m = useCatalog(whatsappMessages).diary;
   const settings = useDiaryAgentSettings();
   const save = useSaveDiaryAgentSettings();
 
@@ -141,7 +155,7 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Diary format</CardTitle>
+          <CardTitle>{m.formatTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -159,10 +173,10 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
                 disabled={!canManage}
                 onChange={(event) => setEnabled(event.target.checked)}
               />
-              Let teachers post the diary by sending a photo on WhatsApp
+              {m.enable}
             </label>
             <div className="grid gap-1.5">
-              <Label htmlFor="diary-template">Message</Label>
+              <Label htmlFor="diary-template">{m.message}</Label>
               <Textarea
                 id="diary-template"
                 ref={templateRef}
@@ -181,7 +195,7 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="diary-entry-template">Each subject&apos;s line</Label>
+              <Label htmlFor="diary-entry-template">{m.entryLine}</Label>
               <Input
                 id="diary-entry-template"
                 ref={entryRef}
@@ -199,19 +213,19 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="diary-instructions">Instructions for the agent (optional)</Label>
+              <Label htmlFor="diary-instructions">{m.instructions}</Label>
               <Textarea
                 id="diary-instructions"
                 rows={3}
                 value={instructions}
                 disabled={!canManage}
-                placeholder="Keep Urdu homework in Urdu. Call Maths 'Mathematics'."
+                placeholder={m.instructionsPlaceholder}
                 onChange={(event) => setInstructions(event.target.value)}
               />
             </div>
             {canManage && (
               <Button type="submit" loading={save.isPending}>
-                Save format
+                {m.save}
               </Button>
             )}
           </form>
@@ -220,14 +234,12 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Preview</CardTitle>
+          <CardTitle>{m.preview}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            A sample diary in this format, as parents will see it. Updates as you type.
-          </p>
+          <p className="text-xs text-muted-foreground">{m.previewHint}</p>
           {!template.trim() ? (
-            <EmptyState title="No format yet" description="Write the message to see a preview." />
+            <EmptyState title={m.noFormat} description={m.noFormatHint} />
           ) : preview.isError ? (
             <p className="text-sm text-destructive">{errorMessage(preview.error)}</p>
           ) : preview.data ? (
@@ -248,16 +260,19 @@ function DiaryFormatEditor({ canManage }: { canManage: boolean }) {
 // Recent diaries
 // ---------------------------------------------------------------------------
 
-const DRAFT_STATUS: Record<DiaryDraftStatus, { label: string; variant: BadgeProps["variant"] }> = {
-  reading: { label: "Reading", variant: "default" },
-  needs_class: { label: "Asked for class", variant: "warning" },
-  awaiting_confirmation: { label: "Waiting for OK", variant: "warning" },
-  posted: { label: "Posted", variant: "success" },
-  cancelled: { label: "Cancelled", variant: "neutral" },
-  failed: { label: "Failed", variant: "destructive" },
+/** Badge treatment per draft state; the words are `diary.draftStatus` in the catalog. */
+const DRAFT_VARIANT: Record<DiaryDraftStatus, BadgeProps["variant"]> = {
+  reading: "default",
+  needs_class: "warning",
+  awaiting_confirmation: "warning",
+  posted: "success",
+  cancelled: "neutral",
+  failed: "destructive",
 };
 
 function RecentDiaries() {
+  const m = useCatalog(whatsappMessages).diary;
+  const shared = useCatalog(sharedMessages);
   const [page, setPage] = React.useState(1);
   const drafts = useDiaryDrafts({ page, size: 20 });
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
@@ -273,7 +288,7 @@ function RecentDiaries() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent diaries</CardTitle>
+        <CardTitle>{m.recentTitle}</CardTitle>
       </CardHeader>
       <CardContent>
         {drafts.isLoading ? (
@@ -281,11 +296,7 @@ function RecentDiaries() {
         ) : drafts.isError ? (
           <ErrorState error={drafts.error} onRetry={() => void drafts.refetch()} />
         ) : !drafts.data?.items.length ? (
-          <EmptyState
-            icon={NotebookPen}
-            title="No diaries yet"
-            description="Diaries teachers send on WhatsApp appear here."
-          />
+          <EmptyState icon={NotebookPen} title={m.noDiaries} description={m.noDiariesHint} />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -293,18 +304,18 @@ function RecentDiaries() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8">
-                      <span className="sr-only">Expand</span>
+                      <span className="sr-only">{m.expand}</span>
                     </TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Teacher</TableHead>
-                    <TableHead>Class</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{m.colDate}</TableHead>
+                    <TableHead>{m.colTeacher}</TableHead>
+                    <TableHead>{m.colClass}</TableHead>
+                    <TableHead>{m.colStatus}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {drafts.data.items.map((draft) => {
                     const open = expanded.has(draft.id);
-                    const status = DRAFT_STATUS[draft.status];
+                    const variant = DRAFT_VARIANT[draft.status];
                     return (
                       <React.Fragment key={draft.id}>
                         <TableRow>
@@ -314,13 +325,13 @@ function RecentDiaries() {
                                 variant="ghost"
                                 size="sm"
                                 aria-expanded={open}
-                                aria-label={open ? "Hide diary" : "Show diary"}
+                                aria-label={open ? m.hide : m.show}
                                 onClick={() => toggle(draft.id)}
                               >
                                 {open ? (
                                   <ChevronDown className="h-4 w-4" aria-hidden />
                                 ) : (
-                                  <ChevronRight className="h-4 w-4" aria-hidden />
+                                  <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden />
                                 )}
                               </Button>
                             )}
@@ -328,7 +339,7 @@ function RecentDiaries() {
                           <TableCell className="whitespace-nowrap align-top">
                             <div>{draft.diary_date ? formatDate(draft.diary_date) : "—"}</div>
                             <div className="text-xs text-muted-foreground">
-                              Sent {formatDateTime(draft.created_at)}
+                              {fill(m.sentAt, { time: formatDateTime(draft.created_at) })}
                             </div>
                           </TableCell>
                           <TableCell className="align-top">{draft.teacher_name ?? "—"}</TableCell>
@@ -343,7 +354,7 @@ function RecentDiaries() {
                               ))}
                           </TableCell>
                           <TableCell className="max-w-xs align-top">
-                            <Badge variant={status.variant}>{status.label}</Badge>
+                            <Badge variant={variant}>{label(m.draftStatus, draft.status)}</Badge>
                             {draft.error && (
                               <p className="mt-1 text-xs text-destructive">{draft.error}</p>
                             )}
@@ -370,10 +381,13 @@ function RecentDiaries() {
                 disabled={!drafts.data.meta.has_prev}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {shared.previous}
               </Button>
               <span className="text-muted-foreground">
-                Page {drafts.data.meta.page} of {Math.max(drafts.data.meta.pages, 1)}
+                {fill(shared.pageOf, {
+                  page: drafts.data.meta.page,
+                  pages: Math.max(drafts.data.meta.pages, 1),
+                })}
               </span>
               <Button
                 variant="outline"
@@ -381,7 +395,7 @@ function RecentDiaries() {
                 disabled={!drafts.data.meta.has_next}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {shared.next}
               </Button>
             </div>
           </>

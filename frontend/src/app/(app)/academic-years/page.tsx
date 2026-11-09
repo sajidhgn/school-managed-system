@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { calendarMessages } from "@/lib/i18n/modules/calendar";
+import { getCatalog } from "@/lib/i18n/server";
 import { CalendarView } from "./calendar-view";
 
-export const metadata: Metadata = { title: "Academic year" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(calendarMessages)).meta.title };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

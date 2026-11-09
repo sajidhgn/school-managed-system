@@ -33,6 +33,9 @@ import {
   useUpdateConcession,
 } from "@/hooks/use-fees";
 import type { ConcessionKind, FeeConcessionRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesSetupMessages } from "@/lib/i18n/modules/fees-setup";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 const money = new Intl.NumberFormat("en-PK", {
   style: "currency",
@@ -40,11 +43,20 @@ const money = new Intl.NumberFormat("en-PK", {
   maximumFractionDigits: 0,
 });
 
-/** "10% off" or "Rs 1,000 off" — how a scheme reads everywhere it is picked. */
-export function concessionRate(concession: { kind: ConcessionKind; value: string }): string {
-  return concession.kind === "percent"
-    ? `${Number(concession.value)}% off`
-    : `${money.format(Number(concession.value))} off`;
+/**
+ * "10% off" or "Rs 1,000 off" — how a scheme reads everywhere it is picked.
+ *
+ * A hook returning the formatter, because the wording is the viewer's language.
+ */
+export function useConcessionRate(): (concession: {
+  kind: ConcessionKind;
+  value: string;
+}) => string {
+  const m = useCatalog(feesSetupMessages).concessions;
+  return (concession) =>
+    concession.kind === "percent"
+      ? fill(m.percentOff, { value: Number(concession.value) })
+      : fill(m.amountOff, { amount: money.format(Number(concession.value)) });
 }
 
 /**
@@ -64,6 +76,8 @@ export function concessionRate(concession: { kind: ConcessionKind; value: string
  *   families back on full fees without anyone deciding that.
  */
 export function ConcessionsPanel() {
+  const { concessions: m, common: c } = useCatalog(feesSetupMessages);
+  const concessionRate = useConcessionRate();
   const concessions = useConcessions({ size: 100 });
   const create = useCreateConcession();
   const update = useUpdateConcession();
@@ -75,13 +89,10 @@ export function ConcessionsPanel() {
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Discount schemes a child can be put on: staff child, merit, sibling. The rate
-          lives on the scheme, so changing it reaches every child on it.
-        </p>
+        <p className="text-sm text-muted-foreground">{m.intro}</p>
         <Button size="sm" onClick={() => setEditing("new")}>
           <Plus className="size-4" aria-hidden />
-          New scheme
+          {m.newScheme}
         </Button>
       </div>
 
@@ -92,19 +103,19 @@ export function ConcessionsPanel() {
           <ErrorState error={concessions.error} onRetry={() => void concessions.refetch()} />
         ) : concessions.data.items.length === 0 ? (
           <EmptyState
-            title="No concession schemes yet"
-            description="Add Staff child 50%, Merit 25%, or the sibling discounts — Sibling 2nd child 10%, 3rd child 15%."
-            action={<Button onClick={() => setEditing("new")}>Add the first scheme</Button>}
+            title={m.emptyTitle}
+            description={m.emptyDescription}
+            action={<Button onClick={() => setEditing("new")}>{m.addFirst}</Button>}
           />
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Scheme</TableHead>
-                  <TableHead>Rate</TableHead>
-                  <TableHead className="text-end">Children</TableHead>
+                  <TableHead>{c.code}</TableHead>
+                  <TableHead>{m.colScheme}</TableHead>
+                  <TableHead>{m.colRate}</TableHead>
+                  <TableHead className="text-end">{m.colChildren}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -119,7 +130,7 @@ export function ConcessionsPanel() {
                       {concession.name}
                       {concession.is_active ? null : (
                         <Badge variant="neutral" className="ms-2">
-                          Retired
+                          {c.retired}
                         </Badge>
                       )}
                     </TableCell>
@@ -139,12 +150,12 @@ export function ConcessionsPanel() {
                             })
                           }
                         >
-                          {concession.is_active ? "Retire" : "Restore"}
+                          {concession.is_active ? c.retire : c.restore}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Edit ${concession.name}`}
+                          aria-label={fill(c.editNamed, { name: concession.name })}
                           onClick={() => setEditing(concession)}
                         >
                           <Pencil className="size-4" aria-hidden />
@@ -152,7 +163,7 @@ export function ConcessionsPanel() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Delete ${concession.name}`}
+                          aria-label={fill(c.deleteNamed, { name: concession.name })}
                           onClick={() => setDeleting(concession)}
                         >
                           <Trash2 className="size-4" aria-hidden />
@@ -187,9 +198,9 @@ export function ConcessionsPanel() {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(next) => !next && setDeleting(null)}
-        title={`Delete ${deleting?.name ?? ""}?`}
-        description="Only possible while no child and no sibling rule uses it. Otherwise retire it: it leaves the pickers and the children on it keep their rate."
-        confirmLabel="Delete"
+        title={fill(c.deleteTitle, { name: deleting?.name ?? "" })}
+        description={m.deleteDescription}
+        confirmLabel={c.delete}
         onConfirm={async () => {
           if (!deleting) return;
           await remove.mutateAsync(deleting.id);
@@ -218,6 +229,7 @@ function ConcessionDialog({
   onClose: () => void;
   onSubmit: (values: ConcessionValues) => Promise<void>;
 }) {
+  const { concessions: m, common: c } = useCatalog(feesSetupMessages);
   const existing = editing && editing !== "new" ? editing : null;
   const [code, setCode] = React.useState(existing?.code ?? "");
   const [name, setName] = React.useState(existing?.name ?? "");
@@ -248,16 +260,21 @@ function ConcessionDialog({
       <DialogContent>
         <form onSubmit={submit} className="grid gap-4" noValidate>
           <DialogHeader>
-            <DialogTitle>{existing ? `Edit ${existing.name}` : "New concession scheme"}</DialogTitle>
+            <DialogTitle>
+              {existing ? fill(c.editNamed, { name: existing.name }) : m.newTitle}
+            </DialogTitle>
             <DialogDescription>
               {existing
-                ? `${existing.student_count} child${existing.student_count === 1 ? " is" : "ren are"} on this scheme. A new rate reaches them from the next challan; challans already issued keep theirs.`
-                : "The code is how your own paperwork refers to the scheme. It cannot be changed later."}
+                ? fill(
+                    existing.student_count === 1 ? m.editDescriptionOne : m.editDescriptionMany,
+                    { count: existing.student_count ?? 0 },
+                  )
+                : m.newDescription}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Code</span>
+              <span className="font-medium">{c.code}</span>
               <Input
                 value={code}
                 onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -267,28 +284,28 @@ function ConcessionDialog({
               />
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Name</span>
+              <span className="font-medium">{c.name}</span>
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Sibling — 2nd child"
+                placeholder={m.namePlaceholder}
                 required
               />
             </label>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Takes off</span>
+              <span className="font-medium">{m.takesOff}</span>
               <NativeSelect
                 value={kind}
                 onChange={(event) => setKind(event.target.value as ConcessionKind)}
               >
-                <option value="percent">A percentage of the fee</option>
-                <option value="amount">A fixed amount</option>
+                <option value="percent">{m.kindPercent}</option>
+                <option value="amount">{m.kindAmount}</option>
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">{kind === "percent" ? "Percent" : "Amount (PKR)"}</span>
+              <span className="font-medium">{kind === "percent" ? m.percent : m.amountPkr}</span>
               <Input
                 value={value}
                 onChange={(event) => setValue(event.target.value)}
@@ -297,20 +314,18 @@ function ConcessionDialog({
                 required
               />
               {kind === "percent" && amount > 100 ? (
-                <span className="text-xs text-destructive">A percentage cannot exceed 100.</span>
+                <span className="text-xs text-destructive">{m.percentTooHigh}</span>
               ) : (
-                <span className="text-xs text-muted-foreground">
-                  A fixed amount larger than the fee bills zero, never a negative line.
-                </span>
+                <span className="text-xs text-muted-foreground">{m.fixedHelp}</span>
               )}
             </label>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {c.cancel}
             </Button>
             <Button type="submit" disabled={pending || !valid}>
-              {pending ? "Saving…" : existing ? "Save" : "Add scheme"}
+              {pending ? c.saving : existing ? m.save : m.addScheme}
             </Button>
           </DialogFooter>
         </form>

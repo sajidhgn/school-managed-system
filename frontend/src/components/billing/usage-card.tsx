@@ -1,4 +1,4 @@
-import { USAGE_LABELS, type UsageItem, type UsageResponse } from "@/lib/api/types";
+import type { UsageItem, UsageResponse } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,26 +12,36 @@ import { cn } from "@/lib/utils";
  * word, never as a bar: a progress bar for an unbounded quantity has no meaningful
  * fill, and showing one at 0% suggests the opposite of what is true.
  */
+export interface UsageCardStrings {
+  /** Display name per usage key (`useLabels().usage`, or `labelsMessages` on the server). */
+  labels: Record<string, string>;
+  /** After the slash for an unbounded quantity: "12 / unlimited". */
+  unlimited: string;
+  /** Under an exhausted bar. */
+  exhausted: string;
+}
+
 export function UsageCard({
   usage,
-  exhaustedLabel = "Limit reached — new records are paused until you upgrade.",
+  strings,
 }: {
   usage: UsageResponse;
   /** Passed in rather than hooked: this renders inside Server Components, which
-   *  read the catalog with `getTranslations()` rather than a client context. */
-  exhaustedLabel?: string;
+   *  read the catalogs with `getTranslations()` / `getCatalog()` rather than a
+   *  client context. */
+  strings: UsageCardStrings;
 }) {
   return (
     <div className="grid gap-4 rounded-xl border border-border bg-card p-5 sm:grid-cols-2">
       {usage.items.map((item) => (
-        <UsageBar key={item.key} item={item} exhaustedLabel={exhaustedLabel} />
+        <UsageBar key={item.key} item={item} strings={strings} />
       ))}
     </div>
   );
 }
 
-function UsageBar({ item, exhaustedLabel }: { item: UsageItem; exhaustedLabel: string }) {
-  const label = USAGE_LABELS[item.key] ?? item.key;
+function UsageBar({ item, strings }: { item: UsageItem; strings: UsageCardStrings }) {
+  const label = strings.labels[item.key] ?? item.key;
 
   if (item.is_unlimited) {
     return (
@@ -39,7 +49,7 @@ function UsageBar({ item, exhaustedLabel }: { item: UsageItem; exhaustedLabel: s
         <div className="flex items-baseline justify-between gap-3 text-sm">
           <span className="text-muted-foreground">{label}</span>
           <span className="font-medium tabular-nums">
-            {item.current} <span className="text-muted-foreground">/ unlimited</span>
+            {item.current} <span className="text-muted-foreground">/ {strings.unlimited}</span>
           </span>
         </div>
         <div className="mt-2 h-1.5 rounded-full bg-muted" />
@@ -83,7 +93,7 @@ function UsageBar({ item, exhaustedLabel }: { item: UsageItem; exhaustedLabel: s
       </div>
       {item.is_exhausted ? (
         <p className="mt-1.5 text-xs text-destructive">
-          {exhaustedLabel}
+          {strings.exhausted}
         </p>
       ) : null}
     </div>

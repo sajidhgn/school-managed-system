@@ -31,6 +31,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -44,6 +45,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -226,4 +228,40 @@ class ExamMark(
         ),
         CheckConstraint("marks_obtained IS NULL OR marks_obtained >= 0", name="marks_non_negative"),
         Index("ix_exam_marks_school_id_student_id", "school_id", "student_id"),
+    )
+
+
+class ExamGradingScale(Base, UUIDPrimaryKeyMixin, TenantMixin, RequiredSchoolMixin, TimestampMixin):
+    """The campus's grading scale: which percentage earns which grade.
+
+    =========================================================================
+    NO ROW MEANS THE BOARD SCALE
+    =========================================================================
+        Every campus starts on `grading.BOARD_SCALE` -- the scale the printed result
+        card used before this table existed -- so introducing it changed no grade on
+        any card. A row exists only once a campus replaces that scale; deleting the
+        row resets to it. The sheet, the card and the parent portal all grade with
+        the same bands, through `grading.band_for`.
+
+    ONE ROW PER CAMPUS, BANDS AS ONE DOCUMENT
+        The bands are stored together (JSONB, sorted highest first) because a scale
+        is changed as a whole: moving the A boundary from 80 to 85 moves the B band's
+        ceiling with it. Rows per band would let a half-saved edit leave a gap or an
+        overlap that grades some percentage twice or not at all. The schema validates
+        the whole list on the way in, so what is stored is always a complete scale.
+
+    Grades are computed when a result sheet is read, never stored on marks: changing
+    the scale re-grades every exam, which is what a school changing its policy wants
+    for the current year and why the screen says so.
+    """
+
+    __tablename__ = "exam_grading_scales"
+
+    bands: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    """`[{"min_percent": "80.00", "grade": "A1", "remark": "Exceptional"}, ...]`,
+    highest `min_percent` first, the last band starting at 0."""
+
+    __table_args__ = (
+        UniqueConstraint("school_id", name="uq_exam_grading_scales_school_id"),
+        CheckConstraint("jsonb_typeof(bands) = 'array'", name="bands_is_array"),
     )

@@ -5,8 +5,11 @@ import { RolesView } from "./roles-view";
 import { serverGetRequired } from "@/lib/api/server";
 import { PERMISSIONS, type PermissionCategory, type RoleRead } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Roles" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.roles };
+}
 
 export default async function RolesPage() {
   const { user, schoolId } = await requireSchoolContext();

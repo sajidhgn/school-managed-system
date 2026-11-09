@@ -146,6 +146,8 @@ _APP_TABLES = (
     "subjects",
     "terms",
     "academic_years",
+    # One row per campus; references `schools` (CASCADE). Listed for readability.
+    "exam_grading_scales",
     "audit_logs",
     "invitations",
     "memberships",

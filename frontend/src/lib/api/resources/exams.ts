@@ -7,6 +7,8 @@ import type {
   ExamPaperUpdate,
   ExamRead,
   ExamUpdate,
+  GradingScaleInput,
+  GradingScaleRead,
   MarksUpsert,
   MarksUpsertResult,
   Page,
@@ -58,4 +60,16 @@ export const examsApi = {
   /** Result sheet for one class: papers as columns, students ranked. */
   results: (examId: string, classId: string) =>
     api.get<ExamClassResults>(`/exams/${examId}/results`, { params: { class_id: classId } }),
+
+  /**
+   * The campus grading scale. Every campus starts on the board scale
+   * (`is_default`); saving replaces it, resetting returns to it. Changing it
+   * re-grades every exam on the next read — marks never change.
+   */
+  gradingScale: {
+    get: () => api.get<GradingScaleRead>("/exams/grading-scale"),
+    /** `grade:manage` AND `school:update`: campus policy, not marking. */
+    set: (body: GradingScaleInput) => api.put<GradingScaleRead>("/exams/grading-scale", body),
+    reset: () => api.delete<void>("/exams/grading-scale"),
+  },
 };

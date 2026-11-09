@@ -7,6 +7,9 @@ import { queryKeys } from "@/lib/api/query-keys";
 import { errorMessage } from "@/lib/api/errors";
 import { classesApi } from "@/lib/api/resources/classes";
 import { ApiError } from "@/lib/api/errors";
+import { fill } from "@/lib/i18n/format";
+import { classesMessages } from "@/lib/i18n/modules/classes";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import type {
   ClassCreate,
   ClassUpdate,
@@ -32,26 +35,28 @@ export function useClassSummary() {
 }
 
 export function useCreateClass() {
+  const m = useCatalog(classesMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: ClassCreate) => classesApi.create(body),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.all });
-      toast.success("Class created", `${created.name} was added.`);
+      toast.success(m.classCreated, fill(m.classCreatedBody, { name: created.name }));
     },
-    onError: (error) => toast.error("Couldn't create class", errorMessage(error)),
+    onError: (error) => toast.error(m.classCreateFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateClass() {
+  const m = useCatalog(classesMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ClassUpdate }) => classesApi.update(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.all });
-      toast.success("Class updated");
+      toast.success(m.classUpdated);
     },
-    onError: (error) => toast.error("Couldn't update class", errorMessage(error)),
+    onError: (error) => toast.error(m.classUpdateFailed, errorMessage(error)),
   });
 }
 
@@ -63,19 +68,20 @@ export function useUpdateClass() {
  * than replaced with a generic failure.
  */
 export function useDeleteClass() {
+  const m = useCatalog(classesMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => classesApi.remove(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.all });
-      toast.success("Class deleted");
+      toast.success(m.classDeleted);
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 409) {
-        toast.error("Class isn't empty", error.message);
+        toast.error(m.classNotEmpty, error.message);
         return;
       }
-      toast.error("Couldn't delete class", errorMessage(error));
+      toast.error(m.classDeleteFailed, errorMessage(error));
     },
   });
 }
@@ -89,6 +95,7 @@ export function useSections(classId: string) {
 }
 
 export function useCreateSection() {
+  const m = useCatalog(classesMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ classId, body }: { classId: string; body: SectionCreate }) =>
@@ -96,13 +103,14 @@ export function useCreateSection() {
     onSuccess: (_section, { classId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.sections(classId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.summary });
-      toast.success("Section added");
+      toast.success(m.sectionAdded);
     },
-    onError: (error) => toast.error("Couldn't add section", errorMessage(error)),
+    onError: (error) => toast.error(m.sectionAddFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateSection() {
+  const m = useCatalog(classesMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -116,13 +124,14 @@ export function useUpdateSection() {
     onSuccess: (_section, { classId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.sections(classId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.summary });
-      toast.success("Section updated");
+      toast.success(m.sectionUpdated);
     },
-    onError: (error) => toast.error("Couldn't update section", errorMessage(error)),
+    onError: (error) => toast.error(m.sectionUpdateFailed, errorMessage(error)),
   });
 }
 
 export function useDeleteSection() {
+  const m = useCatalog(classesMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ sectionId }: { sectionId: string; classId: string }) =>
@@ -130,14 +139,14 @@ export function useDeleteSection() {
     onSuccess: (_result, { classId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.sections(classId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.classes.summary });
-      toast.success("Section deleted");
+      toast.success(m.sectionDeleted);
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 409) {
-        toast.error("Section isn't empty", error.message);
+        toast.error(m.sectionNotEmpty, error.message);
         return;
       }
-      toast.error("Couldn't delete section", errorMessage(error));
+      toast.error(m.sectionDeleteFailed, errorMessage(error));
     },
   });
 }

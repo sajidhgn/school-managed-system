@@ -3,9 +3,14 @@ import { redirect } from "next/navigation";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { getCatalog } from "@/lib/i18n/server";
 import { PapersView } from "./papers-view";
 
-export const metadata: Metadata = { title: "Test papers" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(papersMessages)).meta.list };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

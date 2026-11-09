@@ -31,7 +31,8 @@ test.describe("public security boundary", () => {
 test("platform login requires a valid operator credential and MFA code", async ({ page }) => {
   await page.goto("/platform/login");
   await page.getByLabel(/email/i).fill("nobody@example.com");
-  await page.getByLabel(/password/i).fill("not-a-real-platform-password");
+  // The field itself, not the "Show password" toggle beside it, which also matches /password/.
+  await page.locator('input[type="password"]').fill("not-a-real-platform-password");
   const code = page.getByLabel(/authentication code/i);
   if (await code.isVisible()) await code.fill("000000");
   await page.getByRole("button", { name: /sign in/i }).click();

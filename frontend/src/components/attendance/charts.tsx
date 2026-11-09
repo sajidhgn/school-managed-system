@@ -3,6 +3,9 @@
 import { useState, type ReactNode } from "react";
 
 import type { AttendanceTrendDay, AttendanceWeekday } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 import { formatDelta, formatPct } from "./status";
 
@@ -43,11 +46,11 @@ function useChartTip() {
 }
 
 function useDateFormats() {
-  // The page's own locale would need the i18n provider; these screens are English,
-  // like the register board they sit beside.
+  // The catalog's locale: `en-PK` or `ur-PK`, both with Latin digits.
+  const locale = useCatalog(attendanceMessages).intlLocale;
   return {
-    short: new Intl.DateTimeFormat("en-PK", { day: "numeric", month: "short" }),
-    long: new Intl.DateTimeFormat("en-PK", { weekday: "short", day: "numeric", month: "short" }),
+    short: new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }),
+    long: new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }),
   };
 }
 
@@ -69,6 +72,7 @@ const parse = (iso: string) => new Date(`${iso}T00:00:00`);
  * labelled, so nobody mistakes the bottom of the plot for zero.
  */
 export function TrendChart({ days }: { days: AttendanceTrendDay[] }) {
+  const m = useCatalog(attendanceMessages).charts;
   const { show, hide, node } = useChartTip();
   const [active, setActive] = useState<number | null>(null);
   const dates = useDateFormats();
@@ -116,7 +120,11 @@ export function TrendChart({ days }: { days: AttendanceTrendDay[] }) {
   const labelIndexes = n <= 2 ? [...Array(n).keys()] : [0, Math.floor((n - 1) / 2), n - 1];
 
   const describe = (d: AttendanceTrendDay) =>
-    `${dates.long.format(parse(d.session_date))}: ${formatPct(d.percentage)}, ${d.absent} absent`;
+    fill(m.dayAria, {
+      date: dates.long.format(parse(d.session_date)),
+      rate: formatPct(d.percentage),
+      absent: d.absent,
+    });
 
   return (
     <div data-chart className="relative">
@@ -179,7 +187,7 @@ export function TrendChart({ days }: { days: AttendanceTrendDay[] }) {
             <span className="flex flex-col gap-0.5">
               <span className="text-sm font-semibold tabular-nums">{formatPct(d.percentage)}</span>
               <span className="text-muted-foreground">
-                {dates.long.format(parse(d.session_date))} · {d.absent} absent
+                {fill(m.dayTip, { date: dates.long.format(parse(d.session_date)), absent: d.absent })}
               </span>
             </span>
           );
@@ -216,15 +224,15 @@ export function TrendChart({ days }: { days: AttendanceTrendDay[] }) {
 
       <details className="mt-3 text-xs">
         <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-          View as table
+          {m.viewTable}
         </summary>
         <div className="mt-2 max-h-56 overflow-y-auto rounded-md border border-border">
           <table className="w-full text-start">
             <thead className="sticky top-0 bg-muted text-muted-foreground">
               <tr>
-                <th className="px-2 py-1.5 text-start font-medium">Date</th>
-                <th className="px-2 py-1.5 text-end font-medium">Attendance</th>
-                <th className="px-2 py-1.5 text-end font-medium">Absent</th>
+                <th className="px-2 py-1.5 text-start font-medium">{m.colDate}</th>
+                <th className="px-2 py-1.5 text-end font-medium">{m.colAttendance}</th>
+                <th className="px-2 py-1.5 text-end font-medium">{m.colAbsent}</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
@@ -247,8 +255,6 @@ export function TrendChart({ days }: { days: AttendanceTrendDay[] }) {
 // Weekday pattern: one bar per day the school marks
 // ---------------------------------------------------------------------------
 
-const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
 /**
  * The rate on each day of the week, against the range's overall rate.
  *
@@ -265,25 +271,33 @@ export function WeekdayPattern({
   weekdays: AttendanceWeekday[];
   overall: number | null | undefined;
 }) {
+  const { charts: m, trend } = useCatalog(attendanceMessages);
   const { show, hide, node } = useChartTip();
   const marked = weekdays.filter((w) => w.school_days > 0);
   if (marked.length === 0) return null;
+  // Monday first, as the API numbers them (1 = Monday).
+  const shortNames = m.weekdayShort.split(" ");
+  const pluralNames = m.weekdayPlural.split(" ");
 
   return (
     <div data-chart className="relative">
       <ul className="space-y-2.5" onMouseLeave={hide}>
         {marked.map((w) => {
-          const name = WEEKDAY_NAMES[w.weekday - 1]!;
           const delta = w.percentage != null && overall != null ? w.percentage - overall : null;
-          const text = `${name}s: ${formatPct(w.percentage)} over ${w.school_days} school day${
-            w.school_days === 1 ? "" : "s"
-          }, ${w.absent} absence${w.absent === 1 ? "" : "s"}`;
+          const text = fill(m.weekdayBar, {
+            day: pluralNames[w.weekday - 1] ?? "",
+            rate: formatPct(w.percentage),
+            days: fill(w.school_days === 1 ? m.schoolDaysOne : m.schoolDaysOther, {
+              count: w.school_days,
+            }),
+            absences: fill(w.absent === 1 ? m.absencesOne : m.absencesOther, { count: w.absent }),
+          });
           return (
             <li
               key={w.weekday}
               className="grid grid-cols-[2.5rem_minmax(0,1fr)_3.25rem_4.5rem] items-center gap-2 text-sm"
             >
-              <span className="text-muted-foreground">{name.slice(0, 3)}</span>
+              <span className="text-muted-foreground">{shortNames[w.weekday - 1]}</span>
               <button
                 type="button"
                 aria-label={text}
@@ -306,7 +320,7 @@ export function WeekdayPattern({
                   delta != null && delta <= -2 && "font-medium text-foreground",
                 )}
               >
-                {delta == null ? "" : formatDelta(delta)}
+                {delta == null ? "" : formatDelta(delta, trend.points)}
               </span>
             </li>
           );

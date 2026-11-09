@@ -3,6 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 
 import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from "./config";
+import { pickCatalog, type Catalog, type Translation } from "./catalog";
 import { getMessages, type Messages } from "./messages";
 
 /**
@@ -28,4 +29,9 @@ export async function getLocale(): Promise<Locale> {
 
 export async function getTranslations(): Promise<Messages> {
   return getMessages(await getLocale());
+}
+
+/** A module catalog's strings for this request's locale. See `catalog.ts`. */
+export async function getCatalog<T>(catalog: Catalog<T>): Promise<Translation<T>> {
+  return pickCatalog(catalog, await getLocale());
 }

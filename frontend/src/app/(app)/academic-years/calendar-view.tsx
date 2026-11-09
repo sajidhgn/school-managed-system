@@ -19,15 +19,19 @@ import {
   useTerms,
 } from "@/hooks/use-calendar";
 import type { AcademicYearRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { calendarMessages } from "@/lib/i18n/modules/calendar";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { TermFormDialog } from "./term-form-dialog";
 import { YearFormDialog } from "./year-form-dialog";
 
-function formatRange(from: string, to: string) {
-  return `${from} → ${to}`;
+function formatRange(template: string, from: string, to: string) {
+  return fill(template, { from, to });
 }
 
 /** The terms of one year, loaded only when the year is expanded. */
 function TermList({ year, canManage }: { year: AcademicYearRead; canManage: boolean }) {
+  const { terms: m, page } = useCatalog(calendarMessages);
   const query = useTerms(year.id);
   const deleteTerm = useDeleteTerm();
   const [formOpen, setFormOpen] = React.useState(false);
@@ -36,11 +40,11 @@ function TermList({ year, canManage }: { year: AcademicYearRead; canManage: bool
   return (
     <div className="space-y-2 border-t pt-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Terms</p>
+        <p className="text-sm font-medium">{m.title}</p>
         {canManage && (
           <Button size="sm" variant="outline" onClick={() => setFormOpen(true)}>
-            <Plus className="mr-1 h-3 w-3" aria-hidden />
-            Add term
+            <Plus className="me-1 h-3 w-3" aria-hidden />
+            {m.addTerm}
           </Button>
         )}
       </div>
@@ -48,10 +52,7 @@ function TermList({ year, canManage }: { year: AcademicYearRead; canManage: bool
       {query.isPending && <Skeleton className="h-8 w-full" />}
 
       {query.data && query.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No terms yet. Terms are what report cards and &ldquo;this term&rdquo; attendance
-          figures are quoted against.
-        </p>
+        <p className="text-sm text-muted-foreground">{m.empty}</p>
       )}
 
       {query.data?.map((term) => (
@@ -63,14 +64,14 @@ function TermList({ year, canManage }: { year: AcademicYearRead; canManage: bool
             <span className="font-medium">
               {term.sequence}. {term.name}
             </span>
-            <span className="ml-2 text-muted-foreground">
-              {formatRange(term.start_date, term.end_date)}
+            <span className="ms-2 text-muted-foreground">
+              {formatRange(page.range, term.start_date, term.end_date)}
             </span>
           </div>
           {canManage && (
             <Button size="sm" variant="ghost" onClick={() => setConfirming(term.id)}>
               <Trash2 className="h-3 w-3" aria-hidden />
-              <span className="sr-only">Delete {term.name}</span>
+              <span className="sr-only">{fill(m.deleteNamed, { name: term.name })}</span>
             </Button>
           )}
         </div>
@@ -80,9 +81,9 @@ function TermList({ year, canManage }: { year: AcademicYearRead; canManage: bool
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title="Delete this term?"
-        description="Reports scoped to this term will no longer resolve to a date range."
-        confirmLabel="Delete"
+        title={m.deleteTitle}
+        description={m.deleteDescription}
+        confirmLabel={m.delete}
         variant="destructive"
         onConfirm={() => {
           if (confirming) deleteTerm.mutate(confirming);
@@ -100,6 +101,7 @@ export function CalendarView({
   canManage: boolean;
   canBackfill: boolean;
 }) {
+  const m = useCatalog(calendarMessages).page;
   const query = useAcademicYears({ size: 50, sort_by: "start_date", sort_dir: "desc" });
   const setCurrent = useSetCurrentYear();
   const deleteYear = useDeleteAcademicYear();
@@ -114,8 +116,8 @@ export function CalendarView({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Academic year"
-        description="The calendar attendance percentages, promotion and report cards are measured against."
+        title={m.title}
+        description={m.description}
         actions={
           canManage && (
             <Button
@@ -124,8 +126,8 @@ export function CalendarView({
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-1 h-4 w-4" aria-hidden />
-              New year
+              <Plus className="me-1 h-4 w-4" aria-hidden />
+              {m.newYear}
             </Button>
           )
         }
@@ -137,8 +139,8 @@ export function CalendarView({
       {query.data && years.length === 0 && (
         <EmptyState
           icon={CalendarRange}
-          title="No academic year yet"
-          description="Create one and mark it current. Students cannot be given enrollment history, and attendance cannot be filed, until a year exists."
+          title={m.emptyTitle}
+          description={m.emptyHint}
         />
       )}
 
@@ -149,11 +151,13 @@ export function CalendarView({
               <div>
                 <CardTitle className="flex items-center gap-2">
                   {year.name}
-                  {year.is_current && <Badge variant="success">Current</Badge>}
+                  {year.is_current && <Badge variant="success">{m.current}</Badge>}
                 </CardTitle>
                 <CardDescription>
-                  {formatRange(year.start_date, year.end_date)} &middot; {year.term_count} term
-                  {year.term_count === 1 ? "" : "s"}
+                  {formatRange(m.range, year.start_date, year.end_date)} &middot;{" "}
+                  {fill(year.term_count === 1 ? m.terms.one : m.terms.other, {
+                    count: year.term_count ?? 0,
+                  })}
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -164,8 +168,8 @@ export function CalendarView({
                     disabled={setCurrent.isPending}
                     onClick={() => setCurrent.mutate(year.id)}
                   >
-                    <Check className="mr-1 h-3 w-3" aria-hidden />
-                    Make current
+                    <Check className="me-1 h-3 w-3" aria-hidden />
+                    {m.makeCurrent}
                   </Button>
                 )}
                 {canManage && (
@@ -177,13 +181,13 @@ export function CalendarView({
                       setFormOpen(true);
                     }}
                   >
-                    Edit
+                    {m.edit}
                   </Button>
                 )}
                 {canManage && !year.is_current && (
                   <Button size="sm" variant="ghost" onClick={() => setConfirming(year)}>
                     <Trash2 className="h-3 w-3" aria-hidden />
-                    <span className="sr-only">Delete {year.name}</span>
+                    <span className="sr-only">{fill(m.deleteNamed, { name: year.name })}</span>
                   </Button>
                 )}
               </div>
@@ -193,11 +197,9 @@ export function CalendarView({
 
               {canBackfill && (
                 <div className="rounded-md bg-muted/50 p-3 text-sm">
-                  <p className="font-medium">Enrollment history</p>
+                  <p className="font-medium">{m.historyTitle}</p>
                   <p className="mt-1 text-muted-foreground">
-                    Students enrolled before this calendar existed have no history row. Opening
-                    one records which section they sit in for {year.name}, so attendance and
-                    report cards resolve correctly. Safe to run more than once.
+                    {fill(m.historyBody, { year: year.name })}
                   </p>
                   <Button
                     size="sm"
@@ -206,7 +208,7 @@ export function CalendarView({
                     disabled={backfill.isPending}
                     onClick={() => backfill.mutate(year.id)}
                   >
-                    Open enrollment history
+                    {m.openHistory}
                   </Button>
                 </div>
               )}
@@ -219,9 +221,9 @@ export function CalendarView({
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete ${confirming?.name ?? "this year"}?`}
-        description="This is refused if any student was ever enrolled in it — that record is part of their history."
-        confirmLabel="Delete"
+        title={fill(m.deleteTitle, { name: confirming?.name ?? m.deleteFallback })}
+        description={m.deleteDescription}
+        confirmLabel={m.delete}
         variant="destructive"
         onConfirm={() => {
           if (confirming) deleteYear.mutate(confirming.id);

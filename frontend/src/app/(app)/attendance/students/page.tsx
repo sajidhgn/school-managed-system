@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
 
 import { requireSchoolContext } from "@/lib/auth/session";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { getCatalog } from "@/lib/i18n/server";
 import { StudentAttendanceView } from "./student-attendance-view";
 
-export const metadata: Metadata = { title: "Student attendance" };
+export async function generateMetadata(): Promise<Metadata> {
+  const m = await getCatalog(attendanceMessages);
+  return { title: m.meta.students };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

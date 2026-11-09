@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { api, toSearchParams } from "@/lib/api/client";
 import type {
   BillingRunResult,
   FeeBillingScheduleInput,
@@ -21,6 +21,10 @@ import type {
   FeeVoucherDetail,
   FeeVoucherRead,
   FeeStructureStationeryInput,
+  LateFeePolicyCreate,
+  LateFeePolicyRead,
+  LateFeeRunResult,
+  LedgerAdjustmentInput,
   Page,
   PageParams,
   SiblingApplyRequest,
@@ -31,6 +35,8 @@ import type {
   StationeryItemUpdate,
   StudentFeeAssignmentInput,
   StudentFeeProfile,
+  StudentLedgerStatement,
+  VoucherFeeChargeInput,
   VoucherGenerateRequest,
   VoucherGenerateResult,
   VoucherStationeryInput,
@@ -205,7 +211,40 @@ export const feesApi = {
       api.post<SiblingApplyResult>("/fees/siblings/apply", body),
   },
 
+  /**
+   * The late-fee rule for a year, and the run that applies it.
+   *
+   * One live policy per year — PUT revises it. Each fine is minted as its OWN
+   * challan, never added to the overdue one, so an issued bill is never rewritten.
+   * The run is idempotent: a second press the same day fines nobody further.
+   */
+  lateFees: {
+    list: (academicYear?: string) =>
+      api.get<LateFeePolicyRead[]>("/fees/late-fee-policies", {
+        params: { academic_year: academicYear },
+      }),
+    set: (body: LateFeePolicyCreate) =>
+      api.put<LateFeePolicyRead>("/fees/late-fee-policies", body),
+    /** Soft delete. Fines already raised are untouched. */
+    remove: (id: string) => api.delete<void>(`/fees/late-fee-policies/${id}`),
+    run: (academicYear: string) =>
+      api.post<LateFeeRunResult>("/fees/late-fee-policies/run", undefined, {
+        params: { academic_year: academicYear },
+      }),
+  },
+
   students: {
+    /**
+     * The running account: balance and every movement behind it, newest first.
+     * A NEGATIVE balance means the school holds the family's money.
+     */
+    ledger: (studentId: string, params: PageParams = {}) =>
+      api.get<StudentLedgerStatement>(`/fees/students/${studentId}/ledger`, {
+        params: { ...params },
+      }),
+    /** `fee:void` — the one money movement with no voucher or receipt behind it. */
+    adjustLedger: (studentId: string, body: LedgerAdjustmentInput) =>
+      api.post<StudentLedgerStatement>(`/fees/students/${studentId}/ledger/adjustments`, body),
     profile: (studentId: string, academicYear: string) =>
       api.get<StudentFeeProfile>(`/fees/students/${studentId}/fee-profile`, {
         params: { academic_year: academicYear },
@@ -250,12 +289,35 @@ export const feesApi = {
     removeStationery: (id: string, stationeryItemId: string) =>
       api.delete<FeeVoucherDetail>(`/fees/vouchers/${id}/stationery/${stationeryItemId}`),
 
+    /**
+     * The one-off charge — a fine, a re-exam fee, a broken lab window — on ONE
+     * student's draft. Idempotent by head: the same head twice sets the line. A head
+     * the class structure already put there is RESTATED, which is right on a bill
+     * still being assembled.
+     */
+    addCharge: (id: string, body: VoucherFeeChargeInput) =>
+      api.put<FeeVoucherDetail>(`/fees/vouchers/${id}/charges`, body),
+    /** Draft only. Also removes a structure line — "not paying the exam fee this term". */
+    removeCharge: (id: string, headId: string) =>
+      api.delete<FeeVoucherDetail>(`/fees/vouchers/${id}/charges/${headId}`),
+
     payments: (id: string) => api.get<FeePaymentRead[]>(`/fees/vouchers/${id}/payments`),
     recordPayment: (id: string, body: FeePaymentCreate) =>
       api.post<FeePaymentRead>(`/fees/vouchers/${id}/payments`, body),
 
     /** The printable challan. Opened, not fetched — see the view. */
     pdfUrl: (id: string) => `/api/bff/fees/vouchers/${id}/pdf`,
+
+    /**
+     * The voucher register as CSV, for reconciling against a bank statement.
+     *
+     * A link rather than a fetch: the browser handles the download and the filename
+     * the API sends. The filters are the register's own, so the file holds exactly
+     * the challans on screen (every page, not just this one). The API caps the row
+     * count and says so inside the file.
+     */
+    exportUrl: (params: { academic_year?: string; period_label?: string; status?: string }) =>
+      `/api/bff/fees/vouchers/export${toSearchParams(params)}`,
 
     /**
      * Several months on ONE printed challan — the term-at-a-time page.

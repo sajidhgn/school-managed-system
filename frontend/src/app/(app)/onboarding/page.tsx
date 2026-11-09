@@ -7,7 +7,9 @@ import { PERMISSIONS, type SchoolRead } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Create your first school" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).onboarding.title };
+}
 
 /**
  * First-run onboarding (spec §4.3B step 5).

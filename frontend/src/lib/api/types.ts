@@ -133,6 +133,11 @@ export type GuardianRelationship = S["GuardianRelationship"];
 export type StudentGuardianRead = S["StudentGuardianRead"];
 export type GuardianPortalGrant = S["GuardianPortalGrant"];
 export type GuardianLinkUpdate = S["GuardianLinkUpdate"];
+export type GuardianRead = S["GuardianRead"];
+export type GuardianDetail = S["GuardianDetail"];
+export type GuardianUpdate = S["GuardianUpdate"];
+export type GuardianLinkCreate = S["GuardianLinkCreate"];
+export type LinkedStudentRead = S["LinkedStudentRead"];
 export type OtpRequestResponse = S["OtpRequestResponse"];
 export type GuardianLoginResponse = S["GuardianLoginResponse"];
 export type GuardianContextSummary = S["GuardianContextSummary"];
@@ -208,6 +213,9 @@ export type ChapterFileRead = S["ChapterFileRead"];
 export type ReportIssue = S["ReportIssue"];
 export type BookPageRead = S["PageRead"];
 export type BookSearchHit = S["BookSearchHit"];
+export type LibraryHit = S["LibraryHit"];
+export type AskRequest = S["AskRequest"];
+export type LibraryAnswer = S["LibraryAnswer"];
 /** A book in the library every school on the platform shares. */
 export type LibraryBook = S["LibraryBook"];
 export type ShelfInput = S["ShelfInput"];
@@ -247,6 +255,10 @@ export type MarksUpsert = S["MarksUpsert"];
 export type MarksUpsertResult = S["MarksUpsertResult"];
 export type ExamClassResults = S["ExamClassResults"];
 export type ExamResultRow = S["ExamResultRow"];
+export type GradeBand = S["GradeBand-Output"];
+export type GradeBandInput = S["GradeBand-Input"];
+export type GradingScaleRead = S["GradingScaleRead"];
+export type GradingScaleInput = S["GradingScaleInput"];
 export type ExamResultFilter = S["ExamResultFilter"];
 export type StudentExamResult = S["StudentExamResult"];
 
@@ -380,6 +392,10 @@ export const PERMISSIONS = {
   guardianCreate: "guardian:create",
   guardianUpdate: "guardian:update",
   guardianDelete: "guardian:delete",
+  // The sign-in credential: re-pointing a parent's login at another phone, or
+  // closing the portal. Separate from `guardian:update` so the clerk who fixes a
+  // misspelt name cannot hand a child's records to a different handset.
+  guardianPortal: "guardian:portal",
   calendarRead: "calendar:read",
   calendarManage: "calendar:manage",
   subjectRead: "subject:read",
@@ -485,6 +501,18 @@ export type SiblingMember = S["SiblingMember"];
 export type SiblingAction = S["SiblingAction"];
 export type SiblingApplyRequest = S["SiblingApplyRequest"];
 export type SiblingApplyResult = S["SiblingApplyResult"];
+
+// --- One-off charges, late fees, and the running ledger ---------------------
+export type VoucherFeeChargeInput = S["VoucherFeeChargeInput"];
+export type LateFeePolicyRead = S["LateFeePolicyRead"];
+export type LateFeePolicyCreate = S["LateFeePolicyCreate"];
+export type LateFeeRunResult = S["LateFeeRunResult"];
+export type LateFeeKind = S["LateFeeKind"];
+export type LateFeeRecurrence = S["LateFeeRecurrence"];
+export type StudentLedgerStatement = S["StudentLedgerStatement"];
+export type LedgerEntryRead = S["LedgerEntryRead"];
+export type LedgerEntryType = S["LedgerEntryType"];
+export type LedgerAdjustmentInput = S["LedgerAdjustmentInput"];
 
 // ---------------------------------------------------------------------------
 // Display labels

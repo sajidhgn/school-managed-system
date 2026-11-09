@@ -14,7 +14,6 @@ import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { billing as billingApi } from "@/lib/api/resources";
 import {
-  SUBSCRIPTION_STATUS_LABELS,
   label,
   type InvoiceRead,
   type BillingCycle,
@@ -22,6 +21,10 @@ import {
   type SubscriptionRead,
   type UsageResponse,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -57,6 +60,8 @@ export function BillingView({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const { billing: m, usage: usageText } = useCatalog(adminMessages);
+  const L = useLabels();
   const [busy, setBusy] = useState(false);
   const [changingTo, setChangingTo] = useState<PlanPublic | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -77,12 +82,12 @@ export function BillingView({
       } else {
         await billingApi.changePlan(request);
       }
-      toast({ title: `You are now on ${plan.name}.` });
+      toast({ title: fill(m.nowOn, { plan: plan.name }) });
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not change plan",
+        title: m.changeFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -96,14 +101,14 @@ export function BillingView({
     try {
       await billingApi.cancel();
       toast({
-        title: "Subscription cancelled",
-        description: "You keep full access until the end of the current period.",
+        title: m.cancelled,
+        description: m.cancelledBody,
       });
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not cancel",
+        title: m.cancelFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -146,17 +151,18 @@ export function BillingView({
                     : "destructive"
               }
             >
-              {label(SUBSCRIPTION_STATUS_LABELS, subscription.status)}
+              {label(L.subscriptionStatus, subscription.status)}
             </Badge>
           </div>
 
           {subscription.cancel_at_period_end ? (
             <p className="mt-3 rounded-md bg-warning/15 px-3 py-2 text-sm">
-              Your subscription ends
               {subscription.current_period_end
-                ? ` on ${new Date(subscription.current_period_end).toLocaleDateString()}`
-                : " at the end of the current period"}
-              . {t.billing.keepAccessUntilThen}
+                ? fill(m.endsOn, {
+                    date: new Date(subscription.current_period_end).toLocaleDateString(),
+                  })
+                : m.endsAtPeriodEnd}{" "}
+              {t.billing.keepAccessUntilThen}
             </p>
           ) : null}
 
@@ -176,7 +182,14 @@ export function BillingView({
       {usage ? (
         <section className="mb-8">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t.billing.usage}</h2>
-          <UsageCard usage={usage} />
+          <UsageCard
+            usage={usage}
+            strings={{
+              labels: L.usage,
+              unlimited: usageText.unlimited,
+              exhausted: t.billing.limitReached,
+            }}
+          />
         </section>
       ) : null}
 
@@ -184,7 +197,7 @@ export function BillingView({
         <section className="mb-8">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-medium text-muted-foreground">{t.billing.changePlan}</h2>
-            <div className="flex rounded-md border border-border p-1" aria-label="Billing cycle">
+            <div className="flex rounded-md border border-border p-1" aria-label={t.marketing.billingPeriod}>
               {(["monthly", "yearly"] as const).map((cycle) => (
                 <Button
                   key={cycle}
@@ -193,7 +206,7 @@ export function BillingView({
                   variant={billingCycle === cycle ? "secondary" : "ghost"}
                   onClick={() => setBillingCycle(cycle)}
                 >
-                  {cycle === "monthly" ? "Monthly" : "Yearly"}
+                  {cycle === "monthly" ? t.marketing.monthly : t.marketing.yearly}
                 </Button>
               ))}
             </div>
@@ -214,10 +227,10 @@ export function BillingView({
                   <p className="font-medium">{plan.name}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {(billingCycle === "monthly" ? plan.price_monthly : plan.price_yearly) === null
-                      ? "Custom"
+                      ? m.customPrice
                       : `${plan.currency} ${
                           billingCycle === "monthly" ? plan.price_monthly : plan.price_yearly
-                        }/${billingCycle === "monthly" ? "mo" : "yr"}`}
+                        }${billingCycle === "monthly" ? t.common.perMonth : t.common.perYear}`}
                   </p>
                   <Button
                     size="sm"
@@ -242,11 +255,11 @@ export function BillingView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Number</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Issued</TableHead>
-                  <TableHead className="text-end">Download</TableHead>
+                  <TableHead>{m.colNumber}</TableHead>
+                  <TableHead>{m.colAmount}</TableHead>
+                  <TableHead>{t.common.status}</TableHead>
+                  <TableHead>{m.colIssued}</TableHead>
+                  <TableHead className="text-end">{m.colDownload}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -258,7 +271,7 @@ export function BillingView({
                     </TableCell>
                     <TableCell>
                       <Badge variant={invoice.status === "paid" ? "success" : "neutral"}>
-                        {invoice.status}
+                        {label(m.invoiceStatus, invoice.status)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -287,13 +300,13 @@ export function BillingView({
       <ConfirmDialog
         open={changingTo !== null}
         onOpenChange={(open) => !open && setChangingTo(null)}
-        title={`Switch to ${changingTo?.name}?`}
+        title={fill(m.switchTo, { plan: changingTo?.name ?? "" })}
         description={
           changingTo && isDowngrade(changingTo)
             ? t.billing.downgradeBody
             : t.billing.upgradeBody
         }
-        confirmLabel="Switch plan"
+        confirmLabel={m.switchPlan}
         variant="default"
         loading={busy}
         onConfirm={() => changingTo && changePlan(changingTo)}

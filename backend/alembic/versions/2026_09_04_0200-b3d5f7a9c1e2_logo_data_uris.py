@@ -57,7 +57,9 @@ def downgrade() -> None:
     # Narrowing truncates any stored data URI; there is no lossless downgrade
     # for a value wider than the old column. USING left(...) keeps the column
     # change itself from failing on such rows.
-    op.execute("ALTER TABLE schools ALTER COLUMN logo_url TYPE varchar(500) USING left(logo_url, 500)")
+    op.execute(
+        "ALTER TABLE schools ALTER COLUMN logo_url TYPE varchar(500) USING left(logo_url, 500)"
+    )
     op.execute(
         "ALTER TABLE organizations ALTER COLUMN logo_url TYPE varchar(500) USING left(logo_url, 500)"
     )

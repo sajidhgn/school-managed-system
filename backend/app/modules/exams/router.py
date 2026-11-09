@@ -31,6 +31,8 @@ from app.modules.exams.schemas import (
     ExamPaperUpdate,
     ExamRead,
     ExamUpdate,
+    GradingScaleInput,
+    GradingScaleRead,
     MarksUpsert,
     MarksUpsertResult,
     PaperMarksRead,
@@ -41,6 +43,10 @@ exams_router = APIRouter()
 
 GradeReadCtx = Annotated[AuthContext, Depends(require("grade:read"))]
 GradeManageCtx = Annotated[AuthContext, Depends(require("grade:manage"))]
+# The grading scale is campus POLICY, not marking: teachers hold `grade:manage` so
+# they can enter marks, and must not be able to move the A boundary. `school:update`
+# on top puts it with the principal, like the challan and card designs.
+GradingPolicyCtx = Annotated[AuthContext, Depends(require("grade:manage", "school:update"))]
 
 
 def _teacher(ctx: AuthContext) -> UUID | None:
@@ -95,6 +101,44 @@ async def update_paper(
 )
 async def remove_paper(paper_id: UUID, db: DbSession, ctx: GradeManageCtx) -> None:
     await ExamService(db).remove_paper(paper_id, actor_id=ctx.user_id, teacher_id=_teacher(ctx))
+
+
+# ---------------------------------------------------------------------------
+# Grading scale -- also before `/{exam_id}`, for the same reason
+# ---------------------------------------------------------------------------
+
+
+@exams_router.get(
+    "/grading-scale",
+    response_model=GradingScaleRead,
+    summary="This campus's grading scale (the board scale until it saves its own)",
+)
+async def get_grading_scale(db: DbSession, _ctx: GradeReadCtx) -> GradingScaleRead:
+    """Never 404: a campus that has not saved a scale is on the board scale, and
+    `is_default` says so."""
+    return await ExamService(db).get_grading_scale()
+
+
+@exams_router.put(
+    "/grading-scale",
+    response_model=GradingScaleRead,
+    summary="Create or replace this campus's grading scale",
+)
+async def set_grading_scale(
+    payload: GradingScaleInput, db: DbSession, ctx: GradingPolicyCtx
+) -> GradingScaleRead:
+    """The whole scale at once. The lowest band must start at 0%. Every exam's
+    result sheet is graded with it from the next read; marks never change."""
+    return await ExamService(db).set_grading_scale(payload, actor_id=ctx.user_id)
+
+
+@exams_router.delete(
+    "/grading-scale",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Reset this campus to the board grading scale",
+)
+async def delete_grading_scale(db: DbSession, ctx: GradingPolicyCtx) -> None:
+    await ExamService(db).delete_grading_scale(actor_id=ctx.user_id)
 
 
 # ---------------------------------------------------------------------------

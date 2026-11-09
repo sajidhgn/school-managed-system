@@ -2708,6 +2708,33 @@ export interface paths {
         patch: operations["update_paper_api_v1_exams_papers__paper_id__patch"];
         trace?: never;
     };
+    "/api/v1/exams/grading-scale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This campus's grading scale (the board scale until it saves its own)
+         * @description Never 404: a campus that has not saved a scale is on the board scale, and
+         *     `is_default` says so.
+         */
+        get: operations["get_grading_scale_api_v1_exams_grading_scale_get"];
+        /**
+         * Create or replace this campus's grading scale
+         * @description The whole scale at once. The lowest band must start at 0%. Every exam's
+         *     result sheet is graded with it from the next read; marks never change.
+         */
+        put: operations["set_grading_scale_api_v1_exams_grading_scale_put"];
+        post?: never;
+        /** Reset this campus to the board grading scale */
+        delete: operations["delete_grading_scale_api_v1_exams_grading_scale_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exams": {
         parameters: {
             query?: never;
@@ -6219,6 +6246,8 @@ export interface components {
             papers: components["schemas"]["ExamPaperRead"][];
             /** Rows */
             rows: components["schemas"]["ExamResultRow"][];
+            /** Grading Scale */
+            grading_scale: components["schemas"]["GradeBand-Output"][];
         };
         /** ExamCreate */
         ExamCreate: {
@@ -6394,6 +6423,10 @@ export interface components {
             percentage: string;
             /** Rank */
             rank: number;
+            /** Grade */
+            grade?: string | null;
+            /** Remark */
+            remark?: string | null;
         };
         /**
          * ExamStatus
@@ -7305,6 +7338,67 @@ export interface components {
             gender: string;
             /** Count */
             count: number;
+        };
+        /**
+         * GradeBand
+         * @description One band: a percentage at or above `min_percent` earns `grade`.
+         */
+        "GradeBand-Input": {
+            /**
+             * Min Percent
+             * @example 80
+             */
+            min_percent: number | string;
+            /**
+             * Grade
+             * @example A1
+             */
+            grade: string;
+            /**
+             * Remark
+             * @example Exceptional
+             */
+            remark?: string | null;
+        };
+        /**
+         * GradeBand
+         * @description One band: a percentage at or above `min_percent` earns `grade`.
+         */
+        "GradeBand-Output": {
+            /**
+             * Min Percent
+             * @example 80
+             */
+            min_percent: string;
+            /**
+             * Grade
+             * @example A1
+             */
+            grade: string;
+            /**
+             * Remark
+             * @example Exceptional
+             */
+            remark?: string | null;
+        };
+        /**
+         * GradingScaleInput
+         * @description The whole scale, replaced at once. See `ExamGradingScale` for why.
+         */
+        GradingScaleInput: {
+            /** Bands */
+            bands: components["schemas"]["GradeBand-Input"][];
+        };
+        /** GradingScaleRead */
+        GradingScaleRead: {
+            /** Bands */
+            bands: components["schemas"]["GradeBand-Output"][];
+            /** Is Default */
+            is_default: boolean;
+            /** Id */
+            id?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** GrowthPoint */
         GrowthPoint: {
@@ -9736,6 +9830,10 @@ export interface components {
             rank: number | null;
             /** Class Size */
             class_size: number | null;
+            /** Grade */
+            grade?: string | null;
+            /** Remark */
+            remark?: string | null;
         };
         /**
          * PortalFeeStatement
@@ -9768,6 +9866,8 @@ export interface components {
             is_absent: boolean;
             /** Marked */
             marked: boolean;
+            /** Grade */
+            grade?: string | null;
         };
         /**
          * PortalVoucherRead
@@ -10096,6 +10196,8 @@ export interface components {
             marks_obtained: string | null;
             /** Is Absent */
             is_absent: boolean;
+            /** Grade */
+            grade?: string | null;
         };
         /** RevenuePoint */
         RevenuePoint: {
@@ -20624,6 +20726,152 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExamPaperRead"];
                 };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_grading_scale_api_v1_exams_grading_scale_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GradingScaleRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_grading_scale_api_v1_exams_grading_scale_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GradingScaleInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GradingScaleRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_grading_scale_api_v1_exams_grading_scale_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Bad Request */
             400: {

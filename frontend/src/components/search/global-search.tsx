@@ -27,6 +27,9 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useRecentSearches, useSearch, useSearchConfig } from "@/hooks/use-search";
 import { activeType, withFilter } from "@/lib/api/resources/search";
 import type { SearchEntity, SearchHit, SearchResponse } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { searchMessages } from "@/lib/i18n/modules/search";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -279,7 +282,7 @@ export function GlobalSearch() {
                         setQuery((current) => withFilter(current, "type", group.type))
                       }
                     >
-                      {t.search.seeAll.replace("{count}", String(group.total))}
+                      {fill(t.search.seeAll, { count: group.total })}
                     </button>
                   ) : null}
                 </div>
@@ -439,7 +442,10 @@ function ResultRow({
       ) : null}
 
       <ArrowRight
-        className={cn("size-3.5 shrink-0 text-muted-foreground", active ? "opacity-100" : "opacity-0")}
+        className={cn(
+          "size-3.5 shrink-0 text-muted-foreground rtl:rotate-180",
+          active ? "opacity-100" : "opacity-0",
+        )}
         aria-hidden
       />
     </div>
@@ -521,6 +527,7 @@ function EmptyState({
 
 function Footer({ response, isSearching }: { response?: SearchResponse; isSearching: boolean }) {
   const { t } = useTranslations();
+  const m = useCatalog(searchMessages);
   const summary = response?.parsed.summary ?? [];
   const warnings = response?.warnings ?? [];
 
@@ -558,7 +565,9 @@ function Footer({ response, isSearching }: { response?: SearchResponse; isSearch
             <span>{t.search.searching}</span>
           ) : response ? (
             <span aria-live="polite">
-              {t.search.resultCount.replace("{count}", String(response.total))}
+              {fill(response.total === 1 ? m.resultCount.one : m.resultCount.other, {
+                count: response.total,
+              })}
               {response.cross_school ? ` · ${t.search.allCampuses}` : ""}
             </span>
           ) : null}

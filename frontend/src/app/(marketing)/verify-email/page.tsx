@@ -3,8 +3,10 @@ import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { ResendVerification } from "@/components/auth/resend-verification";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL, API_V1_PREFIX } from "@/lib/api/config";
+import { getTranslations } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Verify your email" };
 
@@ -26,6 +28,7 @@ export default async function VerifyEmailPage({
   searchParams: Promise<{ token?: string }>;
 }) {
   const { token } = await searchParams;
+  const t = await getTranslations();
 
   let ok = false;
   let message = "This verification link is invalid or has expired.";
@@ -58,6 +61,14 @@ export default async function VerifyEmailPage({
         <Button asChild>
           <Link href="/login">Continue to sign in</Link>
         </Button>
+        {/* An expired or already-used link is the usual reason to land here, and the
+            only way forward from it is a fresh link. */}
+        {!ok ? (
+          <div className="grid gap-2 border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground">{t.auth.needNewLink}</p>
+            <ResendVerification />
+          </div>
+        ) : null}
       </div>
     </AuthCard>
   );

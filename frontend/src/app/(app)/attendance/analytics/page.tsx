@@ -2,9 +2,15 @@ import type { Metadata } from "next";
 
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { getCatalog } from "@/lib/i18n/server";
 import { AnalyticsView } from "./analytics-view";
 
-export const metadata: Metadata = { title: "Attendance analytics" };
+export async function generateMetadata(): Promise<Metadata> {
+  const m = await getCatalog(attendanceMessages);
+  return { title: m.meta.analytics };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 
@@ -13,6 +14,9 @@ import type {
   StatusMix,
   StudentPulse,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -125,10 +129,6 @@ function money(value: number, compact = false): string {
     maximumFractionDigits: 0,
     ...(compact ? { notation: "compact" as const, maximumFractionDigits: 1 } : {}),
   }).format(value);
-}
-
-function fill(template: string, values: Record<string, string | number>): string {
-  return Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), template);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +267,11 @@ function StudentsTile({ students }: { students: StudentPulse }) {
         {fill(t.dashboard.joinedRecently, { count: students.joined_last_30_days })}
       </p>
       {students.pending > 0 ? (
-        <p>{fill(t.dashboard.pendingAdmissions, { count: students.pending })}</p>
+        <p>
+          <Link href="/students/admissions" className="hover:text-foreground hover:underline">
+            {fill(t.dashboard.pendingAdmissions, { count: students.pending })}
+          </Link>
+        </p>
       ) : null}
     </Tile>
   );
@@ -275,6 +279,7 @@ function StudentsTile({ students }: { students: StudentPulse }) {
 
 function AttendanceTile({ attendance }: { attendance: AttendancePulse }) {
   const { t } = useTranslations();
+  const pts = useCatalog(adminMessages).dashboard.points;
   const { rate_30d: now, rate_prev_30d: before } = attendance;
   const delta = now != null && before != null ? now - before : null;
   const Icon = delta == null || Math.abs(delta) < 0.0005 ? Minus : delta > 0 ? ArrowUpRight : ArrowDownRight;
@@ -293,7 +298,9 @@ function AttendanceTile({ attendance }: { attendance: AttendancePulse }) {
         {delta == null
           ? t.dashboard.noComparison
           : fill(t.dashboard.vsPrevious, {
-              delta: `${delta >= 0 ? "+" : "−"}${Math.abs(delta * 100).toFixed(1)} pts`,
+              delta: fill(pts, {
+                delta: `${delta >= 0 ? "+" : "−"}${Math.abs(delta * 100).toFixed(1)}`,
+              }),
             })}
       </p>
     </Tile>
@@ -618,6 +625,7 @@ function GenderSplit({ gender, total }: { gender: StudentPulse["gender"]; total:
 
 function ExamCard({ exams }: { exams: ExamPulse }) {
   const { t } = useTranslations();
+  const { passRateValue } = useCatalog(adminMessages).dashboard;
   const { show, hide, node } = useTip();
 
   return (
@@ -626,7 +634,7 @@ function ExamCard({ exams }: { exams: ExamPulse }) {
         {exams.subjects.map((s) => {
           const text = [
             `${s.subject} · ${s.average_pct.toFixed(1)}%`,
-            s.pass_rate == null ? null : `${pct(s.pass_rate)} ${t.dashboard.passRate}`,
+            s.pass_rate == null ? null : fill(passRateValue, { pct: pct(s.pass_rate) }),
             fill(t.dashboard.sat, { count: s.sat }),
           ]
             .filter(Boolean)
@@ -639,7 +647,7 @@ function ExamCard({ exams }: { exams: ExamPulse }) {
                   <span className="font-medium">{s.average_pct.toFixed(0)}%</span>
                   {s.pass_rate != null ? (
                     <span className="ms-2 text-xs text-muted-foreground">
-                      {pct(s.pass_rate)} {t.dashboard.passRate}
+                      {fill(passRateValue, { pct: pct(s.pass_rate) })}
                     </span>
                   ) : null}
                 </span>

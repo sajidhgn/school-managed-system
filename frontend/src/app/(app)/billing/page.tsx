@@ -11,8 +11,11 @@ import type {
 } from "@/lib/api/types";
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
+import { getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Billing" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.billing };
+}
 
 export default async function BillingPage() {
   const user = await requireUser();

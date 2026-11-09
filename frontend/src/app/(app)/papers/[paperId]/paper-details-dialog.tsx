@@ -15,6 +15,8 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUpdatePaper } from "@/hooks/use-papers";
 import type { PaperDetail } from "@/lib/api/types";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { isRtlLanguage } from "../script-font";
 
 /**
@@ -31,6 +33,7 @@ export function PaperDetailsDialog({
   onOpenChange: (open: boolean) => void;
   paper: PaperDetail;
 }) {
+  const m = useCatalog(papersMessages).details;
   const update = useUpdatePaper(paper.id);
   const [title, setTitle] = React.useState("");
   const [duration, setDuration] = React.useState("");
@@ -51,10 +54,8 @@ export function PaperDetailsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit paper details</DialogTitle>
-          <DialogDescription>
-            What prints at the top of the paper. The questions are not changed.
-          </DialogDescription>
+          <DialogTitle>{m.title}</DialogTitle>
+          <DialogDescription>{m.description}</DialogDescription>
         </DialogHeader>
         <form
           id="paper-details-form"
@@ -73,7 +74,7 @@ export function PaperDetailsDialog({
           }}
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="paper-edit-title">Title</Label>
+            <Label htmlFor="paper-edit-title">{m.titleLabel}</Label>
             <Input
               id="paper-edit-title"
               required
@@ -84,7 +85,8 @@ export function PaperDetailsDialog({
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="paper-edit-duration">
-              Time allowed <span className="font-normal text-muted-foreground">(minutes)</span>
+              {m.timeAllowed}{" "}
+              <span className="font-normal text-muted-foreground">{m.minutesSuffix}</span>
             </Label>
             <Input
               id="paper-edit-duration"
@@ -93,17 +95,18 @@ export function PaperDetailsDialog({
               max={600}
               className="w-32"
               value={duration}
-              placeholder="None"
+              placeholder={m.nonePlaceholder}
               aria-invalid={badDuration}
               onChange={(event) => setDuration(event.target.value)}
             />
             {badDuration && (
-              <p className="text-sm text-destructive">Time allowed must be 5–600 minutes.</p>
+              <p className="text-sm text-destructive">{m.badDuration}</p>
             )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="paper-edit-instructions">
-              Instructions <span className="font-normal text-muted-foreground">(optional)</span>
+              {m.instructions}{" "}
+              <span className="font-normal text-muted-foreground">{m.optionalSuffix}</span>
             </Label>
             <Textarea
               id="paper-edit-instructions"
@@ -118,7 +121,7 @@ export function PaperDetailsDialog({
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={update.isPending}>
-            Cancel
+            {m.cancel}
           </Button>
           <Button
             type="submit"
@@ -126,7 +129,7 @@ export function PaperDetailsDialog({
             loading={update.isPending}
             disabled={badDuration}
           >
-            Save
+            {m.save}
           </Button>
         </DialogFooter>
       </DialogContent>

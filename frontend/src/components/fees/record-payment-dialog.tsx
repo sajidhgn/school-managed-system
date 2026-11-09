@@ -14,7 +14,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRecordPayment } from "@/hooks/use-fees";
-import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/api/types";
+import type { PaymentMethod } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /**
  * Take money against a challan.
@@ -46,6 +50,8 @@ export function RecordPaymentDialog({
   outstanding: number;
   currency: string;
 }) {
+  const m = useCatalog(feesMessages).payment;
+  const L = useLabels();
   const record = useRecordPayment();
 
   const [amount, setAmount] = React.useState(String(outstanding));
@@ -97,15 +103,14 @@ export function RecordPaymentDialog({
       <DialogContent>
         <form onSubmit={submit} className="grid gap-4" noValidate>
           <DialogHeader>
-            <DialogTitle>Record a payment</DialogTitle>
+            <DialogTitle>{m.title}</DialogTitle>
             <DialogDescription>
-              {money.format(outstanding)} outstanding. A receipt number is issued
-              automatically.
+              {fill(m.description, { amount: money.format(outstanding) })}
             </DialogDescription>
           </DialogHeader>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Amount received</span>
+            <span className="font-medium">{m.amountReceived}</span>
             <Input
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -116,23 +121,23 @@ export function RecordPaymentDialog({
             />
             {overpaid ? (
               <span className="text-xs text-destructive">
-                That is more than the {money.format(outstanding)} owed on this challan.
+                {fill(m.overpaid, { amount: money.format(outstanding) })}
               </span>
             ) : part ? (
               <span className="text-xs text-muted-foreground">
-                Part payment — {money.format(outstanding - parsed)} will remain owing.
+                {fill(m.partPayment, { amount: money.format(outstanding - parsed) })}
               </span>
             ) : null}
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Method</span>
+              <span className="font-medium">{m.method}</span>
               <NativeSelect
                 value={method}
                 onChange={(event) => setMethod(event.target.value as PaymentMethod)}
               >
-                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, text]) => (
+                {Object.entries(L.paymentMethod).map(([value, text]) => (
                   <option key={value} value={value}>
                     {text}
                   </option>
@@ -141,7 +146,7 @@ export function RecordPaymentDialog({
             </label>
 
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Received on</span>
+              <span className="font-medium">{m.receivedOn}</span>
               <Input
                 type="date"
                 value={receivedOn}
@@ -152,20 +157,20 @@ export function RecordPaymentDialog({
           </div>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Reference</span>
+            <span className="font-medium">{m.reference}</span>
             <Input
               value={reference}
               onChange={(event) => setReference(event.target.value)}
-              placeholder="Cheque or transaction number — optional"
+              placeholder={m.referencePlaceholder}
             />
           </label>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {m.cancel}
             </Button>
             <Button type="submit" disabled={record.isPending || invalid || overpaid}>
-              {record.isPending ? "Recording…" : "Record payment"}
+              {record.isPending ? m.recording : m.submit}
             </Button>
           </DialogFooter>
         </form>

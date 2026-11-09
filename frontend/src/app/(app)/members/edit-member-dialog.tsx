@@ -21,11 +21,16 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/components/providers/i18n-provider";
 import { ApiError } from "@/lib/api/errors";
 import { members as membersApi } from "@/lib/api/resources";
 import { classesApi } from "@/lib/api/resources/classes";
 import { subjectsApi } from "@/lib/api/resources/subjects";
 import { PERMISSIONS, type MemberRead, type MemberUpdate, type RoleRead } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useRbacText } from "@/lib/i18n/modules/permissions";
 
 type Assignment = MemberRead["assigned_classes"] extends (infer A)[] | undefined ? A : never;
 
@@ -54,6 +59,9 @@ export function EditMemberDialog({
   roles: RoleRead[];
   onClose: () => void;
 }) {
+  const { t } = useTranslations();
+  const { editMember: m, members: mm } = useCatalog(adminMessages);
+  const rbac = useRbacText();
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -86,8 +94,8 @@ export function EditMemberDialog({
   function fail(error: unknown) {
     toast({
       variant: "destructive",
-      title: "Something went wrong",
-      description: error instanceof ApiError ? error.message : "Please try again.",
+      title: t.common.somethingWrong,
+      description: error instanceof ApiError ? error.message : t.common.tryAgain,
     });
   }
 
@@ -96,7 +104,7 @@ export function EditMemberDialog({
     setEmailError(null);
     setPasswordError(null);
     if (password && password !== confirmPassword) {
-      setPasswordError("The two passwords do not match.");
+      setPasswordError(m.passwordMismatch);
       return;
     }
 
@@ -120,8 +128,8 @@ export function EditMemberDialog({
     try {
       await membersApi.update(schoolId, member.membership_id, body);
       toast({
-        title: `${name || member.full_name} was updated.`,
-        description: body.password ? "Their new password is set and they were signed out." : undefined,
+        title: fill(m.updated, { name: name || member.full_name }),
+        description: body.password ? m.passwordSet : undefined,
       });
       router.refresh();
       onClose();
@@ -151,7 +159,7 @@ export function EditMemberDialog({
         await subjectsApi.curriculum.update(a.class_subject_id, { teacher_id: null });
       }
       setAssignments((current) => current.filter((x) => x !== a));
-      toast({ title: `Removed from ${describe(a)}.` });
+      toast({ title: fill(m.removedFrom, { assignment: describe(a) }) });
       router.refresh();
     } catch (error) {
       fail(error);
@@ -164,13 +172,13 @@ export function EditMemberDialog({
     <Dialog open={member !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Edit {member?.full_name}</DialogTitle>
+          <DialogTitle>{fill(m.title, { name: member?.full_name ?? "" })}</DialogTitle>
           <DialogDescription>{member?.email}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label htmlFor="member-name">Full name</Label>
+            <Label htmlFor="member-name">{t.auth.fullName}</Label>
             <Input
               id="member-name"
               value={fullName}
@@ -179,7 +187,7 @@ export function EditMemberDialog({
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="member-role">Role</Label>
+            <Label htmlFor="member-role">{t.common.role}</Label>
             <NativeSelect
               id="member-role"
               value={roleId}
@@ -187,17 +195,17 @@ export function EditMemberDialog({
               onChange={(event) => setRoleId(event.target.value)}
             >
               {isOwner || !roles.some((r) => r.id === member?.role_id) ? (
-                <option value={member?.role_id}>{member?.role_name}</option>
+                <option value={member?.role_id}>{rbac.roleName(member?.role_code, member?.role_name ?? "")}</option>
               ) : null}
               {roles.map((role) => (
                 <option key={role.id} value={role.id}>
-                  {role.name}
+                  {rbac.roleName(role.code, role.name)}
                 </option>
               ))}
             </NativeSelect>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="member-email">Email (used to sign in)</Label>
+            <Label htmlFor="member-email">{m.email}</Label>
             <Input
               id="member-email"
               type="email"
@@ -219,14 +227,14 @@ export function EditMemberDialog({
             ) : null}
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="member-phone">Phone</Label>
+            <Label htmlFor="member-phone">{m.phone}</Label>
             <Input
               id="member-phone"
               type="tel"
               autoComplete="off"
               value={phone}
               maxLength={32}
-              placeholder="Not set"
+              placeholder={m.notSet}
               onChange={(event) => setPhone(event.target.value)}
             />
           </div>
@@ -235,17 +243,15 @@ export function EditMemberDialog({
         <Can permission={PERMISSIONS.memberResetPassword}>
           <div className="grid gap-2 rounded-md border p-4">
             <div>
-              <Label>Change password</Label>
+              <Label>{m.changePassword}</Label>
               <p className="text-sm text-muted-foreground">
-                {isOwner
-                  ? "The principal changes their own password from their account."
-                  : "Leave blank to keep the current password. Setting a new one signs them out on every device."}
+                {isOwner ? m.ownerPasswordHint : m.passwordHint}
               </p>
             </div>
             {isOwner ? null : (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="member-password">New password</Label>
+                  <Label htmlFor="member-password">{t.auth.newPassword}</Label>
                   <PasswordInput
                     id="member-password"
                     autoComplete="new-password"
@@ -260,7 +266,7 @@ export function EditMemberDialog({
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="member-password-confirm">Confirm new password</Label>
+                  <Label htmlFor="member-password-confirm">{m.confirmNewPassword}</Label>
                   <PasswordInput
                     id="member-password-confirm"
                     autoComplete="new-password"
@@ -285,19 +291,19 @@ export function EditMemberDialog({
         </Can>
 
         <div className="grid gap-2">
-          <Label>Classes assigned</Label>
+          <Label>{mm.colClasses}</Label>
           {assignments.length === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Not assigned to any class.
+              {m.notAssigned}
             </p>
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Class</TableHead>
-                    <TableHead>Section / Subject</TableHead>
-                    <TableHead>Assignment</TableHead>
+                    <TableHead>{m.colClass}</TableHead>
+                    <TableHead>{m.colSectionSubject}</TableHead>
+                    <TableHead>{m.colAssignment}</TableHead>
                     <TableHead className="w-28" />
                   </TableRow>
                 </TableHeader>
@@ -310,10 +316,10 @@ export function EditMemberDialog({
                         <TableCell>{a.section_name ?? a.subject_name}</TableCell>
                         <TableCell>
                           <Badge variant={a.section_id ? "default" : "neutral"}>
-                            {a.section_id ? "Class teacher" : "Subject teacher"}
+                            {a.section_id ? mm.classTeacher : mm.subjectTeacher}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           <Can permission={PERMISSIONS.classUpdate}>
                             <Button
                               variant="ghost"
@@ -323,7 +329,7 @@ export function EditMemberDialog({
                               onClick={() => removeAssignment(a, key)}
                             >
                               <X className="size-4" aria-hidden />
-                              {removingKey === key ? "Removing…" : "Remove"}
+                              {removingKey === key ? m.removing : m.remove}
                             </Button>
                           </Can>
                         </TableCell>
@@ -338,13 +344,13 @@ export function EditMemberDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button
             onClick={save}
             disabled={saving || fullName.trim() === "" || (!isOwner && email.trim() === "")}
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? t.common.saving : t.settings.saveChanges}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -5,12 +5,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/api/query-keys";
 import { ApiError, errorMessage } from "@/lib/api/errors";
+import { fill } from "@/lib/i18n/format";
+import { booksMessages } from "@/lib/i18n/modules/books";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import {
   booksApi,
   type BookListParams,
   type LibraryParams,
+  type LibraryScopeParams,
 } from "@/lib/api/resources/books";
 import type {
+  AskRequest,
   BookCreate,
   BookDetail,
   BookUpdate,
@@ -77,19 +82,16 @@ export function duplicateBook(
 }
 
 export function useAddFromLibrary() {
+  const m = useCatalog(booksMessages).toast;
   const invalidate = useInvalidateBooks();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ShelfInput }) =>
       booksApi.addFromLibrary(id, body),
     onSuccess: (book) => {
       invalidate();
-      toast.success(
-        "Book added from the library",
-        `${book.title} — ${book.class_name}`,
-      );
+      toast.success(m.addedFromLibrary, `${book.title} — ${book.class_name}`);
     },
-    onError: (error) =>
-      toast.error("Couldn't add the book", errorMessage(error)),
+    onError: (error) => toast.error(m.addFailed, errorMessage(error)),
   });
 }
 
@@ -158,17 +160,17 @@ function useChapterResult(bookId: string) {
 }
 
 export function useCreateBook() {
+  const m = useCatalog(booksMessages).toast;
   const invalidate = useInvalidateBooks();
   return useMutation({
     mutationFn: (body: BookCreate) => booksApi.create(body),
     onSuccess: (book) => {
       invalidate();
-      toast.success("Book added", `${book.title} — ${book.class_name}`);
+      toast.success(m.added, `${book.title} — ${book.class_name}`);
     },
     // A book already in the library is answered in the dialog, with a way to add it.
     onError: (error) => {
-      if (!duplicateBook(error))
-        toast.error("Couldn't add the book", errorMessage(error));
+      if (!duplicateBook(error)) toast.error(m.addFailed, errorMessage(error));
     },
   });
 }
@@ -185,14 +187,15 @@ export function useScanStatus(enabled: boolean) {
 
 /** Read a new book's details off its cover and contents pages. */
 export function useScanBook() {
+  const m = useCatalog(booksMessages).toast;
   return useMutation({
     mutationFn: (files: File[]) => booksApi.scan(files),
-    onError: (error) =>
-      toast.error("Couldn't read the pages", errorMessage(error)),
+    onError: (error) => toast.error(m.scanFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateBook(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const queryClient = useQueryClient();
   const invalidate = useInvalidateBooks();
   return useMutation({
@@ -200,43 +203,43 @@ export function useUpdateBook(bookId: string) {
     onSuccess: (book) => {
       queryClient.setQueryData(queryKeys.books.detail(bookId), book);
       invalidate();
-      toast.success("Book updated", book.title);
+      toast.success(m.updated, book.title);
     },
-    onError: (error) =>
-      toast.error("Couldn't update the book", errorMessage(error)),
+    onError: (error) => toast.error(m.updateFailed, errorMessage(error)),
   });
 }
 
 export function useDeleteBook() {
+  const m = useCatalog(booksMessages).toast;
   const invalidate = useInvalidateBooks();
   return useMutation({
     mutationFn: (id: string) => booksApi.remove(id),
     onSuccess: () => {
       invalidate();
-      toast.success("Book removed");
+      toast.success(m.removed);
     },
-    onError: (error) =>
-      toast.error("Couldn't remove the book", errorMessage(error)),
+    onError: (error) => toast.error(m.removeFailed, errorMessage(error)),
   });
 }
 
 export function useAddChapter(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const invalidate = useInvalidateBooks();
   return useMutation({
     mutationFn: (body: ChapterInput) => booksApi.addChapter(bookId, body),
     onSuccess: (chapter) => {
       invalidate();
       toast.success(
-        "Chapter added",
-        `Chapter ${chapter.number}: ${chapter.title}`,
+        m.chapterAdded,
+        fill(m.chapterLabel, { number: chapter.number, title: chapter.title }),
       );
     },
-    onError: (error) =>
-      toast.error("Couldn't add the chapter", errorMessage(error)),
+    onError: (error) => toast.error(m.chapterAddFailed, errorMessage(error)),
   });
 }
 
 export function useUpdateChapter(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const onResult = useChapterResult(bookId);
   return useMutation({
     mutationFn: ({
@@ -247,26 +250,26 @@ export function useUpdateChapter(bookId: string) {
       body: ChapterUpdate;
     }) => booksApi.updateChapter(bookId, chapterId, body),
     onSuccess: onResult,
-    onError: (error) =>
-      toast.error("Couldn't update the chapter", errorMessage(error)),
+    onError: (error) => toast.error(m.chapterUpdateFailed, errorMessage(error)),
   });
 }
 
 export function useDeleteChapter(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const invalidate = useInvalidateBooks();
   return useMutation({
     mutationFn: (chapterId: string) =>
       booksApi.removeChapter(bookId, chapterId),
     onSuccess: () => {
       invalidate();
-      toast.success("Chapter removed");
+      toast.success(m.chapterRemoved);
     },
-    onError: (error) =>
-      toast.error("Couldn't remove the chapter", errorMessage(error)),
+    onError: (error) => toast.error(m.chapterRemoveFailed, errorMessage(error)),
   });
 }
 
 export function useUploadChapterFiles(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const onResult = useChapterResult(bookId);
   return useMutation({
     mutationFn: ({ chapterId, files }: { chapterId: string; files: File[] }) =>
@@ -274,17 +277,18 @@ export function useUploadChapterFiles(bookId: string) {
     onSuccess: (chapter, { files }) => {
       onResult(chapter);
       toast.success(
-        `${files.length} file${files.length === 1 ? "" : "s"} uploaded`,
-        chapter.status === "queued"
-          ? "The agent will read and check the pages now."
-          : undefined,
+        fill(files.length === 1 ? m.filesUploaded.one : m.filesUploaded.other, {
+          count: files.length,
+        }),
+        chapter.status === "queued" ? m.agentWillRead : undefined,
       );
     },
-    onError: (error) => toast.error("Couldn't upload", errorMessage(error)),
+    onError: (error) => toast.error(m.uploadFailed, errorMessage(error)),
   });
 }
 
 export function useDeleteChapterFile(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const onResult = useChapterResult(bookId);
   return useMutation({
     mutationFn: ({
@@ -295,39 +299,54 @@ export function useDeleteChapterFile(bookId: string) {
       fileId: string;
     }) => booksApi.removeFile(bookId, chapterId, fileId),
     onSuccess: onResult,
-    onError: (error) =>
-      toast.error("Couldn't remove the file", errorMessage(error)),
+    onError: (error) => toast.error(m.fileRemoveFailed, errorMessage(error)),
   });
 }
 
 export function useProcessChapter(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const onResult = useChapterResult(bookId);
   return useMutation({
     mutationFn: (chapterId: string) => booksApi.process(bookId, chapterId),
     onSuccess: (chapter) => {
       onResult(chapter);
-      toast.success(
-        "Agent queued",
-        `Chapter ${chapter.number} will be read and checked.`,
-      );
+      toast.success(m.agentQueued, fill(m.agentQueuedBody, { number: chapter.number }));
     },
-    onError: (error) =>
-      toast.error("Couldn't start the agent", errorMessage(error)),
+    onError: (error) => toast.error(m.agentFailed, errorMessage(error)),
   });
 }
 
 export function useAcceptChapter(bookId: string) {
+  const m = useCatalog(booksMessages).toast;
   const onResult = useChapterResult(bookId);
   return useMutation({
     mutationFn: (chapterId: string) => booksApi.accept(bookId, chapterId),
     onSuccess: (chapter) => {
       onResult(chapter);
-      toast.success(
-        "Chapter accepted",
-        `Chapter ${chapter.number} is marked ready.`,
-      );
+      toast.success(m.chapterAccepted, fill(m.chapterAcceptedBody, { number: chapter.number }));
     },
-    onError: (error) =>
-      toast.error("Couldn't accept the chapter", errorMessage(error)),
+    onError: (error) => toast.error(m.acceptFailed, errorMessage(error)),
+  });
+}
+
+/** Library-wide passage search. Runs once the query has two characters. */
+export function useLibrarySearch(q: string, scope: LibraryScopeParams) {
+  return useQuery({
+    queryKey: queryKeys.books.librarySearch(q, { ...scope }),
+    queryFn: () => booksApi.searchLibrary({ ...scope, q, limit: 12 }),
+    enabled: q.length >= 2,
+    placeholderData: (previous) => previous,
+    // A missing AI key is a 503 that retrying will not fix.
+    retry: false,
+  });
+}
+
+/**
+ * Ask the library. A mutation, not a query: each question is a paid model call the
+ * user asked for, and must not re-run on focus or remount.
+ */
+export function useAskLibrary() {
+  return useMutation({
+    mutationFn: (body: AskRequest) => booksApi.ask(body),
   });
 }

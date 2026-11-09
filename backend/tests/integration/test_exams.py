@@ -24,9 +24,7 @@ async def campus(tenant: Tenant, mailbox: list[EmailMessage]) -> Campus:
 
 
 async def _make_subject(campus: Campus, code: str = "MATH") -> str:
-    created = await campus.post(
-        f"{API}/subjects", json={"code": code, "name": f"Subject {code}"}
-    )
+    created = await campus.post(f"{API}/subjects", json={"code": code, "name": f"Subject {code}"})
     assert created.status_code == 201, created.text
     return created.json()["id"]
 

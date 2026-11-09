@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api/errors";
 import { invitations as invitationsApi } from "@/lib/api/resources";
 import {
-  INVITATION_STATUS_LABELS,
   PERMISSIONS,
   label,
   type InvitationRead,
@@ -27,6 +26,10 @@ import {
   type RoleRead,
   type UsageItem,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 
 /**
  * Add staff and manage invitations (spec §7) across the branches the Members page is
@@ -84,6 +87,8 @@ export function InvitationsSection({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const m = useCatalog(adminMessages).invitations;
+  const L = useLabels();
   const [busy, setBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<InvitationRead | null>(null);
 
@@ -121,7 +126,7 @@ export function InvitationsSection({
         onClick={onToggle}
         aria-expanded={open}
         aria-controls="invitations-panel"
-        className="flex w-full items-center justify-between gap-4 rounded-xl px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex w-full items-center justify-between gap-4 rounded-xl px-5 py-4 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div>
           <span className="flex items-center gap-2 text-sm font-medium">
@@ -129,7 +134,7 @@ export function InvitationsSection({
             {t.invitations.title}
             {pendingCount > 0 ? (
               <Badge variant="warning">
-                {pendingCount} {t.invitations.pending.toLowerCase()}
+                {fill(m.pendingCount, { count: pendingCount })}
               </Badge>
             ) : null}
           </span>
@@ -169,8 +174,8 @@ export function InvitationsSection({
               value={statusFilter ?? ""}
               onChange={(event) => onStatusChange(event.target.value || null)}
             >
-              <option value="">All statuses</option>
-              {Object.entries(INVITATION_STATUS_LABELS).map(([value, text]) => (
+              <option value="">{m.allStatuses}</option>
+              {Object.entries(L.invitationStatus).map(([value, text]) => (
                 <option key={value} value={value}>
                   {text}
                 </option>
@@ -180,7 +185,7 @@ export function InvitationsSection({
 
           {invitations.meta.total === 0 ? (
             <EmptyState
-              title={statusFilter ? "No invitations with this status" : t.invitations.emptyTitle}
+              title={statusFilter ? m.noneWithStatus : t.invitations.emptyTitle}
               description={statusFilter ? undefined : t.invitations.emptyBody}
             />
           ) : (
@@ -192,14 +197,14 @@ export function InvitationsSection({
                 act(
                   invitation.id,
                   () => invitationsApi.resend(branchOf(invitation), invitation.id),
-                  `New link sent to ${invitation.email}.`,
+                  fill(m.resent, { email: invitation.email }),
                 )
               }
               onRevoke={(invitation) =>
                 act(
                   invitation.id,
                   () => invitationsApi.revoke(branchOf(invitation), invitation.id),
-                  `Invitation to ${invitation.email} revoked.`,
+                  fill(m.revoked, { email: invitation.email }),
                 )
               }
               onDelete={remove}
@@ -218,9 +223,9 @@ export function InvitationsSection({
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(isOpen) => !isOpen && setDeleting(null)}
-        title={`Delete the invitation to ${deleting?.email}?`}
-        description="It will be removed from this list. A pending invitation's link stops working and its staff seat is returned."
-        confirmLabel="Delete"
+        title={fill(m.deleteTitle, { email: deleting?.email ?? "" })}
+        description={m.deleteDescription}
+        confirmLabel={m.delete}
         variant="destructive"
         loading={deleting !== null && busy === deleting.id}
         onConfirm={async () => {
@@ -228,7 +233,7 @@ export function InvitationsSection({
           await act(
             deleting.id,
             () => invitationsApi.remove(branchOf(deleting), deleting.id),
-            `Invitation to ${deleting.email} deleted.`,
+            fill(m.deleted, { email: deleting.email }),
           );
           setDeleting(null);
         }}
@@ -256,6 +261,9 @@ function InvitationTable({
   /** Rendered under the table, inside its border — the pagination. */
   footer?: ReactNode;
 }) {
+  const { t } = useTranslations();
+  const m = useCatalog(adminMessages).invitations;
+  const L = useLabels();
   const hasActions = Boolean(onResend || onRevoke || onDelete);
 
   return (
@@ -264,11 +272,11 @@ function InvitationTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Email</TableHead>
-              {branchNames ? <TableHead>Branch</TableHead> : null}
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Expires</TableHead>
+              <TableHead>{t.common.email}</TableHead>
+              {branchNames ? <TableHead>{t.members.branch}</TableHead> : null}
+              <TableHead>{t.common.role}</TableHead>
+              <TableHead>{t.common.status}</TableHead>
+              <TableHead>{t.invitations.expires}</TableHead>
               {hasActions ? <TableHead className="w-32" /> : null}
             </TableRow>
           </TableHeader>
@@ -295,7 +303,7 @@ function InvitationTable({
                           : "neutral"
                     }
                   >
-                    {label(INVITATION_STATUS_LABELS, invitation.status)}
+                    {label(L.invitationStatus, invitation.status)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
@@ -311,10 +319,10 @@ function InvitationTable({
                           size="icon"
                           disabled={busy === invitation.id}
                           onClick={() => onResend(invitation)}
-                          title="Send a new link (the old one stops working)"
+                          title={t.invitations.resendHint}
                         >
                           <RotateCw className="size-4" aria-hidden />
-                          <span className="sr-only">Resend to {invitation.email}</span>
+                          <span className="sr-only">{fill(m.resendTo, { email: invitation.email })}</span>
                         </Button>
                       </Can>
                       ) : null}
@@ -325,10 +333,10 @@ function InvitationTable({
                           size="icon"
                           disabled={busy === invitation.id}
                           onClick={() => onRevoke?.(invitation)}
-                          title="Revoke — the link dies immediately and the seat is returned"
+                          title={t.invitations.revokeHint}
                         >
                           <X className="size-4" aria-hidden />
-                          <span className="sr-only">Revoke {invitation.email}</span>
+                          <span className="sr-only">{fill(m.revokeEmail, { email: invitation.email })}</span>
                         </Button>
                       </Can>
                       ) : null}
@@ -340,10 +348,10 @@ function InvitationTable({
                             className="text-destructive hover:text-destructive"
                             disabled={busy === invitation.id}
                             onClick={() => onDelete(invitation)}
-                            title="Delete — removes it from this list"
+                            title={m.deleteHint}
                           >
                             <Trash2 className="size-4" aria-hidden />
-                            <span className="sr-only">Delete invitation to {invitation.email}</span>
+                            <span className="sr-only">{fill(m.deleteInvitationTo, { email: invitation.email })}</span>
                           </Button>
                         </Can>
                       ) : null}

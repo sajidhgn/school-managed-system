@@ -323,7 +323,46 @@ async def test_results_appear_only_once_the_exam_is_published(portal: Portal) ->
             "marks_obtained": "76.00",
             "is_absent": False,
             "marked": True,
+            # The board scale every campus starts on: 70-79% is an A.
+            "grade": "A",
         }
     ]
+    assert result["grade"] == "A" and result["remark"] == "Very Good"
     # Nobody else's marks leave the server.
     assert "91.5" not in str(results)
+
+
+@pytest.mark.asyncio
+async def test_results_carry_the_campus_grade_once_a_scale_is_set(portal: Portal) -> None:
+    """The parent sees the same grade the report card prints -- one grading function."""
+    campus = portal.campus
+    subject = await campus.post(f"{API}/subjects", json={"code": "ENG", "name": "English"})
+    exam = await campus.post(f"{API}/exams", json={"name": "Final"})
+    exam_id = exam.json()["id"]
+    paper = await campus.post(
+        f"{API}/exams/{exam_id}/papers",
+        json={"class_id": campus.class_id, "subject_id": subject.json()["id"], "max_marks": 50},
+    )
+    assert paper.status_code == 201, paper.text
+    await campus.put(
+        f"{API}/exams/papers/{paper.json()['id']}/marks",
+        json={"entries": [{"student_id": campus.student_ids[0], "marks_obtained": "36"}]},
+    )
+    await campus.patch(f"{API}/exams/{exam_id}", json={"status": "published"})
+    scale = await campus.put(
+        f"{API}/exams/grading-scale",
+        json={
+            "bands": [
+                {"min_percent": "0", "grade": "F"},
+                {"min_percent": "70", "grade": "A", "remark": "Excellent"},
+                {"min_percent": "50", "grade": "B"},
+            ]
+        },
+    )
+    assert scale.status_code == 200, scale.text
+
+    (result,) = await portal.ok(f"/children/{portal.child}/results")
+    # 36 of 50 is 72%.
+    assert Decimal(result["percentage"]) == Decimal("72.00")
+    assert result["grade"] == "A" and result["remark"] == "Excellent"
+    assert result["papers"][0]["grade"] == "A"

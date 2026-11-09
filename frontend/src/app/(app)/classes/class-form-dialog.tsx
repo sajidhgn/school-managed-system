@@ -17,7 +17,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { useCreateClass, useUpdateClass } from "@/hooks/use-classes";
 import { ApiError, errorMessage } from "@/lib/api/errors";
-import { classFormSchema, toClassPayload, type ClassFormValues } from "@/lib/validation/classes";
+import { classesMessages } from "@/lib/i18n/modules/classes";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { createClassFormSchema, toClassPayload, type ClassFormValues } from "@/lib/validation/classes";
 
 /** Both ClassRead and ClassSummary satisfy this, so either can be edited. */
 export type EditableClass = { id: string; name: string; level: number };
@@ -39,6 +41,8 @@ export function ClassFormDialog({
   onOpenChange: (open: boolean) => void;
   schoolClass?: EditableClass | null;
 }) {
+  const { classForm: m, validation } = useCatalog(classesMessages);
+  const schema = React.useMemo(() => createClassFormSchema(validation), [validation]);
   const isEdit = Boolean(schoolClass);
   const [formError, setFormError] = React.useState<string | null>(null);
 
@@ -46,7 +50,7 @@ export function ClassFormDialog({
   const updateClass = useUpdateClass();
 
   const form = useForm<ClassFormValues>({
-    resolver: zodResolver(classFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: EMPTY,
   });
 
@@ -97,11 +101,9 @@ export function ClassFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit class" : "Add class"}</DialogTitle>
+          <DialogTitle>{isEdit ? m.editTitle : m.addTitle}</DialogTitle>
           <DialogDescription>
-            {isEdit
-              ? "Update this class's name or level."
-              : "Create a new class. You can add its sections afterwards."}
+            {isEdit ? m.editDescription : m.addDescription}
           </DialogDescription>
         </DialogHeader>
 
@@ -110,20 +112,20 @@ export function ClassFormDialog({
 
           <div className="grid gap-4">
             <Field
-              label="Class name"
+              label={m.name}
               htmlFor="name"
               error={form.formState.errors.name}
-              hint="For example, Grade 10."
+              hint={m.nameHint}
               required
             >
               <Input autoFocus {...form.register("name")} />
             </Field>
 
             <Field
-              label="Level"
+              label={m.level}
               htmlFor="level"
               error={form.formState.errors.level}
-              hint="Numeric rank used to order classes across the school."
+              hint={m.levelHint}
               required
             >
               <Input type="number" min={0} max={100} step={1} {...form.register("level")} />
@@ -137,10 +139,10 @@ export function ClassFormDialog({
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              Cancel
+              {m.cancel}
             </Button>
             <Button type="submit" loading={saving}>
-              {isEdit ? "Save changes" : "Add class"}
+              {isEdit ? m.saveChanges : m.add}
             </Button>
           </DialogFooter>
         </form>

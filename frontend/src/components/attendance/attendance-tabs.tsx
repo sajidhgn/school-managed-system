@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarCheck, ChartColumn, Users } from "lucide-react";
 
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,18 +20,19 @@ import { cn } from "@/lib/utils";
  *   Classes    which classes are slipping, and who is at risk
  *   Students   every child: today, this month, last month, the year
  */
-const TABS: { href: Route; label: string; Icon: typeof Users }[] = [
-  { href: "/attendance", label: "Registers", Icon: CalendarCheck },
-  { href: "/attendance/analytics", label: "Classes", Icon: ChartColumn },
-  { href: "/attendance/students", label: "Students", Icon: Users },
+const TABS: { href: Route; key: "registers" | "classes" | "students"; Icon: typeof Users }[] = [
+  { href: "/attendance", key: "registers", Icon: CalendarCheck },
+  { href: "/attendance/analytics", key: "classes", Icon: ChartColumn },
+  { href: "/attendance/students", key: "students", Icon: Users },
 ];
 
 export function AttendanceTabs({ className }: { className?: string }) {
   const pathname = usePathname();
+  const m = useCatalog(attendanceMessages).tabs;
   return (
-    <nav aria-label="Attendance" className={cn("-mx-1 overflow-x-auto px-1", className)}>
+    <nav aria-label={m.label} className={cn("-mx-1 overflow-x-auto px-1", className)}>
       <ul className="inline-flex gap-1 rounded-[calc(var(--control-radius)+5px)] border border-border bg-muted/40 p-1">
-        {TABS.map(({ href, label, Icon }) => {
+        {TABS.map(({ href, key, Icon }) => {
           const active = pathname === href;
           return (
             <li key={href}>
@@ -45,7 +48,7 @@ export function AttendanceTabs({ className }: { className?: string }) {
                 )}
               >
                 <Icon className="size-4" aria-hidden />
-                {label}
+                {m[key]}
               </Link>
             </li>
           );

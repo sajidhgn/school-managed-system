@@ -5,7 +5,7 @@ import { Archive, Building2, Pencil, Plus } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Can } from "@/components/auth/can";
@@ -32,12 +32,15 @@ import { ApiError } from "@/lib/api/errors";
 import { schools as schoolsApi } from "@/lib/api/resources";
 import {
   PERMISSIONS,
-  SCHOOL_STATUS_LABELS,
   label,
   type SchoolRead,
   type UsageItem,
 } from "@/lib/api/types";
-import { schoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/schools";
+import { fill } from "@/lib/i18n/format";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
+import { createSchoolCreateSchema, type SchoolCreateValues } from "@/lib/validation/schools";
 
 /**
  * School list and creation.
@@ -71,6 +74,9 @@ export function SchoolsView({
 }) {
   const router = useRouter();
   const { t } = useTranslations();
+  const { schools: m, validation } = useCatalog(adminMessages);
+  const L = useLabels();
+  const schema = useMemo(() => createSchoolCreateSchema(validation), [validation]);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SchoolRead | null>(null);
@@ -82,7 +88,7 @@ export function SchoolsView({
   const exhausted = schoolSeats?.is_exhausted ?? false;
 
   const form = useForm<SchoolCreateValues>({
-    resolver: zodResolver(schoolCreateSchema),
+    resolver: zodResolver(schema),
     defaultValues: { name: "", code: "", city: "", logo_url: "" },
   });
 
@@ -135,7 +141,7 @@ export function SchoolsView({
         logo_url: values.logo_url?.trim() || undefined,
       });
       toast({
-        title: `${result.name} created.`,
+        title: fill(m.created, { name: result.name }),
         description: t.schools.rolesCreated,
       });
       form.reset();
@@ -144,7 +150,7 @@ export function SchoolsView({
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.code === "plan_limit_exceeded") {
-          setFormError(`${error.message} Upgrade your plan to add more campuses.`);
+          setFormError(`${error.message} ${m.upgradeForCampuses}`);
           return;
         }
         if (error.code === "SCHOOL_CODE_TAKEN") {
@@ -154,7 +160,7 @@ export function SchoolsView({
         setFormError(error.message);
         return;
       }
-      setFormError("Please try again.");
+      setFormError(t.common.tryAgain);
     }
   }
 
@@ -174,11 +180,11 @@ export function SchoolsView({
         name: editName.trim(),
         city: editCity.trim() || null,
       });
-      toast({ title: `${editName.trim()} updated.` });
+      toast({ title: fill(m.updated, { name: editName.trim() }) });
       setEditing(null);
       router.refresh();
     } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : "Please try again.");
+      setFormError(error instanceof ApiError ? error.message : t.common.tryAgain);
     } finally {
       setBusy(false);
     }
@@ -189,12 +195,12 @@ export function SchoolsView({
     setBusy(true);
     try {
       await schoolsApi.archive(archiving.id);
-      toast({ title: `${archiving.name} archived.` });
+      toast({ title: fill(m.archived, { name: archiving.name }) });
       router.refresh();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not archive this school",
+        title: m.archiveFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -270,21 +276,21 @@ export function SchoolsView({
                   </p>
                 </div>
                 <Badge variant={school.status === "active" ? "success" : "neutral"}>
-                  {label(SCHOOL_STATUS_LABELS, school.status)}
+                  {label(L.schoolStatus, school.status)}
                 </Badge>
               </div>
               <div className="relative z-10 mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                 <Can permission={PERMISSIONS.schoolUpdate}>
                   <Button variant="outline" size="sm" onClick={() => beginEdit(school)}>
                     <Pencil className="size-4" aria-hidden />
-                    Edit
+                    {t.common.edit}
                   </Button>
                 </Can>
                 {school.status === "active" ? (
                   <Can permission={PERMISSIONS.schoolArchive}>
                     <Button variant="ghost" size="sm" onClick={() => setArchiving(school)}>
                       <Archive className="size-4" aria-hidden />
-                      Archive
+                      {m.archive}
                     </Button>
                   </Can>
                 ) : null}
@@ -320,7 +326,7 @@ export function SchoolsView({
               <Input {...form.register("city")} />
             </Field>
             <div className="grid gap-1.5 text-sm">
-              <span className="font-medium">Logo</span>
+              <span className="font-medium">{m.logo}</span>
               <LogoInput
                 value={form.watch("logo_url") ?? ""}
                 onChange={(value) => form.setValue("logo_url", value)}
@@ -348,12 +354,12 @@ export function SchoolsView({
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit school</DialogTitle>
-            <DialogDescription>The school code remains stable for links and imports.</DialogDescription>
+            <DialogTitle>{m.editTitle}</DialogTitle>
+            <DialogDescription>{m.editDescription}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-1.5">
-              <label htmlFor="edit-school-name" className="text-sm font-medium">Name</label>
+              <label htmlFor="edit-school-name" className="text-sm font-medium">{t.common.name}</label>
               <Input
                 id="edit-school-name"
                 value={editName}
@@ -361,7 +367,7 @@ export function SchoolsView({
               />
             </div>
             <div className="grid gap-1.5">
-              <label htmlFor="edit-school-city" className="text-sm font-medium">City</label>
+              <label htmlFor="edit-school-city" className="text-sm font-medium">{t.onboarding.city}</label>
               <Input
                 id="edit-school-city"
                 value={editCity}
@@ -371,8 +377,8 @@ export function SchoolsView({
             {formError ? <p role="alert" className="text-sm text-destructive">{formError}</p> : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button onClick={saveEdit} loading={busy} disabled={!editName.trim()}>Save changes</Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>{t.common.cancel}</Button>
+            <Button onClick={saveEdit} loading={busy} disabled={!editName.trim()}>{t.settings.saveChanges}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -380,9 +386,9 @@ export function SchoolsView({
       <ConfirmDialog
         open={archiving !== null}
         onOpenChange={(open) => !open && setArchiving(null)}
-        title={`Archive ${archiving?.name}?`}
-        description="The school and its records are retained, but it no longer accepts new work and its plan seat is released."
-        confirmLabel="Archive school"
+        title={fill(m.archiveTitle, { name: archiving?.name ?? "" })}
+        description={m.archiveDescription}
+        confirmLabel={m.archiveSchool}
         variant="destructive"
         loading={busy}
         onConfirm={archiveSchool}

@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 
 import { AuthLink } from "@/components/auth/auth-link";
 import { ContextPicker } from "@/components/auth/context-picker";
+import { ResendVerification } from "@/components/auth/resend-verification";
 import { useTranslations } from "@/components/providers/i18n-provider";
 import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,9 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState<LoginResponse | null>(null);
+  // Set only once the password was right and the API said the address is not yet
+  // verified, so offering a resend here reveals nothing a wrong guess could learn.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -53,6 +57,7 @@ export function LoginForm() {
 
   async function onSubmit(values: LoginValues) {
     setFormError(null);
+    setUnverifiedEmail(null);
     try {
       const result = await authRequest<LoginResponse>("/login", values);
 
@@ -71,6 +76,11 @@ export function LoginForm() {
       // redirect, and no type could catch that anyway.
       router.push(next as Route);
     } catch (error) {
+      if (error instanceof ApiError && error.code === "EMAIL_NOT_VERIFIED") {
+        setUnverifiedEmail(values.email);
+        setFormError(t.auth.verifyBeforeSignIn);
+        return;
+      }
       setFormError(
         error instanceof ApiError ? error.message : t.errors.generic,
       );
@@ -82,38 +92,43 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4" noValidate>
-      <Field label={t.auth.email} htmlFor="email" error={form.formState.errors.email} required>
-        <Input
-          type="email"
-          autoComplete="email"
-          autoFocus
-          {...form.register("email")}
-        />
-      </Field>
+    <div className="grid gap-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4" noValidate>
+        <Field label={t.auth.email} htmlFor="email" error={form.formState.errors.email} required>
+          <Input
+            type="email"
+            autoComplete="email"
+            autoFocus
+            {...form.register("email")}
+          />
+        </Field>
 
-      <Field
-        label={t.auth.password}
-        htmlFor="password"
-        error={form.formState.errors.password}
-        required
-      >
-        <PasswordInput autoComplete="current-password" {...form.register("password")} />
-      </Field>
+        <Field
+          label={t.auth.password}
+          htmlFor="password"
+          error={form.formState.errors.password}
+          required
+        >
+          <PasswordInput autoComplete="current-password" {...form.register("password")} />
+        </Field>
 
-      {formError ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {formError}
+        {formError ? (
+          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {formError}
+          </p>
+        ) : null}
+
+        <Button type="submit" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? t.common.loading : t.common.signIn}
+        </Button>
+
+        <p className="text-center text-sm">
+          <AuthLink href="/forgot-password">{t.auth.forgotPassword}</AuthLink>
         </p>
-      ) : null}
+      </form>
 
-      <Button type="submit" disabled={form.formState.isSubmitting}>
-        {form.formState.isSubmitting ? t.common.loading : t.common.signIn}
-      </Button>
-
-      <p className="text-center text-sm">
-        <AuthLink href="/forgot-password">{t.auth.forgotPassword}</AuthLink>
-      </p>
-    </form>
+      {/* Outside the sign-in form: it is a form of its own, and forms do not nest. */}
+      {unverifiedEmail ? <ResendVerification email={unverifiedEmail} /> : null}
+    </div>
   );
 }

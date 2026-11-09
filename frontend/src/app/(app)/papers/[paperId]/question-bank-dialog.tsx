@@ -19,11 +19,12 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useAddPaperQuestion, useQuestionBank } from "@/hooks/use-papers";
 import type { PaperDetail, QuestionDifficulty, QuestionType } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import {
-  DIFFICULTY_LABELS,
   DIFFICULTY_VARIANT,
-  LANGUAGE_NAMES,
-  QUESTION_TYPE_LABELS,
+  QUESTION_DIFFICULTIES,
   QUESTION_TYPE_ORDER,
   TYPES_FOR_PAPER,
 } from "../paper-meta";
@@ -43,6 +44,8 @@ export function QuestionBankDialog({
   onOpenChange: (open: boolean) => void;
   paper: PaperDetail;
 }) {
+  const t = useCatalog(papersMessages);
+  const m = t.bank;
   const add = useAddPaperQuestion(paper.id);
   const [type, setType] = React.useState<QuestionType | "">("");
   const [difficulty, setDifficulty] = React.useState<QuestionDifficulty | "">("");
@@ -83,42 +86,44 @@ export function QuestionBankDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Add from question bank</DialogTitle>
+          <DialogTitle>{m.title}</DialogTitle>
           <DialogDescription>
-            Questions written for {paper.class_name ?? "this class"} in{" "}
-            {LANGUAGE_NAMES[paper.language]}, including ones removed or replaced on other papers.
+            {fill(m.description, {
+              className: paper.class_name ?? m.thisClass,
+              language: t.languageName[paper.language],
+            })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-2 sm:grid-cols-[1fr_11rem_9rem]">
           <Input
-            aria-label="Search questions"
-            placeholder="Search the question text…"
+            aria-label={m.searchAria}
+            placeholder={m.searchPlaceholder}
             value={q}
             maxLength={200}
             onChange={(event) => setQ(event.target.value)}
           />
           <NativeSelect
-            aria-label="Question type"
+            aria-label={m.typeAria}
             value={type}
             onChange={(event) => setType(event.target.value as QuestionType | "")}
           >
-            <option value="">All types</option>
-            {QUESTION_TYPE_ORDER.map((t) => (
-              <option key={t} value={t}>
-                {QUESTION_TYPE_LABELS[t]}
+            <option value="">{m.allTypes}</option>
+            {QUESTION_TYPE_ORDER.map((option) => (
+              <option key={option} value={option}>
+                {t.questionType[option]}
               </option>
             ))}
           </NativeSelect>
           <NativeSelect
-            aria-label="Difficulty"
+            aria-label={m.difficultyAria}
             value={difficulty}
             onChange={(event) => setDifficulty(event.target.value as QuestionDifficulty | "")}
           >
-            <option value="">Any difficulty</option>
-            {(["easy", "medium", "hard"] as const).map((d) => (
+            <option value="">{m.anyDifficulty}</option>
+            {QUESTION_DIFFICULTIES.map((d) => (
               <option key={d} value={d}>
-                {DIFFICULTY_LABELS[d]}
+                {t.difficulty[d]}
               </option>
             ))}
           </NativeSelect>
@@ -127,15 +132,13 @@ export function QuestionBankDialog({
         <div className="min-h-48">
           {bank.isLoading ? (
             <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading questions…
+              <Loader2 className="size-4 animate-spin" /> {m.loading}
             </p>
           ) : bank.isError ? (
             <ErrorState error={bank.error} onRetry={() => void bank.refetch()} className="py-8" />
           ) : !bank.data?.items.length ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {debounced || type || difficulty
-                ? "No question in the bank matches."
-                : "The bank has no questions for this class in this language yet."}
+              {debounced || type || difficulty ? m.noMatch : m.empty}
             </p>
           ) : (
             <>
@@ -150,22 +153,28 @@ export function QuestionBankDialog({
                     >
                       <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          <Badge variant="outline">{QUESTION_TYPE_LABELS[question.type]}</Badge>
+                          <Badge variant="outline">{t.questionType[question.type]}</Badge>
                           <Badge variant={DIFFICULTY_VARIANT[question.difficulty]}>
-                            {DIFFICULTY_LABELS[question.difficulty]}
+                            {t.difficulty[question.difficulty]}
                           </Badge>
                           <Badge variant="neutral">
-                            {question.marks} mark{question.marks === 1 ? "" : "s"}
+                            {fill(question.marks === 1 ? t.question.marksOne : t.question.marksMany, {
+                              count: question.marks,
+                            })}
                           </Badge>
                           {question.chapter_number !== null && (
                             <span className="text-muted-foreground">
-                              Ch {question.chapter_number}
-                              {question.printed_page !== null ? `, p. ${question.printed_page}` : ""}
+                              {question.printed_page !== null
+                                ? fill(m.chapterPageRef, {
+                                    number: question.chapter_number,
+                                    page: question.printed_page,
+                                  })
+                                : fill(m.chapterRef, { number: question.chapter_number })}
                             </span>
                           )}
                           {!fits.has(question.type) && (
                             <span className="text-warning-foreground dark:text-warning">
-                              not usually on this paper type
+                              {m.notUsual}
                             </span>
                           )}
                         </div>
@@ -173,7 +182,7 @@ export function QuestionBankDialog({
                       </div>
                       {already ? (
                         <Badge variant="success" className="mt-1 shrink-0 gap-1">
-                          <Check className="size-3" /> On paper
+                          <Check className="size-3" /> {m.onPaper}
                         </Badge>
                       ) : (
                         <Button
@@ -184,7 +193,7 @@ export function QuestionBankDialog({
                           disabled={add.isPending && !adding}
                           onClick={() => add.mutate({ question_id: question.id })}
                         >
-                          {!adding && <Plus />} Add
+                          {!adding && <Plus />} {m.add}
                         </Button>
                       )}
                     </li>

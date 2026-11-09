@@ -4,9 +4,14 @@ import { redirect } from "next/navigation";
 import { serverGetOrNull } from "@/lib/api/server";
 import { PERMISSIONS, type SchoolRead } from "@/lib/api/types";
 import { hasPermission, requireSchoolContext } from "@/lib/auth/session";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { getCatalog } from "@/lib/i18n/server";
 import { PaperPrintView } from "./paper-print-view";
 
-export const metadata: Metadata = { title: "Print test paper" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(papersMessages)).meta.print };
+}
+
 export const dynamic = "force-dynamic";
 
 /**

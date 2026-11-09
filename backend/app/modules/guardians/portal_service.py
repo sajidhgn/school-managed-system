@@ -54,6 +54,7 @@ from app.core.context import get_school_id, set_school_id
 from app.core.exceptions import NotFoundError
 from app.modules.attendance.analytics import AttendanceAnalyticsService
 from app.modules.attendance.schemas import StudentAttendanceCalendar
+from app.modules.exams.grading import band_for, paper_percentage
 from app.modules.exams.models import Exam, ExamMark, ExamPaper, ExamStatus
 from app.modules.exams.schemas import ExamClassResults, ExamResultRow
 from app.modules.exams.service import ExamService
@@ -327,8 +328,14 @@ class GuardianPortalService:
     ) -> PortalExamResult:
         papers = []
         obtained, counted = Decimal(0), 0
+        bands = sheet.grading_scale
         for paper in sheet.papers:
             mark = own.get(paper.id)
+            paper_band = (
+                band_for(paper_percentage(mark.marks_obtained, paper.max_marks), bands)
+                if mark is not None and mark.marks_obtained is not None and not mark.is_absent
+                else None
+            )
             papers.append(
                 PortalPaperResult(
                     subject_name=paper.subject_name,
@@ -337,6 +344,7 @@ class GuardianPortalService:
                     marks_obtained=mark.marks_obtained if mark else None,
                     is_absent=mark.is_absent if mark else False,
                     marked=mark is not None,
+                    grade=paper_band.grade if paper_band else None,
                 )
             )
             # The sheet's rule, for a child no longer on the class roster (`row` is
@@ -347,10 +355,13 @@ class GuardianPortalService:
 
         if row is not None:
             obtained, counted, percentage = row.total_obtained, row.total_max, row.percentage
+            grade, remark = row.grade, row.remark
         else:
             percentage = (
                 (obtained * 100 / counted).quantize(Decimal("0.01")) if counted else Decimal(0)
             )
+            overall = band_for(percentage, bands) if counted else None
+            grade, remark = (overall.grade, overall.remark) if overall else (None, None)
         return PortalExamResult(
             exam_id=exam.id,
             exam_name=exam.name,
@@ -363,6 +374,8 @@ class GuardianPortalService:
             percentage=percentage,
             rank=row.rank if row is not None else None,
             class_size=len(sheet.rows) if row is not None else None,
+            grade=grade,
+            remark=remark,
         )
 
     async def _guardian(self, ctx: GuardianContext) -> Guardian:

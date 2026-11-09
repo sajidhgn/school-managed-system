@@ -97,25 +97,81 @@ RNG = random.Random(20260827)
 
 # --- Name pools. Pakistani names, because that is who this product is for. ---
 FIRST_M = [
-    "Ahmed", "Bilal", "Danish", "Faizan", "Hamza", "Imran", "Junaid", "Kamran",
-    "Mustafa", "Noman", "Omar", "Rehan", "Saad", "Talha", "Usman", "Waleed",
-    "Yasir", "Zain", "Abdullah", "Haris",
+    "Ahmed",
+    "Bilal",
+    "Danish",
+    "Faizan",
+    "Hamza",
+    "Imran",
+    "Junaid",
+    "Kamran",
+    "Mustafa",
+    "Noman",
+    "Omar",
+    "Rehan",
+    "Saad",
+    "Talha",
+    "Usman",
+    "Waleed",
+    "Yasir",
+    "Zain",
+    "Abdullah",
+    "Haris",
 ]
 FIRST_F = [
-    "Aisha", "Bushra", "Dua", "Fatima", "Hina", "Iqra", "Javeria", "Kinza",
-    "Laiba", "Mahnoor", "Nimra", "Rabia", "Sana", "Tania", "Urooj", "Warda",
-    "Yusra", "Zainab", "Amna", "Hafsa",
+    "Aisha",
+    "Bushra",
+    "Dua",
+    "Fatima",
+    "Hina",
+    "Iqra",
+    "Javeria",
+    "Kinza",
+    "Laiba",
+    "Mahnoor",
+    "Nimra",
+    "Rabia",
+    "Sana",
+    "Tania",
+    "Urooj",
+    "Warda",
+    "Yusra",
+    "Zainab",
+    "Amna",
+    "Hafsa",
 ]
 LAST = [
-    "Ahmed", "Ali", "Butt", "Chaudhry", "Farooq", "Gilani", "Hussain", "Iqbal",
-    "Javed", "Khan", "Malik", "Nawaz", "Qureshi", "Raza", "Sheikh", "Tariq",
-    "Usmani", "Zafar", "Rashid", "Siddiqui",
+    "Ahmed",
+    "Ali",
+    "Butt",
+    "Chaudhry",
+    "Farooq",
+    "Gilani",
+    "Hussain",
+    "Iqbal",
+    "Javed",
+    "Khan",
+    "Malik",
+    "Nawaz",
+    "Qureshi",
+    "Raza",
+    "Sheikh",
+    "Tariq",
+    "Usmani",
+    "Zafar",
+    "Rashid",
+    "Siddiqui",
 ]
 
 CITIES = [
-    ("Lahore", "LHR"), ("Karachi", "KHI"), ("Islamabad", "ISB"),
-    ("Faisalabad", "FSD"), ("Multan", "MUX"), ("Peshawar", "PEW"),
-    ("Sialkot", "SKT"), ("Gujranwala", "GUJ"),
+    ("Lahore", "LHR"),
+    ("Karachi", "KHI"),
+    ("Islamabad", "ISB"),
+    ("Faisalabad", "FSD"),
+    ("Multan", "MUX"),
+    ("Peshawar", "PEW"),
+    ("Sialkot", "SKT"),
+    ("Gujranwala", "GUJ"),
 ]
 
 FEE_HEADS = [
@@ -128,14 +184,31 @@ FEE_HEADS = [
 # What the campus SELLS, as opposed to what it charges. Priced per unit; the quantity
 # lands on the structure line, which is the whole reason these are not fee heads.
 STATIONERY_ITEMS = [
-    ("COPY-100", "Copy (Register, 100 pages)", StationeryCategory.NOTEBOOK,
-     StationeryUnit.PIECE, Decimal(60), 1),
-    ("PENCIL-HB", "Pencil (HB)", StationeryCategory.STATIONERY,
-     StationeryUnit.DOZEN, Decimal(240), 2),
-    ("BOOK-SET", "Course book set", StationeryCategory.BOOK,
-     StationeryUnit.SET, Decimal(4200), 3),
-    ("UNIFORM-SHIRT", "Uniform shirt", StationeryCategory.UNIFORM,
-     StationeryUnit.PIECE, Decimal(950), 4),
+    (
+        "COPY-100",
+        "Copy (Register, 100 pages)",
+        StationeryCategory.NOTEBOOK,
+        StationeryUnit.PIECE,
+        Decimal(60),
+        1,
+    ),
+    (
+        "PENCIL-HB",
+        "Pencil (HB)",
+        StationeryCategory.STATIONERY,
+        StationeryUnit.DOZEN,
+        Decimal(240),
+        2,
+    ),
+    ("BOOK-SET", "Course book set", StationeryCategory.BOOK, StationeryUnit.SET, Decimal(4200), 3),
+    (
+        "UNIFORM-SHIRT",
+        "Uniform shirt",
+        StationeryCategory.UNIFORM,
+        StationeryUnit.PIECE,
+        Decimal(950),
+        4,
+    ),
 ]
 
 # How many of each every student in a seeded class is billed. Only the copies and
@@ -251,9 +324,9 @@ async def seed_subjects(session, org: Organization, school: School) -> dict[str,
     counts = {"subjects": 0, "class subjects": 0}
 
     subjects = list(
-        (
-            await session.execute(select(Subject).where(Subject.school_id == school.id))
-        ).scalars().all()
+        (await session.execute(select(Subject).where(Subject.school_id == school.id)))
+        .scalars()
+        .all()
     )
     subject_codes = {s.code for s in subjects}
     subject_names = {s.name for s in subjects}
@@ -294,7 +367,9 @@ async def seed_subjects(session, org: Organization, school: School) -> dict[str,
                         Membership.deleted_at.is_(None),
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
 
     all_classes = list(
@@ -305,17 +380,19 @@ async def seed_subjects(session, org: Organization, school: School) -> dict[str,
                     SchoolClass.deleted_at.is_(None),
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     # Soft-deleted pairs included on purpose: the (class, subject) unique
     # constraint is not partial, so a deleted row still blocks a re-insert.
     assigned = {
         (row.class_id, row.subject_id)
         for row in (
-            await session.execute(
-                select(ClassSubject).where(ClassSubject.school_id == school.id)
-            )
-        ).scalars().all()
+            await session.execute(select(ClassSubject).where(ClassSubject.school_id == school.id))
+        )
+        .scalars()
+        .all()
     }
     for cls in all_classes:
         for code in curriculum_for(cls.level):
@@ -330,9 +407,7 @@ async def seed_subjects(session, org: Organization, school: School) -> dict[str,
                     class_id=cls.id,
                     subject_id=subject.id,
                     teacher_id=(
-                        RNG.choice(teacher_ids)
-                        if teacher_ids and RNG.random() < 0.7
-                        else None
+                        RNG.choice(teacher_ids) if teacher_ids and RNG.random() < 0.7 else None
                     ),
                     weekly_periods=SUBJECT_CATALOGUE[code][2],
                 )
@@ -353,15 +428,24 @@ async def populate_school(
     staff_per_school: int,
 ) -> dict[str, int]:
     """Top one campus up. Anything already present is left exactly as it is."""
-    counts = {"classes": 0, "sections": 0, "students": 0, "staff": 0,
-              "invitations": 0, "roles": 0, "vouchers": 0, "payments": 0,
-              "subjects": 0, "class subjects": 0}
+    counts = {
+        "classes": 0,
+        "sections": 0,
+        "students": 0,
+        "staff": 0,
+        "invitations": 0,
+        "roles": 0,
+        "vouchers": 0,
+        "payments": 0,
+        "subjects": 0,
+        "class subjects": 0,
+    }
 
     roles = {
         r.code: r
-        for r in (
-            await session.execute(select(Role).where(Role.school_id == school.id))
-        ).scalars().all()
+        for r in (await session.execute(select(Role).where(Role.school_id == school.id)))
+        .scalars()
+        .all()
     }
 
     # --- A custom role, because every real school invents one ----------------
@@ -384,9 +468,18 @@ async def populate_school(
             for code in sorted(
                 SCHOOL_SCOPED_CODES
                 & {
-                    "member:read", "school:read", "student:read", "student:update",
-                    "class:read", "teacher:read", "attendance:read", "attendance:mark",
-                    "grade:read", "grade:manage", "timetable:read", "audit:read",
+                    "member:read",
+                    "school:read",
+                    "student:read",
+                    "student:update",
+                    "class:read",
+                    "teacher:read",
+                    "attendance:read",
+                    "attendance:mark",
+                    "grade:read",
+                    "grade:manage",
+                    "timetable:read",
+                    "audit:read",
                 }
             )
         )
@@ -398,8 +491,10 @@ async def populate_school(
     # blocks that slot. Skipping it is the point: your "3rd" at level 1 stays, and
     # this fills the levels around it.
     existing_classes = (
-        await session.execute(select(SchoolClass).where(SchoolClass.school_id == school.id))
-    ).scalars().all()
+        (await session.execute(select(SchoolClass).where(SchoolClass.school_id == school.id)))
+        .scalars()
+        .all()
+    )
     taken_levels = {c.level for c in existing_classes}
     taken_names = {c.name for c in existing_classes}
 
@@ -468,8 +563,7 @@ async def populate_school(
                 guardian_phone=f"+92-3{RNG.randint(10, 49)}-{RNG.randint(1000000, 9999999)}",
                 guardian_email=f"{first.lower()}.{last.lower()}{admission_seq}@example.pk",
                 address=(
-                    f"House {RNG.randint(1, 900)}, "
-                    f"Block {RNG.choice('ABCDEFG')}, {school.city}"
+                    f"House {RNG.randint(1, 900)}, Block {RNG.choice('ABCDEFG')}, {school.city}"
                 ),
                 status=status,
                 enrolled_on=date(2026, 4, 1) + timedelta(days=RNG.randint(0, 60)),
@@ -562,9 +656,9 @@ async def populate_school(
 
     # --- Fees ----------------------------------------------------------------
     heads = list(
-        (
-            await session.execute(select(FeeHead).where(FeeHead.school_id == school.id))
-        ).scalars().all()
+        (await session.execute(select(FeeHead).where(FeeHead.school_id == school.id)))
+        .scalars()
+        .all()
     )
     have = {h.code for h in heads}
     for code, name, recurrence, order in FEE_HEADS:
@@ -587,11 +681,9 @@ async def populate_school(
     # The stationery catalog, seeded the same way and for the same reason: the fee
     # screens are unreadable without something in them.
     articles = list(
-        (
-            await session.execute(
-                select(StationeryItem).where(StationeryItem.school_id == school.id)
-            )
-        ).scalars().all()
+        (await session.execute(select(StationeryItem).where(StationeryItem.school_id == school.id)))
+        .scalars()
+        .all()
     )
     stocked = {a.code for a in articles}
     for code, name, category, unit, price, order in STATIONERY_ITEMS:
@@ -812,9 +904,7 @@ async def run(args: argparse.Namespace) -> int:
             ).scalar_one_or_none()
             if org is None:
                 print(f"No organization with slug {args.org_slug!r}.")
-                slugs = (
-                    (await session.execute(select(Organization.slug))).scalars().all()
-                )
+                slugs = (await session.execute(select(Organization.slug))).scalars().all()
                 print(f"Known slugs: {', '.join(sorted(slugs)) or '(none)'}")
                 return 1
             org_id, org_name = org.id, org.name

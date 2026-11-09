@@ -4,7 +4,7 @@ import * as React from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CreditCard, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
+import { CreditCard, Inbox, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-states";
@@ -35,21 +35,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { UNASSIGNED_DESCRIPTION, UNASSIGNED_TITLE, useAssignmentBound } from "@/hooks/use-assignment-bound";
+import { useAssignmentBound } from "@/hooks/use-assignment-bound";
 import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExams } from "@/hooks/use-exams";
 import { useDeleteStudent, useStudents } from "@/hooks/use-students";
-import {
-  STUDENT_STATUS_LABELS,
-  type ExamResultFilter,
-  type FeeStandingFilter,
-  type StudentListRow,
-  type StudentRead,
-  type StudentStatus,
+import type {
+  ExamResultFilter,
+  FeeStandingFilter,
+  StudentListRow,
+  StudentRead,
+  StudentStatus,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { studentsMessages } from "@/lib/i18n/modules/students";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+import { useLabels } from "@/lib/i18n/use-labels";
 import { cn, formatDate } from "@/lib/utils";
 import { CardDesignDialog } from "./card-design-dialog";
+import { fillNodes } from "@/lib/i18n/format";
 import type { CardSchool } from "./student-card";
 import { StudentFormDialog } from "./student-form-dialog";
 import { StudentIdCardDialog } from "./student-id-card-dialog";
@@ -57,37 +61,20 @@ import { StudentResultDialog } from "./student-result-dialog";
 
 const ALL = "__all__";
 
-/**
- * Labels for the fee filter.
+/*
+ * The fee-filter, dues-column and exam-result labels live in the catalog
+ * (`list.feeStanding`, `list.duesColumn`, `list.examResult`).
  *
- * "No dues" rather than "Paid": the set includes children who have never been billed
- * at all, and calling that "paid" would be actively wrong on a screen an accountant
- * reads. The question the filter answers is whether the family owes the school
- * anything -- see `FeeStandingFilter` on the backend.
- */
-const FEE_STANDING_LABELS: Record<string, string> = {
-  pending: "Fees pending",
-  overdue: "Fees overdue",
-  clear: "No dues",
-};
-
-/** Column heading, so the number is never ambiguous about which money it is. */
-const DUES_COLUMN_LABELS: Record<string, string> = {
-  pending: "Pending dues",
-  overdue: "Overdue dues",
-};
-
-/**
- * Labels for the exam-result filter.
+ * Fee filter: "No dues" rather than "Paid": the set includes children who have never
+ * been billed at all, and calling that "paid" would be actively wrong on a screen an
+ * accountant reads. The question the filter answers is whether the family owes the
+ * school anything -- see `FeeStandingFilter` on the backend.
  *
- * All three imply "marked in the chosen exam": an unmarked student is missing
- * data, not a pass — see `ExamResultFilter` on the backend.
+ * Dues column: headed by which money it is, so the number is never ambiguous.
+ *
+ * Exam result: all three imply "marked in the chosen exam": an unmarked student is
+ * missing data, not a pass — see `ExamResultFilter` on the backend.
  */
-const EXAM_RESULT_LABELS: Record<string, string> = {
-  passed: "Passed",
-  failed: "Failed",
-  absent: "Absent",
-};
 
 /**
  * A billing period as a human reads it.
@@ -134,6 +121,8 @@ export function StudentsView({
    */
   school: CardSchool | null;
 }) {
+  const { list: m, remove: rm } = useCatalog(studentsMessages);
+  const L = useLabels();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -237,7 +226,7 @@ export function StudentsView({
   // the same people the server would accept the filter from.
   const examOptions = useExams({ size: 50 }, { enabled: canFilterByResults });
   const activeExamName =
-    examOptions.data?.items.find((exam) => exam.id === examId)?.name ?? "Result";
+    examOptions.data?.items.find((exam) => exam.id === examId)?.name ?? m.colResult;
 
   // Remembered for the "All students" link on a student's page: Back already
   // restores the filtered list, but people click the breadcrumb just as often and
@@ -322,22 +311,23 @@ export function StudentsView({
   return (
     <>
       <PageHeader
-        title="Students"
-        description="Search, filter, and manage your school's student directory."
+        title={m.title}
+        description={m.description}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <AdmissionsButton />
             {/* The card DESIGNER lives here, once per school — a row's "View
                 card" only renders the saved template. See CardDesignDialog. */}
             {canDesignCard && school ? (
               <Button variant="outline" onClick={() => setDesigningCard(true)}>
                 <CreditCard />
-                Card design
+                {m.cardDesign}
               </Button>
             ) : null}
             {canManage ? (
               <Button onClick={openCreate}>
                 <Plus />
-                Enroll student
+                {m.enroll}
               </Button>
             ) : null}
           </div>
@@ -351,9 +341,9 @@ export function StudentsView({
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name or admission number…"
+              placeholder={m.searchPlaceholder}
               className="ps-9"
-              aria-label="Search students"
+              aria-label={m.searchLabel}
             />
           </div>
 
@@ -364,12 +354,12 @@ export function StudentsView({
                 writeParams({ status: value === ALL ? null : value, page: null })
               }
             >
-              <SelectTrigger className="w-40" aria-label="Filter by status">
-                <SelectValue placeholder="All statuses" />
+              <SelectTrigger className="w-40" aria-label={m.filterStatus}>
+                <SelectValue placeholder={m.allStatuses} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>All statuses</SelectItem>
-                {Object.entries(STUDENT_STATUS_LABELS).map(([value, label]) => (
+                <SelectItem value={ALL}>{m.allStatuses}</SelectItem>
+                {Object.entries(L.studentStatus).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>
@@ -383,11 +373,11 @@ export function StudentsView({
                 writeParams({ section: value === ALL ? null : value, page: null })
               }
             >
-              <SelectTrigger className="w-48" aria-label="Filter by section">
-                <SelectValue placeholder="All sections" />
+              <SelectTrigger className="w-48" aria-label={m.filterSection}>
+                <SelectValue placeholder={m.allSections} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>All sections</SelectItem>
+                <SelectItem value={ALL}>{m.allSections}</SelectItem>
                 {(classes ?? []).flatMap((cls) =>
                   cls.sections.map((section) => (
                     <SelectItem key={section.id} value={section.id}>
@@ -410,12 +400,12 @@ export function StudentsView({
                   writeParams({ fees: value === ALL ? null : value, page: null })
                 }
               >
-                <SelectTrigger className="w-40" aria-label="Filter by fee standing">
-                  <SelectValue placeholder="All fees" />
+                <SelectTrigger className="w-40" aria-label={m.filterFees}>
+                  <SelectValue placeholder={m.allFees} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL}>All fees</SelectItem>
-                  {Object.entries(FEE_STANDING_LABELS).map(([value, label]) => (
+                  <SelectItem value={ALL}>{m.allFees}</SelectItem>
+                  {Object.entries(m.feeStanding).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>
@@ -441,11 +431,11 @@ export function StudentsView({
                     })
                   }
                 >
-                  <SelectTrigger className="w-48" aria-label="Filter by exam">
-                    <SelectValue placeholder="Any exam" />
+                  <SelectTrigger className="w-48" aria-label={m.filterExam}>
+                    <SelectValue placeholder={m.anyExam} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL}>Any exam</SelectItem>
+                    <SelectItem value={ALL}>{m.anyExam}</SelectItem>
                     {(examOptions.data?.items ?? []).map((exam) => (
                       <SelectItem key={exam.id} value={exam.id}>
                         {exam.name}
@@ -461,12 +451,12 @@ export function StudentsView({
                       writeParams({ result: value === ALL ? null : value, page: null })
                     }
                   >
-                    <SelectTrigger className="w-36" aria-label="Filter by result">
-                      <SelectValue placeholder="Any result" />
+                    <SelectTrigger className="w-36" aria-label={m.filterResult}>
+                      <SelectValue placeholder={m.anyResult} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={ALL}>Any result</SelectItem>
-                      {Object.entries(EXAM_RESULT_LABELS).map(([value, label]) => (
+                      <SelectItem value={ALL}>{m.anyResult}</SelectItem>
+                      {Object.entries(m.examResult).map(([value, label]) => (
                         <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
@@ -480,7 +470,7 @@ export function StudentsView({
             {hasFilters ? (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X />
-                Clear
+                {m.clear}
               </Button>
             ) : null}
           </div>
@@ -493,25 +483,25 @@ export function StudentsView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Admission no.</TableHead>
-                  <TableHead>Class</TableHead>
+                  <TableHead>{m.colName}</TableHead>
+                  <TableHead>{m.colAdmissionNo}</TableHead>
+                  <TableHead>{m.colClass}</TableHead>
                   {showDues ? (
-                    <TableHead className="text-right">
-                      {DUES_COLUMN_LABELS[fees] ?? "Dues"}
+                    <TableHead className="text-end">
+                      {(m.duesColumn as Record<string, string>)[fees] ?? m.colDues}
                     </TableHead>
                   ) : null}
                   {showResult ? (
                     // The exam's own name, so a screenshot of the table still says
                     // WHICH result the column shows.
-                    <TableHead className="text-right">{activeExamName}</TableHead>
+                    <TableHead className="text-end">{activeExamName}</TableHead>
                   ) : null}
-                  <TableHead>Status</TableHead>
-                  <TableHead>Guardian</TableHead>
-                  <TableHead>Enrolled</TableHead>
+                  <TableHead>{m.colStatus}</TableHead>
+                  <TableHead>{m.colGuardian}</TableHead>
+                  <TableHead>{m.colEnrolled}</TableHead>
                   {canManage ? (
                     <TableHead className="w-12">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">{m.colActions}</span>
                     </TableHead>
                   ) : null}
                 </TableRow>
@@ -526,28 +516,20 @@ export function StudentsView({
                       <EmptyState
                         icon={Users}
                         title={
-                          hasFilters
-                            ? "No matching students"
-                            : bound
-                              ? UNASSIGNED_TITLE
-                              : "No students yet"
+                          hasFilters ? m.noMatches : bound ? m.unassignedTitle : m.noStudents
                         }
                         description={
-                          hasFilters
-                            ? "Try a different search term or clear the filters."
-                            : bound
-                              ? UNASSIGNED_DESCRIPTION
-                              : "Enroll your first student to start building the directory."
+                          hasFilters ? m.noMatchesHint : bound ? m.unassignedHint : m.emptyHint
                         }
                         action={
                           hasFilters ? (
                             <Button variant="outline" size="sm" onClick={clearFilters}>
-                              Clear filters
+                              {m.clearFilters}
                             </Button>
                           ) : canManage ? (
                             <Button size="sm" onClick={openCreate}>
                               <Plus />
-                              Enroll student
+                              {m.enroll}
                             </Button>
                           ) : null
                         }
@@ -585,7 +567,7 @@ export function StudentsView({
                             {student.section_name ? ` · ${student.section_name}` : ""}
                           </>
                         ) : (
-                          <span aria-label="Not assigned to a class">—</span>
+                          <span aria-label={m.notAssigned}>—</span>
                         )}
                       </TableCell>
                       {/*
@@ -598,7 +580,7 @@ export function StudentsView({
                         is not a date.
                       */}
                       {showDues ? (
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           {student.dues ? (
                             (() => {
                               const owed = Number(student.dues.amount);
@@ -631,7 +613,7 @@ export function StudentsView({
                                   */}
                                   {late > 0 && late < owed ? (
                                     <span className="text-xs font-medium tabular-nums text-destructive">
-                                      {money.format(late)} overdue
+                                      {fill(m.overdueAmount, { amount: money.format(late) })}
                                     </span>
                                   ) : null}
                                 </div>
@@ -650,7 +632,7 @@ export function StudentsView({
                         a verdict.
                       */}
                       {showResult ? (
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           {student.exam_result ? (
                             (() => {
                               const summary = (
@@ -670,13 +652,19 @@ export function StudentsView({
                                   </span>
                                   {student.exam_result.failed_papers > 0 ? (
                                     <span className="text-xs font-medium text-destructive">
-                                      {student.exam_result.failed_papers} paper
-                                      {student.exam_result.failed_papers === 1 ? "" : "s"} failed
+                                      {fill(
+                                        student.exam_result.failed_papers === 1
+                                          ? m.papersFailedOne
+                                          : m.papersFailedMany,
+                                        { count: student.exam_result.failed_papers },
+                                      )}
                                     </span>
                                   ) : null}
                                   {student.exam_result.absent_papers > 0 ? (
                                     <span className="text-xs text-muted-foreground">
-                                      {student.exam_result.absent_papers} absent
+                                      {fill(m.papersAbsent, {
+                                        count: student.exam_result.absent_papers,
+                                      })}
                                     </span>
                                   ) : null}
                                 </>
@@ -694,8 +682,8 @@ export function StudentsView({
                                   onClick={() =>
                                     setResultTarget({ student, classId: resultClassId })
                                   }
-                                  aria-label={`Subject-wise result for ${student.full_name}`}
-                                  title="View subject-wise marks"
+                                  aria-label={fill(m.resultFor, { name: student.full_name })}
+                                  title={m.viewSubjectMarks}
                                   className="-my-1 flex w-full cursor-pointer flex-col items-end rounded-md px-1 py-1 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
                                   {summary}
@@ -725,23 +713,23 @@ export function StudentsView({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label={`Actions for ${student.full_name}`}
+                                aria-label={fill(m.actionsFor, { name: student.full_name })}
                               >
                                 <MoreHorizontal />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem asChild>
-                                <Link href={`/students/${student.id}`}>View profile</Link>
+                                <Link href={`/students/${student.id}`}>{m.viewProfile}</Link>
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setCardStudent(student)}>
-                                View card
+                                {m.viewCard}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openEdit(student)}>
-                                Edit
+                                {m.edit}
                               </DropdownMenuItem>
                               <DropdownMenuItem destructive onClick={() => setDeleting(student)}>
-                                Remove
+                                {m.remove}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -778,14 +766,11 @@ export function StudentsView({
           <ConfirmDialog
             open={Boolean(deleting)}
             onOpenChange={(open) => !open && setDeleting(null)}
-            title="Remove student?"
-            description={
-              <>
-                <span className="font-medium text-foreground">{deleting?.full_name}</span> will be
-                removed from the directory. This cannot be undone.
-              </>
-            }
-            confirmLabel="Remove student"
+            title={rm.title}
+            description={fillNodes(rm.description, {
+              name: <span className="font-medium text-foreground">{deleting?.full_name}</span>,
+            })}
+            confirmLabel={rm.confirm}
             loading={deleteStudent.isPending}
             onConfirm={confirmDelete}
           />
@@ -815,5 +800,31 @@ export function StudentsView({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * The way into the admissions queue, with how many are waiting.
+ *
+ * One request for the count (`size: 1` — only `meta.total` is read), shared through
+ * the query cache with the queue page's own first fetch. The badge disappears at
+ * zero rather than reading "0", which would invite a click to find nothing.
+ */
+function AdmissionsButton() {
+  const m = useCatalog(studentsMessages).list;
+  const pending = useStudents({ status: "pending", size: 1 });
+  const waiting = pending.data?.meta.total ?? 0;
+  return (
+    <Button variant="outline" asChild>
+      <Link href="/students/admissions">
+        <Inbox />
+        {m.admissions}
+        {waiting > 0 ? (
+          <span className="ms-1 rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
+            {waiting}
+          </span>
+        ) : null}
+      </Link>
+    </Button>
   );
 }

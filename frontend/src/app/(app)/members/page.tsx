@@ -14,8 +14,12 @@ import {
   type UsageResponse,
 } from "@/lib/api/types";
 import { hasPermission, requireUser } from "@/lib/auth/session";
+import { adminMessages } from "@/lib/i18n/modules/admin";
+import { getCatalog, getTranslations } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Members" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations()).nav.members };
+}
 
 /**
  * Staff across every branch the caller can see, with invitations folded in as a
@@ -48,9 +52,10 @@ export default async function MembersPage({
     ipage?: string;
   }>;
 }) {
-  const [user, { invite, page, school, q, role, istatus, ipage }] = await Promise.all([
+  const [user, { invite, page, school, q, role, istatus, ipage }, admin] = await Promise.all([
     requireUser(),
     searchParams,
+    getCatalog(adminMessages),
   ]);
 
   // Hidden from the nav for anyone without the permission, but the URL still
@@ -77,7 +82,7 @@ export default async function MembersPage({
           name:
             schools.find((s) => s.id === user.school_id)?.name ??
             user.school_name ??
-            "Current school",
+            admin.members.currentSchool,
         },
       ];
   const branchNames: Record<string, string> = Object.fromEntries([

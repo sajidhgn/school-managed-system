@@ -4,8 +4,12 @@ import { redirect } from "next/navigation";
 import { FeesView } from "./fees-view";
 import { PERMISSIONS } from "@/lib/api/types";
 import { hasPermission, listSchools, requireSchoolContext } from "@/lib/auth/session";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { getCatalog } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Fees" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getCatalog(feesMessages)).register.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 /**

@@ -27,12 +27,14 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
 
 /**
  * A message as WhatsApp shows it. Built from React text nodes — never HTML — so a
- * diary the agent read off a photo cannot inject markup.
+ * diary the agent read off a photo cannot inject markup. `dir="auto"` lets an English
+ * message read left-to-right on the Urdu screen, and an Urdu one right-to-left on the
+ * English screen, as WhatsApp itself does.
  */
 export function WhatsAppText({ text, className }: { text: string; className?: string }) {
   const lines = text.split("\n");
   return (
-    <div className={cn("whitespace-pre-wrap break-words text-sm leading-relaxed", className)}>
+    <div dir="auto" className={cn("whitespace-pre-wrap break-words text-sm leading-relaxed", className)}>
       {lines.map((line, index) => (
         <React.Fragment key={index}>
           {renderInline(line, String(index))}
@@ -47,7 +49,7 @@ export function WhatsAppText({ text, className }: { text: string; className?: st
 export function WhatsAppBubble({ text, className }: { text: string; className?: string }) {
   return (
     <div className={cn("rounded-lg bg-[#efeae2] p-3 dark:bg-[#0b141a]", className)}>
-      <div className="ms-auto w-fit max-w-full rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-[#111b21] shadow-sm dark:bg-[#005c4b] dark:text-[#e9edef]">
+      <div className="ms-auto w-fit max-w-full rounded-lg rounded-se-none bg-[#d9fdd3] px-3 py-2 text-[#111b21] shadow-sm dark:bg-[#005c4b] dark:text-[#e9edef]">
         <WhatsAppText text={text} />
       </div>
     </div>

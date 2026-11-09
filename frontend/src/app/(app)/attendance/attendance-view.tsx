@@ -22,7 +22,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAttendanceSession, useDailyOverview, useOpenRegister } from "@/hooks/use-attendance";
-import type { SectionDayStatus } from "@/lib/api/types";
+import type { RegisterState, SectionDayStatus } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { RegisterDialog } from "./register-dialog";
 
 /** Today in the browser's timezone, as the `YYYY-MM-DD` the API expects. */
@@ -44,17 +47,17 @@ type BadgeVariant = "neutral" | "success" | "warning" | "destructive" | "outline
  * something someone has to go and chase.
  */
 function registerStatus(row: SectionDayStatus): {
-  label: string;
+  state: RegisterState;
   variant: BadgeVariant;
   Icon: typeof CircleCheck;
 } {
   if (row.session_id === null) {
-    return { label: "Not started", variant: "warning", Icon: CircleDashed };
+    return { state: "not_started", variant: "warning", Icon: CircleDashed };
   }
   if (row.status === "submitted") {
-    return { label: "Submitted", variant: "success", Icon: CircleCheck };
+    return { state: "submitted", variant: "success", Icon: CircleCheck };
   }
-  return { label: "In progress", variant: "neutral", Icon: CircleAlert };
+  return { state: "draft", variant: "neutral", Icon: CircleAlert };
 }
 
 function BoardSkeleton() {
@@ -79,6 +82,7 @@ export function AttendanceView({
   canMark: boolean;
   canAmend: boolean;
 }) {
+  const { board: m, registerState } = useCatalog(attendanceMessages);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [date, setDate] = React.useState(todayIso);
@@ -138,13 +142,13 @@ export function AttendanceView({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Attendance"
-        description="Who was in the room, section by section."
+        title={m.title}
+        description={m.description}
         actions={
           <div className="flex items-end gap-2">
             <div className="space-y-1">
               <Label htmlFor="attendance-date" className="text-xs">
-                Date
+                {m.date}
               </Label>
               <Input
                 id="attendance-date"
@@ -160,7 +164,7 @@ export function AttendanceView({
             </div>
             {!isToday && (
               <Button variant="outline" onClick={() => setDate(todayIso())}>
-                Today
+                {m.today}
               </Button>
             )}
           </div>
@@ -173,28 +177,24 @@ export function AttendanceView({
       {lockedForMe && (
         <p className="flex items-start gap-2 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
           <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span className="text-pretty">
-            Attendance for {date} is locked. Registers can be taken or changed until the
-            end of the following day; after that only someone with the &ldquo;amend
-            attendance&rdquo; permission can correct them.
-          </span>
+          <span className="text-pretty">{fill(m.locked, { date })}</span>
         </p>
       )}
 
       {overview && (
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryTile
-            label="Sections"
+            label={m.sections}
             value={overview.sections_total}
             Icon={CalendarCheck}
           />
           <SummaryTile
-            label="Submitted"
+            label={m.submitted}
             value={overview.sections_submitted}
             Icon={CircleCheck}
           />
           <SummaryTile
-            label="Not started"
+            label={m.notStarted}
             value={overview.sections_not_started}
             Icon={CircleDashed}
             // Only an alarm when there is something to act on. A zero here is the
@@ -208,26 +208,23 @@ export function AttendanceView({
       {query.isError && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
 
       {overview && overview.sections.length === 0 && (
-        <EmptyState
-          title="No sections yet"
-          description="Create a class and at least one section before taking attendance."
-        />
+        <EmptyState title={m.noSections} description={m.noSectionsHint} />
       )}
 
       {overview && overview.sections.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Registers for {date}</CardTitle>
+            <CardTitle>{fill(m.registersFor, { date })}</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Section</TableHead>
-                  <TableHead>Class teacher</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Present</TableHead>
-                  <TableHead className="text-right">Absent</TableHead>
+                  <TableHead>{m.colSection}</TableHead>
+                  <TableHead>{m.colTeacher}</TableHead>
+                  <TableHead>{m.colStatus}</TableHead>
+                  <TableHead className="text-end">{m.colPresent}</TableHead>
+                  <TableHead className="text-end">{m.colAbsent}</TableHead>
                   <TableHead className="w-32" />
                 </TableRow>
               </TableHeader>
@@ -246,24 +243,24 @@ export function AttendanceView({
                       */}
                       <TableCell className="text-muted-foreground">
                         {row.class_teacher_name ?? (
-                          <span aria-label="No class teacher assigned">&mdash;</span>
+                          <span aria-label={m.noTeacher}>&mdash;</span>
                         )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={status.variant}>
-                          <status.Icon className="mr-1 h-3 w-3" aria-hidden />
-                          {status.label}
+                          <status.Icon className="me-1 h-3 w-3" aria-hidden />
+                          {registerState[status.state]}
                         </Badge>
                       </TableCell>
                       {/* An em dash, not a 0. Nobody marked this register, so
                           "0 present" would be a claim the data does not support. */}
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="text-end tabular-nums">
                         {row.session_id ? row.present_count : "—"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="text-end tabular-nums">
                         {row.session_id ? row.absent_count : "—"}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-end">
                         <Button
                           size="sm"
                           variant={row.session_id ? "outline" : "default"}
@@ -271,10 +268,10 @@ export function AttendanceView({
                           onClick={() => void handleOpen(row)}
                         >
                           {row.session_id === null
-                            ? "Take"
+                            ? m.take
                             : row.status === "submitted" || lockedForMe
-                              ? "View"
-                              : "Continue"}
+                              ? m.view
+                              : m.continue}
                         </Button>
                       </TableCell>
                     </TableRow>

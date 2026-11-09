@@ -9,6 +9,8 @@ import type {
   QuestionDifficulty,
   QuestionType,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import type { PapersStrings } from "@/lib/i18n/modules/papers";
 
 /**
  * The paper rules the backend enforces (backend/app/modules/papers/schemas.py),
@@ -64,47 +66,14 @@ export const SECTION_PRESETS: Record<PaperType, PaperSectionInput[]> = {
   ],
 };
 
-export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  mcq: "Multiple choice",
-  true_false: "True / false",
-  fill_blank: "Fill in the blank",
-  short: "Short question",
-  long: "Long question",
-};
+/*
+ * The display labels for these enums -- question types, section headings, paper
+ * types, difficulties, statuses -- are in the viewer's language, in
+ * `lib/i18n/modules/papers.ts`; read them with `useCatalog(papersMessages)`.
+ */
 
-/** Section headings on screen; the printed paper has its own, in its language. */
-export const SECTION_LABELS: Record<QuestionType, string> = {
-  mcq: "Multiple choice",
-  true_false: "True or false",
-  fill_blank: "Fill in the blanks",
-  short: "Short questions",
-  long: "Long questions",
-};
-
-export const PAPER_TYPE_LABELS: Record<PaperType, string> = {
-  objective: "Objective",
-  subjective: "Subjective",
-  mix: "Mix",
-};
-
-export const PAPER_TYPE_HINTS: Record<PaperType, string> = {
-  objective: "MCQs, true/false and fill in the blanks",
-  subjective: "Short and long questions",
-  mix: "At least one objective and one subjective section",
-};
-
-export const PAPER_DIFFICULTY_LABELS: Record<PaperDifficulty, string> = {
-  easy: "Easy",
-  medium: "Medium",
-  hard: "Hard",
-  mixed: "Mixed",
-};
-
-export const DIFFICULTY_LABELS: Record<QuestionDifficulty, string> = {
-  easy: "Easy",
-  medium: "Medium",
-  hard: "Hard",
-};
+export const PAPER_DIFFICULTIES: readonly PaperDifficulty[] = ["easy", "medium", "hard", "mixed"];
+export const QUESTION_DIFFICULTIES: readonly QuestionDifficulty[] = ["easy", "medium", "hard"];
 
 export const DIFFICULTY_VARIANT: Record<QuestionDifficulty, BadgeProps["variant"]> = {
   easy: "success",
@@ -112,27 +81,26 @@ export const DIFFICULTY_VARIANT: Record<QuestionDifficulty, BadgeProps["variant"
   hard: "warning",
 };
 
+/**
+ * Each language named in itself -- the paper language picker and badges. Not
+ * translated: like the app's own language switcher, a reader picks the language
+ * they can read by its own name. (`languageName` in the catalog names them in the
+ * viewer's language, for sentences.)
+ */
 export const LANGUAGE_LABELS: Record<PaperLanguage, string> = {
   en: "English",
   ur: "اردو",
   ar: "العربية",
 };
 
-/** The languages named in English, for sentences the screens say about a paper. */
-export const LANGUAGE_NAMES: Record<PaperLanguage, string> = {
-  en: "English",
-  ur: "Urdu",
-  ar: "Arabic",
+/** Badge colour per status; the label is `status` in the papers catalog. */
+export const PAPER_STATUS_VARIANT: Record<PaperStatus, BadgeProps["variant"]> = {
+  queued: "default",
+  generating: "default",
+  ready: "success",
+  needs_review: "warning",
+  failed: "destructive",
 };
-
-export const PAPER_STATUS: Record<PaperStatus, { label: string; variant: BadgeProps["variant"] }> =
-  {
-    queued: { label: "Queued", variant: "default" },
-    generating: { label: "Writing questions…", variant: "default" },
-    ready: { label: "Ready", variant: "success" },
-    needs_review: { label: "Needs review", variant: "warning" },
-    failed: { label: "Failed", variant: "destructive" },
-  };
 
 export function isObjective(type: QuestionType): boolean {
   return OBJECTIVE.has(type);
@@ -187,41 +155,49 @@ export interface SectionRow {
   marks: string;
 }
 
-/** Everything wrong with the sections as entered, in words a teacher can act on. */
-export function sectionProblems(paperType: PaperType, rows: SectionRow[]): string[] {
+/**
+ * Everything wrong with the sections as entered, in words a teacher can act on.
+ * `t` is the papers catalog in the viewer's language.
+ */
+export function sectionProblems(
+  paperType: PaperType,
+  rows: SectionRow[],
+  t: PapersStrings,
+): string[] {
+  const m = t.sectionProblems;
   const problems: string[] = [];
-  if (!rows.length) return ["Add at least one section."];
+  if (!rows.length) return [m.none];
 
   const allowed = new Set(TYPES_FOR_PAPER[paperType]);
   for (const row of rows) {
-    const label = SECTION_LABELS[row.type];
+    const section = t.section[row.type];
     if (!allowed.has(row.type)) {
       problems.push(
-        `${label} does not belong on a ${PAPER_TYPE_LABELS[paperType].toLowerCase()} paper.`,
+        fill(m.wrongType, { section, paperType: t.paperType[paperType].toLowerCase() }),
       );
     }
     const count = Number(row.count);
     if (!Number.isInteger(count) || count < 1 || count > MAX_SECTION_COUNT) {
-      problems.push(`${label}: the number of questions must be 1–${MAX_SECTION_COUNT}.`);
+      problems.push(fill(m.count, { section, max: MAX_SECTION_COUNT }));
     }
     if (row.marks.trim()) {
       const marks = Number(row.marks);
       if (!Number.isInteger(marks) || marks < 1 || marks > MAX_MARKS) {
-        problems.push(`${label}: marks per question must be 1–${MAX_MARKS}.`);
+        problems.push(fill(m.marks, { section, max: MAX_MARKS }));
       }
     }
   }
 
   const types = rows.map((r) => r.type);
   if (new Set(types).size !== types.length) {
-    problems.push("Each question type can have one section only.");
+    problems.push(m.duplicate);
   }
   if (paperType === "mix" && !(types.some(isObjective) && types.some((t) => !isObjective(t)))) {
-    problems.push("A mix paper needs at least one objective and one subjective section.");
+    problems.push(m.mixNeedsBoth);
   }
   const total = rows.reduce((sum, r) => sum + (Number(r.count) || 0), 0);
   if (total > MAX_QUESTIONS) {
-    problems.push(`A paper holds at most ${MAX_QUESTIONS} questions — this one has ${total}.`);
+    problems.push(fill(m.tooMany, { max: MAX_QUESTIONS, total }));
   }
   return problems;
 }

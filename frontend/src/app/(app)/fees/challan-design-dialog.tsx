@@ -20,6 +20,9 @@ import type {
   ChallanDesignConfig,
   ChallanPaymentAccount,
 } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { feesMessages } from "@/lib/i18n/modules/fees";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 
 /** A campus whose challan template this dialog edits. */
 export interface ChallanSchool {
@@ -32,11 +35,19 @@ export interface ChallanSchool {
 type ResolvedChallanDesign = Required<ChallanDesignConfig>;
 type Copy = ResolvedChallanDesign["copies"][number];
 
-const COPY_LABELS: [Copy, string][] = [
-  ["bank", "Bank copy"],
-  ["school", "School copy"],
-  ["student", "Student copy"],
-];
+/** The order copies sit on the printed page. Their on-screen names are in the catalog. */
+const COPY_ORDER: Copy[] = ["bank", "school", "student"];
+
+/**
+ * The copy names AS PRINTED, for the preview only. The challan PDF is English-only
+ * (Helvetica cannot draw Urdu), so the preview stays in English too — a translated
+ * preview would be a preview of a page that never prints.
+ */
+const PRINTED_COPY_NAMES: Record<Copy, string> = {
+  bank: "Bank copy",
+  school: "School copy",
+  student: "Student copy",
+};
 
 /**
  * Every knob's pre-feature value, mirroring `ChallanDesignConfig`'s defaults in
@@ -88,8 +99,14 @@ export function ChallanDesignDialog({
   onOpenChange: (open: boolean) => void;
   school: ChallanSchool | null;
 }) {
+  const m = useCatalog(feesMessages).design;
   const router = useRouter();
   const saved = React.useMemo(() => resolveChallanDesign(school), [school]);
+  const copyLabels: Record<Copy, string> = {
+    bank: m.copyBank,
+    school: m.copySchool,
+    student: m.copyStudent,
+  };
   const [config, setConfig] = React.useState<ResolvedChallanDesign>(saved);
   const [saving, setSaving] = React.useState(false);
 
@@ -105,7 +122,7 @@ export function ChallanDesignDialog({
   ) => setConfig((current) => ({ ...current, [key]: value }));
 
   function toggleCopy(copy: Copy, on: boolean) {
-    const next = COPY_LABELS.map(([value]) => value).filter((value) =>
+    const next = COPY_ORDER.filter((value) =>
       value === copy ? on : config.copies.includes(value),
     );
     // At least one, matching the API's `min_length=1`: a challan with no copies is
@@ -138,13 +155,13 @@ export function ChallanDesignDialog({
           ),
         },
       });
-      toast({ title: "Challan design saved for the whole campus." });
+      toast({ title: m.saved });
       router.refresh();
       onOpenChange(false);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not save the challan design",
+        title: m.saveFailed,
         description: error instanceof ApiError ? error.message : undefined,
       });
     } finally {
@@ -156,24 +173,17 @@ export function ChallanDesignDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Challan design</DialogTitle>
-          <DialogDescription>
-            The printed fee challan for {school.name}. Saving applies it to
-            every challan this campus prints from now on, including reprints of
-            ones already issued.
-          </DialogDescription>
+          <DialogTitle>{m.title}</DialogTitle>
+          <DialogDescription>{fill(m.description, { school: school.name })}</DialogDescription>
         </DialogHeader>
 
         <section className="grid gap-2">
-          <span className="text-xs text-muted-foreground">
-            Copies printed on each page — the bank keeps one, stamps and returns
-            one, and the parent keeps one
-          </span>
+          <span className="text-xs text-muted-foreground">{m.copiesHelp}</span>
           <div className="flex flex-wrap gap-4">
-            {COPY_LABELS.map(([value, copyLabel]) => (
+            {COPY_ORDER.map((value) => (
               <Toggle
                 key={value}
-                label={copyLabel}
+                label={copyLabels[value]}
                 checked={config.copies.includes(value)}
                 onChange={(on) => toggleCopy(value, on)}
               />
@@ -183,10 +193,7 @@ export function ChallanDesignDialog({
 
         <section className="grid gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              Accounts a parent may pay into — printed across the head of every
-              copy
-            </span>
+            <span className="text-xs text-muted-foreground">{m.accountsHelp}</span>
             {config.payment_accounts.length < 4 ? (
               <Button
                 type="button"
@@ -200,36 +207,35 @@ export function ChallanDesignDialog({
                 }
               >
                 <Plus className="size-3.5" aria-hidden />
-                Add account
+                {m.addAccount}
               </Button>
             ) : null}
           </div>
 
           {config.payment_accounts.length === 0 ? (
             <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-              No accounts — the challan prints without a payment band, which is
-              right for a campus that only takes cash at its own window.
+              {m.noAccounts}
             </p>
           ) : null}
 
           {config.payment_accounts.map((account, index) => (
             <div key={index} className="flex flex-wrap items-end gap-2">
               <Field
-                label="Bank or wallet"
+                label={m.bankOrWallet}
                 value={account.label}
                 placeholder="Meezan Bank"
                 maxLength={60}
                 onChange={(value) => editAccount(index, { label: value })}
               />
               <Field
-                label="Account number"
+                label={m.accountNumber}
                 value={account.number}
                 placeholder="98410113254130"
                 maxLength={40}
                 onChange={(value) => editAccount(index, { number: value })}
               />
               <Field
-                label="Account title"
+                label={m.accountTitle}
                 value={account.holder ?? ""}
                 placeholder="M. Aftab"
                 maxLength={80}
@@ -240,7 +246,7 @@ export function ChallanDesignDialog({
                 variant="ghost"
                 size="icon"
                 className="size-8"
-                title="Remove this account"
+                title={m.removeAccount}
                 onClick={() =>
                   set(
                     "payment_accounts",
@@ -249,44 +255,44 @@ export function ChallanDesignDialog({
                 }
               >
                 <Trash2 className="size-4" aria-hidden />
-                <span className="sr-only">Remove account {index + 1}</span>
+                <span className="sr-only">
+                  {fill(m.removeAccountNumbered, { n: index + 1 })}
+                </span>
               </Button>
             </div>
           ))}
         </section>
 
         <section className="grid gap-2">
-          <span className="text-xs text-muted-foreground">
-            Lines that print
-          </span>
+          <span className="text-xs text-muted-foreground">{m.linesThatPrint}</span>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             <Toggle
-              label="Admission no."
+              label={m.admissionNo}
               checked={config.show_admission_number}
               onChange={(v) => set("show_admission_number", v)}
             />
             <Toggle
-              label="Roll no."
+              label={m.rollNo}
               checked={config.show_roll_number}
               onChange={(v) => set("show_roll_number", v)}
             />
             <Toggle
-              label="Father / guardian"
+              label={m.fatherGuardian}
               checked={config.show_father_name}
               onChange={(v) => set("show_father_name", v)}
             />
             <Toggle
-              label="Contact number"
+              label={m.contactNumber}
               checked={config.show_contact}
               onChange={(v) => set("show_contact", v)}
             />
             <Toggle
-              label="Amount in words"
+              label={m.amountInWords}
               checked={config.show_amount_in_words}
               onChange={(v) => set("show_amount_in_words", v)}
             />
             <Toggle
-              label="Signature block"
+              label={m.signatureBlock}
               checked={config.show_signature_block}
               onChange={(v) => set("show_signature_block", v)}
             />
@@ -294,26 +300,23 @@ export function ChallanDesignDialog({
         </section>
 
         <label className="grid gap-1 text-xs">
-          <span className="text-muted-foreground">
-            Footer line — leave empty for the standard &quot;quote the challan
-            number&quot; wording
-          </span>
+          <span className="text-muted-foreground">{m.footerLabel}</span>
           <input
             type="text"
             value={config.footer_note}
             onChange={(event) =>
               set("footer_note", event.target.value.slice(0, 200))
             }
-            placeholder="Fees once paid are not refundable."
+            placeholder={m.footerPlaceholder}
             className="h-8 rounded-control border border-input bg-card px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
 
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4">
           <p className="mb-3 text-center text-xs text-muted-foreground">
-            Preview — sample student, one copy of {config.copies.length}
+            {fill(m.previewCaption, { count: config.copies.length })}
           </p>
-          <ChallanPreview config={config} />
+          <ChallanPreview config={config} label={m.previewLabel} />
         </div>
 
         <DialogFooter>
@@ -322,11 +325,11 @@ export function ChallanDesignDialog({
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
-            Cancel
+            {m.cancel}
           </Button>
           <Button onClick={save} disabled={saving}>
             <Save className="size-4" aria-hidden />
-            {saving ? "Saving…" : "Save design for campus"}
+            {saving ? m.saving : m.save}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -343,21 +346,26 @@ export function ChallanDesignDialog({
  * the whole campus and print a real child's challan, which means every experiment
  * ships. The structure deliberately mirrors `challan_pdf.py` row for row so a
  * change there has an obvious counterpart here.
+ *
+ * Its wording is English on every screen, and is not in the fees catalog: the PDF
+ * is set in Helvetica, which cannot draw Urdu, so the challan only ever prints in
+ * English — and a preview is only useful while it shows the page that prints.
  */
-function ChallanPreview({ config }: { config: ResolvedChallanDesign }) {
+function ChallanPreview({ config, label }: { config: ResolvedChallanDesign; label: string }) {
   const cell = "border border-black px-1.5 py-[3px] align-middle";
   const accounts = config.payment_accounts.filter(
     (account) => account.label.trim() && account.number.trim(),
   );
 
   return (
-    <div className="overflow-x-auto">
+    // Left-to-right even on an Urdu screen, like the page it previews.
+    <div className="overflow-x-auto" dir="ltr">
       <table
         /* Sans, matching `_BODY_FACE` in challan_pdf.py. A preview set in a
            different face than the PDF is a preview that lies about line
            breaks, which is most of what this is here to show. */
         className="w-full min-w-[30rem] border-collapse bg-white font-sans text-[10px] text-black"
-        aria-label="Challan preview"
+        aria-label={label}
       >
         <tbody>
           <tr>
@@ -366,8 +374,7 @@ function ChallanPreview({ config }: { config: ResolvedChallanDesign }) {
               className={`${cell} text-center text-[13px] font-bold`}
               colSpan={4}
             >
-              {COPY_LABELS.find(([value]) => value === config.copies[0])?.[1] ??
-                "Copy"}
+              {config.copies[0] ? PRINTED_COPY_NAMES[config.copies[0]] : "Copy"}
             </td>
             <td className={cell} style={{ width: "26%" }} />
           </tr>

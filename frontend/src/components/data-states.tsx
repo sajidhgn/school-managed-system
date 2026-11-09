@@ -2,6 +2,10 @@
 
 import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
 
+import { fill } from "@/lib/i18n/format";
+import { sharedMessages } from "@/lib/i18n/modules/shared";
+import { useCatalog } from "@/lib/i18n/use-catalog";
+
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/misc";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -102,6 +106,7 @@ export function ErrorState({
   onRetry?: () => void;
   className?: string;
 }) {
+  const m = useCatalog(sharedMessages);
   const forbidden = error instanceof ApiError && error.isForbidden;
   const requestId = error instanceof ApiError ? error.instance : undefined;
 
@@ -112,16 +117,16 @@ export function ErrorState({
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold">
-          {forbidden ? "You don't have access to this" : "Couldn't load this"}
+          {forbidden ? m.noAccess : m.couldntLoad}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">{errorMessage(error)}</p>
         {requestId ? (
-          <p className="text-xs text-muted-foreground/70">Request ID: {requestId}</p>
+          <p className="text-xs text-muted-foreground/70">{fill(m.requestId, { id: requestId })}</p>
         ) : null}
       </div>
       {onRetry && !forbidden ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          Try again
+          {m.tryAgain}
         </Button>
       ) : null}
     </div>
@@ -129,10 +134,11 @@ export function ErrorState({
 }
 
 export function PageSpinner() {
+  const m = useCatalog(sharedMessages);
   return (
     <div className="flex items-center justify-center py-20">
       <Loader2 className="size-5 animate-spin text-primary" />
-      <span className="sr-only">Loading</span>
+      <span className="sr-only">{m.loading}</span>
     </div>
   );
 }

@@ -112,6 +112,14 @@
     "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
+/* Letter-spacing pulls Urdu's joined letters apart, so the small-caps table
+   headers and section labels (`tracking-[0.07em]` and friends) would print
+   "ک و ڈ" instead of "کوڈ". Tailwind's tracking utilities sit in a cascade layer,
+   so this unlayered rule wins on Urdu pages without `!important`. */
+:root:lang(ur) * {
+  letter-spacing: normal;
+}
+
 .dark {
   --background: #0b0d12;
   --foreground: #f2f3f5;

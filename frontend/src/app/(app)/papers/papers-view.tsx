@@ -26,18 +26,18 @@ import { useClassSummary } from "@/hooks/use-classes";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { BUSY_PAPER_STATUSES, usePapers } from "@/hooks/use-papers";
 import type { PaperStatus } from "@/lib/api/types";
+import { fill } from "@/lib/i18n/format";
+import { papersMessages } from "@/lib/i18n/modules/papers";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { formatDate } from "@/lib/utils";
 import { PaperFormDialog } from "./paper-form-dialog";
-import {
-  LANGUAGE_LABELS,
-  PAPER_DIFFICULTY_LABELS,
-  PAPER_STATUS,
-  PAPER_TYPE_LABELS,
-} from "./paper-meta";
+import { LANGUAGE_LABELS, PAPER_STATUS_VARIANT } from "./paper-meta";
 
 const PAGE_SIZE = 20;
 
 export function PapersView({ canWrite }: { canWrite: boolean }) {
+  const t = useCatalog(papersMessages);
+  const m = t.list;
   const router = useRouter();
   const classes = useClassSummary();
   const [classId, setClassId] = React.useState("");
@@ -69,12 +69,12 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Test papers"
-        description="Pick a book's chapters and the kind of paper you want; an AI agent writes the questions from those pages, checks each one against the book, and keeps them all in the class's question bank. Review, edit and print the paper here."
+        title={m.title}
+        description={m.description}
         actions={
           canWrite ? (
             <Button onClick={() => setOpen(true)}>
-              <Plus /> New paper
+              <Plus /> {m.newPaper}
             </Button>
           ) : null
         }
@@ -89,15 +89,15 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by title…"
-            aria-label="Search papers by title"
+            placeholder={m.searchPlaceholder}
+            aria-label={m.searchAria}
             maxLength={200}
             className="ps-9"
           />
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="papers-class" className="text-sm text-muted-foreground">
-            Class
+            {m.classLabel}
           </label>
           <NativeSelect
             id="papers-class"
@@ -108,7 +108,7 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
               setPage(1);
             }}
           >
-            <option value="">All classes</option>
+            <option value="">{m.allClasses}</option>
             {classes.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -118,7 +118,7 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="papers-status" className="text-sm text-muted-foreground">
-            Status
+            {m.statusLabel}
           </label>
           <NativeSelect
             id="papers-status"
@@ -129,10 +129,10 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
               setPage(1);
             }}
           >
-            <option value="">Any status</option>
-            {(Object.keys(PAPER_STATUS) as PaperStatus[]).map((s) => (
+            <option value="">{m.anyStatus}</option>
+            {(Object.keys(PAPER_STATUS_VARIANT) as PaperStatus[]).map((s) => (
               <option key={s} value={s}>
-                {PAPER_STATUS[s].label}
+                {t.status[s]}
               </option>
             ))}
           </NativeSelect>
@@ -147,16 +147,12 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
         ) : !papers.data?.items.length ? (
           <EmptyState
             icon={FileQuestion}
-            title={filtered ? "No papers match" : "No test papers yet"}
-            description={
-              filtered
-                ? "Try another title, class or status."
-                : "Create a paper from the chapters of a book in the library. Only chapters the agent has read can be used."
-            }
+            title={filtered ? m.noMatches : m.noPapers}
+            description={filtered ? m.tryAnother : m.emptyHint}
             action={
               canWrite && !filtered ? (
                 <Button variant="outline" onClick={() => setOpen(true)}>
-                  <Plus /> New paper
+                  <Plus /> {m.newPaper}
                 </Button>
               ) : null
             }
@@ -166,18 +162,18 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Paper</TableHead>
-                  <TableHead>Class</TableHead>
-                  <TableHead>Kind</TableHead>
-                  <TableHead className="w-36">Status</TableHead>
-                  <TableHead className="w-24 text-end">Questions</TableHead>
-                  <TableHead className="w-20 text-end">Marks</TableHead>
-                  <TableHead className="w-40">Created</TableHead>
+                  <TableHead>{m.colPaper}</TableHead>
+                  <TableHead>{m.colClass}</TableHead>
+                  <TableHead>{m.colKind}</TableHead>
+                  <TableHead className="w-36">{m.colStatus}</TableHead>
+                  <TableHead className="w-24 text-end">{m.colQuestions}</TableHead>
+                  <TableHead className="w-20 text-end">{m.colMarks}</TableHead>
+                  <TableHead className="w-40">{m.colCreated}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {papers.data.items.map((paper) => {
-                  const state = PAPER_STATUS[paper.status];
+                  const variant = PAPER_STATUS_VARIANT[paper.status];
                   return (
                     <TableRow key={paper.id}>
                       <TableCell className="max-w-72">
@@ -199,19 +195,19 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          <Badge variant="outline">{PAPER_TYPE_LABELS[paper.paper_type]}</Badge>
-                          <Badge variant="neutral">{PAPER_DIFFICULTY_LABELS[paper.difficulty]}</Badge>
+                          <Badge variant="outline">{t.paperType[paper.paper_type]}</Badge>
+                          <Badge variant="neutral">{t.paperDifficulty[paper.difficulty]}</Badge>
                           <Badge variant="neutral" lang={paper.language}>
                             {LANGUAGE_LABELS[paper.language]}
                           </Badge>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={state.variant} className="gap-1">
+                        <Badge variant={variant} className="gap-1">
                           {BUSY_PAPER_STATUSES.has(paper.status) && (
                             <Loader2 className="size-3 animate-spin" />
                           )}
-                          {state.label}
+                          {t.status[paper.status]}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-end tabular-nums">{paper.question_count}</TableCell>
@@ -219,7 +215,9 @@ export function PapersView({ canWrite }: { canWrite: boolean }) {
                       <TableCell className="text-muted-foreground">
                         {formatDate(paper.created_at)}
                         {paper.created_by_name ? (
-                          <p className="truncate text-xs">by {paper.created_by_name}</p>
+                          <p className="truncate text-xs">
+                            {fill(m.byName, { name: paper.created_by_name })}
+                          </p>
                         ) : null}
                       </TableCell>
                     </TableRow>

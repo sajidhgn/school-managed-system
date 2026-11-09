@@ -5,6 +5,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/use-toast";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
+import type { Translation } from "@/lib/i18n/catalog";
+import { fill } from "@/lib/i18n/format";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import {
   diaryAgentApi,
   whatsappApi,
@@ -53,100 +57,112 @@ function useInvalidateWhatsApp() {
 }
 
 export function useSaveWhatsAppGroup() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: ({ id, body }: { id?: string; body: WhatsAppGroupWrite }) =>
       id ? whatsappApi.updateGroup(id, body) : whatsappApi.createGroup(body),
     onSuccess: (group, { id }) => {
       void invalidate();
-      toast.success(id ? "Group updated" : "Group linked", group.name);
+      toast.success(id ? m.groupUpdated : m.groupLinked, group.name);
     },
-    onError: (error) => toast.error("Couldn't save the group", errorMessage(error)),
+    onError: (error) => toast.error(m.groupSaveFailed, errorMessage(error)),
   });
 }
 
 export function useDeleteWhatsAppGroup() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: (id: string) => whatsappApi.deleteGroup(id),
     onSuccess: () => {
       void invalidate();
-      toast.success("Group unlinked");
+      toast.success(m.groupUnlinked);
     },
-    onError: (error) => toast.error("Couldn't unlink the group", errorMessage(error)),
+    onError: (error) => toast.error(m.groupUnlinkFailed, errorMessage(error)),
   });
 }
 
 export function useSaveWhatsAppSettings() {
+  const m = useCatalog(whatsappMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: WhatsAppSettingsWrite) => whatsappApi.saveSettings(body),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.whatsapp.settings, settings);
       void queryClient.invalidateQueries({ queryKey: ["whatsapp", "preview"] });
-      toast.success("WhatsApp settings saved");
+      toast.success(m.settingsSaved);
     },
-    onError: (error) => toast.error("Couldn't save the settings", errorMessage(error)),
+    onError: (error) => toast.error(m.settingsSaveFailed, errorMessage(error)),
   });
 }
 
-function queuedToast(result: QueueResult) {
+type ToastMessages = Translation<(typeof whatsappMessages)["en"]>["toast"];
+
+function queuedToast(result: QueueResult, m: ToastMessages) {
   const skipped = result.skipped ?? [];
   if (result.queued === 0) {
-    toast.error("Nothing was queued", skipped[0]?.reason ?? undefined);
+    // The reason is the server's own sentence for the first skipped group.
+    toast.error(m.nothingQueued, skipped[0]?.reason ?? undefined);
     return;
   }
   toast.success(
-    `${result.queued} message${result.queued === 1 ? "" : "s"} queued`,
-    skipped.length ? `${skipped.length} group(s) skipped.` : undefined,
+    fill(result.queued === 1 ? m.queuedOne : m.queuedOther, { count: result.queued }),
+    skipped.length
+      ? fill(skipped.length === 1 ? m.skippedOne : m.skippedOther, { count: skipped.length })
+      : undefined,
   );
 }
 
 export function useQueueFeeNotices() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: (body: FeeNoticeQueueRequest) => whatsappApi.queueFeeNotices(body),
     onSuccess: (result) => {
       void invalidate();
-      queuedToast(result);
+      queuedToast(result, m);
     },
-    onError: (error) => toast.error("Couldn't queue the fee notice", errorMessage(error)),
+    onError: (error) => toast.error(m.feeNoticeFailed, errorMessage(error)),
   });
 }
 
 export function useSendCustomMessage() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: (body: CustomMessageRequest) => whatsappApi.sendCustom(body),
     onSuccess: (result) => {
       void invalidate();
-      queuedToast(result);
+      queuedToast(result, m);
     },
-    onError: (error) => toast.error("Couldn't queue the message", errorMessage(error)),
+    onError: (error) => toast.error(m.messageFailed, errorMessage(error)),
   });
 }
 
 export function useRetryWhatsAppMessage() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: (id: string) => whatsappApi.retry(id),
     onSuccess: () => {
       void invalidate();
-      toast.success("Message queued again");
+      toast.success(m.requeued);
     },
-    onError: (error) => toast.error("Couldn't retry", errorMessage(error)),
+    onError: (error) => toast.error(m.retryFailed, errorMessage(error)),
   });
 }
 
 export function useCancelWhatsAppMessage() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: (id: string) => whatsappApi.cancel(id),
     onSuccess: () => {
       void invalidate();
-      toast.success("Message cancelled");
+      toast.success(m.cancelled);
     },
-    onError: (error) => toast.error("Couldn't cancel", errorMessage(error)),
+    onError: (error) => toast.error(m.cancelFailed, errorMessage(error)),
   });
 }
 
@@ -180,26 +196,28 @@ export function useWhatsAppQr(enabled: boolean) {
 }
 
 export function useConnectWhatsApp() {
+  const m = useCatalog(whatsappMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => whatsappApi.connect(),
     onSuccess: (connection) => {
       queryClient.setQueryData(queryKeys.whatsapp.connection, connection);
-      toast.success("Starting WhatsApp", "The QR code appears in a few seconds.");
+      toast.success(m.starting, m.startingDetail);
     },
-    onError: (error) => toast.error("Couldn't start WhatsApp", errorMessage(error)),
+    onError: (error) => toast.error(m.startFailed, errorMessage(error)),
   });
 }
 
 export function useDisconnectWhatsApp() {
+  const m = useCatalog(whatsappMessages).toast;
   const invalidate = useInvalidateWhatsApp();
   return useMutation({
     mutationFn: () => whatsappApi.disconnect(),
     onSuccess: () => {
       void invalidate();
-      toast.success("WhatsApp disconnected");
+      toast.success(m.disconnected);
     },
-    onError: (error) => toast.error("Couldn't disconnect", errorMessage(error)),
+    onError: (error) => toast.error(m.disconnectFailed, errorMessage(error)),
   });
 }
 
@@ -234,13 +252,14 @@ export function useDiaryDrafts(params: PageParams) {
 }
 
 export function useSaveDiaryAgentSettings() {
+  const m = useCatalog(whatsappMessages).toast;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: DiaryAgentSettingsWrite) => diaryAgentApi.saveSettings(body),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.whatsapp.diarySettings, settings);
-      toast.success("Diary format saved");
+      toast.success(m.diarySaved);
     },
-    onError: (error) => toast.error("Couldn't save the diary format", errorMessage(error)),
+    onError: (error) => toast.error(m.diarySaveFailed, errorMessage(error)),
   });
 }

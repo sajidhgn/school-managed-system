@@ -33,11 +33,17 @@ import {
   useWhatsAppMessages,
   useWhatsAppSettings,
 } from "@/hooks/use-whatsapp";
-import type {
-  WhatsAppGroupRead,
-  WhatsAppMessageRead,
-  WhatsAppMessageStatus,
+import {
+  label,
+  type WhatsAppGroupRead,
+  type WhatsAppMessageRead,
+  type WhatsAppMessageStatus,
 } from "@/lib/api/types";
+import type { Translation } from "@/lib/i18n/catalog";
+import { fill } from "@/lib/i18n/format";
+import { sharedMessages } from "@/lib/i18n/modules/shared";
+import { whatsappMessages } from "@/lib/i18n/modules/whatsapp";
+import { useCatalog } from "@/lib/i18n/use-catalog";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { AbsenceAlertsPanel } from "./absence-alerts-panel";
 import { ConnectionCard } from "./connection-card";
@@ -54,21 +60,19 @@ function groupClassLabel(group: WhatsAppGroupRead): string {
 }
 
 export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canManage: boolean }) {
+  const m = useCatalog(whatsappMessages).page;
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="WhatsApp groups"
-        description="Post the monthly fee notice, the daily diary and your own messages to each class's parents' group."
-      />
+      <PageHeader title={m.title} description={m.description} />
       <ConnectionCard canManage={canManage} />
       <Tabs defaultValue="groups">
         <TabsList>
-          <TabsTrigger value="groups">Groups</TabsTrigger>
-          <TabsTrigger value="fee-notice">Monthly fee notice</TabsTrigger>
-          <TabsTrigger value="diary">Diary</TabsTrigger>
-          <TabsTrigger value="absence">Absence alerts</TabsTrigger>
-          {canSend && <TabsTrigger value="send">Send message</TabsTrigger>}
-          <TabsTrigger value="outbox">Outbox</TabsTrigger>
+          <TabsTrigger value="groups">{m.tabGroups}</TabsTrigger>
+          <TabsTrigger value="fee-notice">{m.tabFeeNotice}</TabsTrigger>
+          <TabsTrigger value="diary">{m.tabDiary}</TabsTrigger>
+          <TabsTrigger value="absence">{m.tabAbsence}</TabsTrigger>
+          {canSend && <TabsTrigger value="send">{m.tabSend}</TabsTrigger>}
+          <TabsTrigger value="outbox">{m.tabOutbox}</TabsTrigger>
         </TabsList>
         <TabsContent value="groups">
           <GroupsPanel canManage={canManage} />
@@ -100,6 +104,7 @@ export function WhatsAppView({ canSend, canManage }: { canSend: boolean; canMana
 // ---------------------------------------------------------------------------
 
 function GroupsPanel({ canManage }: { canManage: boolean }) {
+  const m = useCatalog(whatsappMessages).groups;
   const groups = useWhatsAppGroups();
   const remove = useDeleteWhatsAppGroup();
   // Reachability only means something when the school's own number is on the gateway.
@@ -115,8 +120,8 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
-        <CardTitle>Class groups</CardTitle>
-        {canManage && <Button onClick={() => openForm(null)}>Link a group</Button>}
+        <CardTitle>{m.title}</CardTitle>
+        {canManage && <Button onClick={() => openForm(null)}>{m.link}</Button>}
       </CardHeader>
       <CardContent>
         {groups.isLoading ? (
@@ -124,21 +129,17 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
         ) : groups.isError ? (
           <ErrorState error={groups.error} onRetry={() => void groups.refetch()} />
         ) : !groups.data?.length ? (
-          <EmptyState
-            icon={MessageCircle}
-            title="No groups linked yet"
-            description="Link each class's parents' group with its invite link (Group info → Invite via link)."
-          />
+          <EmptyState icon={MessageCircle} title={m.emptyTitle} description={m.emptyHint} />
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Group</TableHead>
-                  <TableHead>Class</TableHead>
-                  <TableHead>Fee notice</TableHead>
-                  <TableHead>Last sent</TableHead>
-                  {canManage && <TableHead className="text-end">Actions</TableHead>}
+                  <TableHead>{m.colGroup}</TableHead>
+                  <TableHead>{m.colClass}</TableHead>
+                  <TableHead>{m.colFeeNotice}</TableHead>
+                  <TableHead>{m.colLastSent}</TableHead>
+                  {canManage && <TableHead className="text-end">{m.colActions}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -147,16 +148,13 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
                     <TableCell>
                       <div className="font-medium">{group.name}</div>
                       <div className="flex flex-wrap gap-1">
-                        {!group.is_active && <Badge variant="neutral">Paused</Badge>}
+                        {!group.is_active && <Badge variant="neutral">{m.paused}</Badge>}
                         {gateway &&
                           (group.chat_id ? (
-                            <Badge variant="success">Linked</Badge>
+                            <Badge variant="success">{m.linked}</Badge>
                           ) : (
-                            <Badge
-                              variant="warning"
-                              title="The school's number isn't in this group yet. The gateway tries to join through the invite link."
-                            >
-                              Not reachable yet
+                            <Badge variant="warning" title={m.unreachableTitle}>
+                              {m.unreachable}
                             </Badge>
                           ))}
                       </div>
@@ -164,20 +162,20 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
                     <TableCell>{groupClassLabel(group)}</TableCell>
                     <TableCell>
                       {group.send_fee_notice ? (
-                        <Badge variant="success">On</Badge>
+                        <Badge variant="success">{m.on}</Badge>
                       ) : (
-                        <Badge variant="neutral">Off</Badge>
+                        <Badge variant="neutral">{m.off}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {group.last_sent_at ? formatDateTime(group.last_sent_at) : "Never"}
+                      {group.last_sent_at ? formatDateTime(group.last_sent_at) : m.never}
                     </TableCell>
                     {canManage && (
                       <TableCell className="text-end">
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Edit ${group.name}`}
+                          aria-label={fill(m.editNamed, { name: group.name })}
                           onClick={() => openForm(group)}
                         >
                           <Pencil className="h-4 w-4" aria-hidden />
@@ -185,14 +183,10 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Unlink ${group.name}`}
+                          aria-label={fill(m.unlinkNamed, { name: group.name })}
                           disabled={remove.isPending}
                           onClick={() => {
-                            if (
-                              window.confirm(
-                                `Unlink "${group.name}"? Messages still waiting to be sent to it are dropped.`,
-                              )
-                            )
+                            if (window.confirm(fill(m.unlinkConfirm, { name: group.name })))
                               remove.mutate(group.id);
                           }}
                         >
@@ -217,6 +211,7 @@ function GroupsPanel({ canManage }: { canManage: boolean }) {
 // ---------------------------------------------------------------------------
 
 function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: boolean }) {
+  const m = useCatalog(whatsappMessages).fee;
   const settings = useWhatsAppSettings();
   const save = useSaveWhatsAppSettings();
   const [period, setPeriod] = React.useState(currentPeriod);
@@ -246,7 +241,7 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Settings</CardTitle>
+          <CardTitle>{m.settings}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -268,10 +263,10 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
                 disabled={!canManage}
                 onChange={(event) => setEnabled(event.target.checked)}
               />
-              Send the fee notice automatically every month
+              {m.autoSend}
             </label>
             <div className="grid gap-1.5">
-              <Label htmlFor="wa-send-day">Day of the month</Label>
+              <Label htmlFor="wa-send-day">{m.sendDay}</Label>
               <Input
                 id="wa-send-day"
                 type="number"
@@ -283,15 +278,14 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
                 className="w-24"
               />
               <p className="text-xs text-muted-foreground">
-                Only issued challans are announced. If they are still drafts on this day, the
-                notice goes out the night after they are issued.
+                {m.sendDayHint}
                 {settings.data?.next_send_on
-                  ? ` Next: ${formatDate(settings.data.next_send_on)}.`
+                  ? ` ${fill(m.nextSend, { date: formatDate(settings.data.next_send_on) })}`
                   : ""}
               </p>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="wa-template">Message</Label>
+              <Label htmlFor="wa-template">{m.message}</Label>
               <Textarea
                 id="wa-template"
                 rows={8}
@@ -300,7 +294,7 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
                 onChange={(event) => setTemplate(event.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Placeholders:{" "}
+                {m.placeholders}{" "}
                 {settings.data?.placeholders.map((p) => (
                   <code key={p} className="me-1 rounded bg-muted px-1">
                     {`{${p}}`}
@@ -309,19 +303,19 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
               </p>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="wa-note">Custom message added every month (optional)</Label>
+              <Label htmlFor="wa-note">{m.note}</Label>
               <Textarea
                 id="wa-note"
                 rows={3}
                 value={note}
                 disabled={!canManage}
-                placeholder="e.g. Summer uniform starts from next week."
+                placeholder={m.notePlaceholder}
                 onChange={(event) => setNote(event.target.value)}
               />
             </div>
             {canManage && (
               <Button type="submit" disabled={save.isPending}>
-                Save settings
+                {m.save}
               </Button>
             )}
           </form>
@@ -330,10 +324,10 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <CardTitle>Preview</CardTitle>
+          <CardTitle>{m.preview}</CardTitle>
           <Input
             type="month"
-            aria-label="Month"
+            aria-label={m.month}
             value={period}
             onChange={(event) => event.target.value && setPeriod(event.target.value)}
             className="w-44"
@@ -345,10 +339,7 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
           ) : preview.isError ? (
             <ErrorState error={preview.error} onRetry={() => void preview.refetch()} />
           ) : !preview.data?.length ? (
-            <EmptyState
-              title="No groups take the fee notice"
-              description="Link a group and leave its fee notice on."
-            />
+            <EmptyState title={m.emptyTitle} description={m.emptyHint} />
           ) : (
             preview.data.map((item) => (
               <div key={item.group_id} className="rounded-md border p-3">
@@ -367,14 +358,17 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
               onClick={() => {
                 if (
                   window.confirm(
-                    `Queue the ${period} fee notice for ${ready.length} group(s) now? Each group gets it once per month.`,
+                    fill(ready.length === 1 ? m.confirmOne : m.confirmOther, {
+                      period,
+                      count: ready.length,
+                    }),
                   )
                 )
                   queue.mutate({ period_label: period });
               }}
             >
-              <Send className="mr-1 h-4 w-4" aria-hidden />
-              Send now
+              <Send className="me-1 h-4 w-4" aria-hidden />
+              {m.sendNow}
             </Button>
           )}
         </CardContent>
@@ -388,6 +382,7 @@ function FeeNoticePanel({ canManage, canSend }: { canManage: boolean; canSend: b
 // ---------------------------------------------------------------------------
 
 function SendPanel() {
+  const m = useCatalog(whatsappMessages).send;
   const groups = useWhatsAppGroups();
   const send = useSendCustomMessage();
   const [body, setBody] = React.useState("");
@@ -407,13 +402,13 @@ function SendPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Send a message</CardTitle>
+        <CardTitle>{m.title}</CardTitle>
       </CardHeader>
       <CardContent>
         {groups.isLoading ? (
           <TableCardSkeleton columns={1} rows={3} />
         ) : active.length === 0 ? (
-          <EmptyState title="No active groups" description="Link a class group first." />
+          <EmptyState title={m.emptyTitle} description={m.emptyHint} />
         ) : (
           <form
             className="space-y-4"
@@ -431,7 +426,7 @@ function SendPanel() {
             }}
           >
             <fieldset className="space-y-2">
-              <legend className="mb-1 text-sm font-medium">Groups</legend>
+              <legend className="mb-1 text-sm font-medium">{m.groups}</legend>
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input
                   type="checkbox"
@@ -440,7 +435,7 @@ function SendPanel() {
                     setSelected(event.target.checked ? new Set(active.map((g) => g.id)) : new Set())
                   }
                 />
-                All groups
+                {m.allGroups}
               </label>
               <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
                 {active.map((group) => (
@@ -457,19 +452,19 @@ function SendPanel() {
               </div>
             </fieldset>
             <div className="grid gap-1.5">
-              <Label htmlFor="wa-body">Message</Label>
+              <Label htmlFor="wa-body">{m.message}</Label>
               <Textarea
                 id="wa-body"
                 rows={6}
                 maxLength={4000}
                 value={body}
                 onChange={(event) => setBody(event.target.value)}
-                placeholder="Dear Parents, the school will remain closed on…"
+                placeholder={m.placeholder}
               />
             </div>
             <Button type="submit" disabled={send.isPending || !body.trim() || selected.size === 0}>
-              <Send className="mr-1 h-4 w-4" aria-hidden />
-              Send to {selected.size} group{selected.size === 1 ? "" : "s"}
+              <Send className="me-1 h-4 w-4" aria-hidden />
+              {fill(selected.size === 1 ? m.sendToOne : m.sendToOther, { count: selected.size })}
             </Button>
           </form>
         )}
@@ -482,17 +477,20 @@ function SendPanel() {
 // Outbox
 // ---------------------------------------------------------------------------
 
-function messageKindLabel(message: WhatsAppMessageRead): string {
-  const by = message.created_by_name ? ` · ${message.created_by_name}` : "";
+type OutboxMessages = Translation<(typeof whatsappMessages)["en"]>["outbox"];
+
+function messageKindLabel(message: WhatsAppMessageRead, m: OutboxMessages): string {
+  const name = message.created_by_name;
+  const period = message.period_label ?? "";
   switch (message.kind) {
     case "fee_notice":
-      return `Fee notice ${message.period_label ?? ""}`;
+      return fill(m.kindFeeNotice, { period });
     case "diary":
-      return `Diary${by}`;
+      return name ? fill(m.kindDiaryBy, { name }) : m.kindDiary;
     case "absence_alert":
-      return `Absence alert ${message.period_label ?? ""}`;
+      return fill(m.kindAbsence, { period });
     default:
-      return `Custom${by}`;
+      return name ? fill(m.kindCustomBy, { name }) : m.kindCustom;
   }
 }
 
@@ -503,6 +501,8 @@ const STATUS_BADGE: Record<WhatsAppMessageStatus, "warning" | "success" | "destr
 };
 
 function OutboxPanel({ canSend }: { canSend: boolean }) {
+  const m = useCatalog(whatsappMessages).outbox;
+  const shared = useCatalog(sharedMessages);
   const [status, setStatus] = React.useState<WhatsAppMessageStatus | "">("");
   const [page, setPage] = React.useState(1);
   const messages = useWhatsAppMessages({ page, size: 20, ...(status ? { status } : {}) });
@@ -512,9 +512,9 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
-        <CardTitle>Outbox</CardTitle>
+        <CardTitle>{m.title}</CardTitle>
         <NativeSelect
-          aria-label="Status"
+          aria-label={m.status}
           value={status}
           onChange={(event) => {
             setStatus(event.target.value as WhatsAppMessageStatus | "");
@@ -522,10 +522,10 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
           }}
           className="w-40"
         >
-          <option value="">All</option>
-          <option value="queued">Queued</option>
-          <option value="sent">Sent</option>
-          <option value="failed">Failed</option>
+          <option value="">{m.all}</option>
+          <option value="queued">{m.statusLabel.queued}</option>
+          <option value="sent">{m.statusLabel.sent}</option>
+          <option value="failed">{m.statusLabel.failed}</option>
         </NativeSelect>
       </CardHeader>
       <CardContent>
@@ -534,18 +534,18 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
         ) : messages.isError ? (
           <ErrorState error={messages.error} onRetry={() => void messages.refetch()} />
         ) : !messages.data?.items.length ? (
-          <EmptyState title="Nothing here yet" description="Queued and sent messages appear here." />
+          <EmptyState title={m.emptyTitle} description={m.emptyHint} />
         ) : (
           <>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Group</TableHead>
-                    <TableHead>Message</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>When</TableHead>
-                    {canSend && <TableHead className="text-end">Actions</TableHead>}
+                    <TableHead>{m.colGroup}</TableHead>
+                    <TableHead>{m.colMessage}</TableHead>
+                    <TableHead>{m.colStatus}</TableHead>
+                    <TableHead>{m.colWhen}</TableHead>
+                    {canSend && <TableHead className="text-end">{m.colActions}</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -554,7 +554,7 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                       <TableCell className="align-top">
                         <div className="font-medium">{message.group_name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {messageKindLabel(message)}
+                          {messageKindLabel(message, m)}
                         </div>
                       </TableCell>
                       <TableCell className="max-w-md align-top">
@@ -564,7 +564,9 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                         )}
                       </TableCell>
                       <TableCell className="align-top">
-                        <Badge variant={STATUS_BADGE[message.status]}>{message.status}</Badge>
+                        <Badge variant={STATUS_BADGE[message.status]}>
+                          {label(m.statusLabel, message.status)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap align-top text-sm text-muted-foreground">
                         {formatDateTime(message.sent_at ?? message.created_at)}
@@ -575,7 +577,7 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              aria-label="Retry"
+                              aria-label={m.retry}
                               disabled={retry.isPending}
                               onClick={() => retry.mutate(message.id)}
                             >
@@ -586,7 +588,7 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              aria-label="Cancel"
+                              aria-label={m.cancel}
                               disabled={cancel.isPending}
                               onClick={() => cancel.mutate(message.id)}
                             >
@@ -607,10 +609,13 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                 disabled={!messages.data.meta.has_prev}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {shared.previous}
               </Button>
               <span className="text-muted-foreground">
-                Page {messages.data.meta.page} of {Math.max(messages.data.meta.pages, 1)}
+                {fill(shared.pageOf, {
+                  page: messages.data.meta.page,
+                  pages: Math.max(messages.data.meta.pages, 1),
+                })}
               </span>
               <Button
                 variant="outline"
@@ -618,7 +623,7 @@ function OutboxPanel({ canSend }: { canSend: boolean }) {
                 disabled={!messages.data.meta.has_next}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {shared.next}
               </Button>
             </div>
           </>
