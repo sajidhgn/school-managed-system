@@ -22,10 +22,14 @@ import {
   useReopenRegister,
   useSubmitRegister,
 } from "@/hooks/use-attendance";
+import { toast } from "@/components/ui/use-toast";
+import { isOfflineError } from "@/lib/api/errors";
 import type { AttendanceEntryRead, AttendanceStatus } from "@/lib/api/types";
 import { fill } from "@/lib/i18n/format";
 import { attendanceMessages } from "@/lib/i18n/modules/attendance";
+import { offlineMessages } from "@/lib/i18n/modules/offline";
 import { useCatalog } from "@/lib/i18n/use-catalog";
+import { saveOfflineRegister } from "@/lib/offline/attendance-outbox";
 
 /**
  * The marking screen.
@@ -42,7 +46,7 @@ import { useCatalog } from "@/lib/i18n/use-catalog";
  *   the backend's mark endpoint is partial: the two halves were designed together.
  */
 
-const STATUS_ORDER: AttendanceStatus[] = ["present", "absent", "late", "excused", "half_day"];
+export const STATUS_ORDER: AttendanceStatus[] = ["present", "absent", "late", "excused", "half_day"];
 
 /**
  * Colour carries meaning here, so it is paired with a label rather than used alone:
@@ -53,7 +57,7 @@ const STATUS_ORDER: AttendanceStatus[] = ["present", "absent", "late", "excused"
  * in, amber partly in, red out, gray on leave. (This used to add a sky blue and a
  * violet of its own.)
  */
-const STATUS_STYLE: Record<AttendanceStatus, string> = {
+export const STATUS_STYLE: Record<AttendanceStatus, string> = {
   present: "bg-success text-success-foreground border-success",
   absent: "bg-destructive text-destructive-foreground border-destructive",
   late: "bg-warning text-warning-foreground border-warning",
@@ -63,16 +67,20 @@ const STATUS_STYLE: Record<AttendanceStatus, string> = {
 
 export function RegisterDialog({
   sessionId,
+  sectionLabel = "",
   onClose,
   canMark,
   canAmend,
 }: {
   sessionId: string | null;
+  /** "Grade 5 · A", for the offline queue if the connection drops mid-save. */
+  sectionLabel?: string;
   onClose: () => void;
   canMark: boolean;
   canAmend: boolean;
 }) {
   const m = useCatalog(attendanceMessages).register;
+  const offline = useCatalog(offlineMessages).toast;
   const query = useAttendanceSession(sessionId);
   const mark = useMarkAttendance();
   const submit = useSubmitRegister();
@@ -114,24 +122,57 @@ export function RegisterDialog({
       }));
   }, [session, pending]);
 
+  /**
+   * The connection dropped while saving a DRAFT: keep the taps on the device and let
+   * the sync send them, rather than losing them with the dialog. An amendment to a
+   * submitted register is not queued — it needs a reason checked by the server now.
+   */
+  async function keepOffline(submitAfter: boolean): Promise<boolean> {
+    if (!session || isSubmitted) return false;
+    await saveOfflineRegister({
+      sectionId: session.section_id,
+      sectionLabel: sectionLabel || session.section_id,
+      date: session.session_date,
+      changes: Object.fromEntries(changed.map((entry) => [entry.student_id, entry.status])),
+      submit: submitAfter,
+    });
+    toast.success(offline.noConnectionSaved, offline.savedOfflineBody);
+    setPending({});
+    onClose();
+    return true;
+  }
+
   async function handleSave() {
     if (!sessionId || changed.length === 0) return;
-    await mark.mutateAsync({
-      sessionId,
-      entries: changed,
-      // Only sent when amending. The backend requires it there and ignores it on a
-      // draft, so passing it unconditionally would train users to type a reason for
-      // an edit that needs none.
-      reason: isSubmitted ? reason : undefined,
-    });
+    try {
+      await mark.mutateAsync({
+        sessionId,
+        entries: changed,
+        // Only sent when amending. The backend requires it there and ignores it on a
+        // draft, so passing it unconditionally would train users to type a reason for
+        // an edit that needs none.
+        reason: isSubmitted ? reason : undefined,
+      });
+    } catch (error) {
+      if (isOfflineError(error) && (await keepOffline(false))) return;
+      throw error;
+    }
     setPending({});
     setReason("");
   }
 
   async function handleSubmit() {
     if (!sessionId) return;
-    if (changed.length > 0) await handleSave();
-    await submit.mutateAsync(sessionId);
+    try {
+      if (changed.length > 0) {
+        await mark.mutateAsync({ sessionId, entries: changed, reason: undefined });
+        setPending({});
+      }
+      await submit.mutateAsync(sessionId);
+    } catch (error) {
+      if (isOfflineError(error) && (await keepOffline(true))) return;
+      return;
+    }
     onClose();
   }
 

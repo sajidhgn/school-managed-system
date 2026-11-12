@@ -66,7 +66,35 @@ export class ApiError extends Error {
 }
 
 /** Normalise any thrown value into a user-presentable message. */
+/**
+ * The request never got a response: the device is offline, or the wifi has no
+ * internet behind it. Distinct from `ApiError` (the server answered with a refusal)
+ * because the right reaction differs — offline work can be kept on the device and
+ * sent later; a refusal cannot.
+ */
+export class OfflineError extends Error {
+  readonly code = "OFFLINE";
+
+  constructor() {
+    super("offline");
+    this.name = "OfflineError";
+  }
+}
+
+export function isOfflineError(error: unknown): error is OfflineError {
+  return error instanceof OfflineError;
+}
+
+/** The offline sentence in the page's language. This module has no React context. */
+function offlineSentence(): string {
+  const urdu = typeof document !== "undefined" && document.documentElement.lang === "ur";
+  return urdu
+    ? "انٹرنیٹ سے رابطہ نہیں۔ کنکشن بحال ہونے پر دوبارہ کوشش کریں۔"
+    : "No connection. Try again when you are back online.";
+}
+
 export function errorMessage(error: unknown): string {
+  if (error instanceof OfflineError) return offlineSentence();
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "Something went wrong. Please try again.";

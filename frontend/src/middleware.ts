@@ -151,6 +151,9 @@ export const config = {
   // that receives a 302 to an HTML login page produces a baffling parse error),
   // Next internals, and static assets.
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)",
+    // The service worker, its offline page and the app manifest are static and hold
+    // no data; they must load for a signed-out visitor too, so they skip the session
+    // redirect along with the other static assets.
+    "/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)",
   ],
 };

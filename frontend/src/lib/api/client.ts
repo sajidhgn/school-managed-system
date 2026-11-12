@@ -1,4 +1,6 @@
-import { ApiError, toProblem } from "./errors";
+import { reportNetworkFailure, reportReachable } from "@/lib/offline/connectivity";
+
+import { ApiError, OfflineError, toProblem } from "./errors";
 
 /**
  * Browser-side API client.
@@ -29,6 +31,27 @@ interface RequestOptions {
   headers?: HeadersInit;
 }
 
+/**
+ * `fetch`, reporting reachability to offline mode.
+ *
+ * A rejected fetch that was not cancelled on purpose means no response arrived: the
+ * device is offline or the wifi has no internet. That becomes an `OfflineError`, so
+ * callers can tell "keep this for later" apart from "the server said no". Any
+ * response at all, even a 500, proves the server is reachable.
+ */
+async function send(url: string, init: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    reportNetworkFailure();
+    throw new OfflineError();
+  }
+  reportReachable();
+  return response;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -42,7 +65,7 @@ async function request<T>(
   const headers = new Headers(options.headers);
   if (body !== undefined) headers.set("content-type", "application/json");
 
-  const response = await fetch(url, {
+  const response = await send(url, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -66,7 +89,7 @@ async function request<T>(
  */
 async function upload<T>(path: string, form: FormData, options: RequestOptions = {}): Promise<T> {
   const url = `${BFF_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetch(url, {
+  const response = await send(url, {
     method: "POST",
     headers: options.headers,
     body: form,

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/components/ui/use-toast";
-import { errorMessage } from "@/lib/api/errors";
+import { errorMessage, isOfflineError } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
 import { fill } from "@/lib/i18n/format";
 import { attendanceMessages } from "@/lib/i18n/modules/attendance";
@@ -57,7 +57,10 @@ export function useOpenRegister() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
       queryClient.setQueryData(queryKeys.attendance.session(session.id), session);
     },
-    onError: (error) => toast.error(m.openFailed, errorMessage(error)),
+    // Offline: the register dialog keeps the work on the device and says so.
+    onError: (error) => {
+      if (!isOfflineError(error)) toast.error(m.openFailed, errorMessage(error));
+    },
   });
 }
 
@@ -85,7 +88,10 @@ export function useMarkAttendance() {
       queryClient.setQueryData(queryKeys.attendance.session(session.id), session);
       void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
     },
-    onError: (error) => toast.error(m.saveFailed, errorMessage(error)),
+    // Offline: the register dialog keeps the work on the device and says so.
+    onError: (error) => {
+      if (!isOfflineError(error)) toast.error(m.saveFailed, errorMessage(error));
+    },
   });
 }
 
@@ -105,7 +111,10 @@ export function useSubmitRegister() {
         }),
       );
     },
-    onError: (error) => toast.error(m.submitFailed, errorMessage(error)),
+    // Offline: the register dialog keeps the work on the device and says so.
+    onError: (error) => {
+      if (!isOfflineError(error)) toast.error(m.submitFailed, errorMessage(error));
+    },
   });
 }
 

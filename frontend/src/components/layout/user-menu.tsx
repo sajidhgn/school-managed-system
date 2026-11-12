@@ -18,7 +18,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "@/components/ui/use-toast";
 import { UserAvatar } from "@/components/user-avatar";
+import { fill } from "@/lib/i18n/format";
+import { offlineMessages } from "@/lib/i18n/modules/offline";
+import { getOutbox } from "@/lib/offline/attendance-outbox";
+import { isOnline } from "@/lib/offline/connectivity";
+import { clearOfflineData } from "@/lib/offline/query-persistence";
 import { authRequest } from "@/lib/api/client";
 import type { SchoolRead } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -60,6 +67,11 @@ export function UserMenu({
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState<{
+    everywhere: boolean;
+    unsent: number;
+  } | null>(null);
+  const offline = useCatalog(offlineMessages);
   const [busy, setBusy] = useState(false);
 
   const activeSchool = schools.find((s) => s.id === activeSchoolId) ?? null;
@@ -86,9 +98,34 @@ export function UserMenu({
     }
   }
 
-  async function signOut(everywhere: boolean) {
+  /**
+   * Sign out, guarding offline work.
+   *
+   * Offline, it refuses: the session lives in httpOnly cookies only the server can
+   * clear, so "signing out" without it would leave the next person signed in. With
+   * registers taken offline still unsent, it asks first — signing out deletes them.
+   * Then everything this user kept on the device goes too: saved screens, the queue,
+   * and the service worker's page copies.
+   */
+  async function signOut(everywhere: boolean, confirmed = false) {
+    if (!isOnline()) {
+      toast.error(offline.signOut.needsConnection, offline.signOut.needsConnectionBody);
+      return;
+    }
+    const unsent = getOutbox().length;
+    if (unsent > 0 && !confirmed) {
+      setConfirmSignOut({ everywhere, unsent });
+      return;
+    }
     setSigningOut(true);
-    await fetch(`/api/auth/logout${everywhere ? "?all=true" : ""}`, { method: "POST" });
+    try {
+      await fetch(`/api/auth/logout${everywhere ? "?all=true" : ""}`, { method: "POST" });
+    } catch {
+      setSigningOut(false);
+      toast.error(offline.signOut.needsConnection, offline.signOut.needsConnectionBody);
+      return;
+    }
+    await clearOfflineData(user.user_id);
     // A full navigation, not `router.push`. Sign-out must leave no cached RSC
     // payload holding the previous user's data — which matters on the shared
     // machines common in a staff room.
@@ -96,159 +133,177 @@ export function UserMenu({
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="grid size-9 cursor-pointer place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-2 ring-card transition-transform duration-250 ease-out-quart hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-ring data-[state=open]:scale-95"
-          aria-label={shared.accountMenu}
-        >
-          <UserAvatar
-            name={user.full_name}
-            avatarUrl={user.avatar_url}
-            className="size-full"
-            fallbackClassName="bg-transparent text-sm font-semibold text-primary-foreground"
-          />
-        </button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="font-normal">
-          <p className="text-sm font-medium">{user.full_name}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-          {user.role_code ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {/* The campus, when one is selected — NOT `organization_name`. An
-                  org-level principal has no `school_name` on their membership, so
-                  falling back to the organization here would leave the one thing
-                  they actually chose invisible everywhere in the chrome. */}
-              {user.role_code} ·{" "}
-              {user.school_name ?? activeSchool?.name ?? user.organization_name}
-            </p>
-          ) : null}
-        </DropdownMenuLabel>
-
-        {schools.length > 0 ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-              {t.nav.schools}
-            </DropdownMenuLabel>
-            {schools.map((school) => (
-              <DropdownMenuItem
-                key={school.id}
-                onSelect={() => viewSchool(school.id)}
-                disabled={busy}
-                className="gap-2"
-              >
-                <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-sm">{school.name}</span>
-                <Check
-                  className={cn(
-                    "size-4 shrink-0",
-                    school.id === activeSchoolId ? "opacity-100" : "opacity-0",
-                  )}
-                  aria-hidden
-                />
-              </DropdownMenuItem>
-            ))}
-          </>
-        ) : null}
-
-        {user.memberships.length > 1 ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-              Switch context
-            </DropdownMenuLabel>
-            {user.memberships.map((membership) => (
-              <DropdownMenuItem
-                key={membership.membership_id}
-                onSelect={() => switchTo(membership.membership_id)}
-                disabled={busy}
-                className="gap-2"
-              >
-                {membership.is_org_level ? (
-                  <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                ) : (
-                  <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">
-                    {membership.school_name ?? membership.organization_name}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {membership.role_name}
-                  </span>
-                </span>
-                <Check
-                  className={cn(
-                    "size-4 shrink-0",
-                    membership.membership_id === user.active_membership_id
-                      ? "opacity-100"
-                      : "opacity-0",
-                  )}
-                  aria-hidden
-                />
-              </DropdownMenuItem>
-            ))}
-          </>
-        ) : null}
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem asChild>
-          <Link href="/settings" className="gap-2">
-            <Settings className="size-4" aria-hidden />
-            {t.nav.settings}
-          </Link>
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          Theme
-        </DropdownMenuLabel>
-        {(
-          [
-            ["light", Sun, "Light"],
-            ["dark", Moon, "Dark"],
-            ["system", Monitor, "System"],
-          ] as const
-        ).map(([value, Icon, labelText]) => (
-          <DropdownMenuItem
-            key={value}
-            onSelect={() => setTheme(value)}
-            className="gap-2"
-            data-active={theme === value}
+    <>
+      <ConfirmDialog
+        open={confirmSignOut !== null}
+        onOpenChange={(open) => !open && setConfirmSignOut(null)}
+        title={offline.signOut.pendingTitle}
+        description={fill(
+          confirmSignOut?.unsent === 1 ? offline.signOut.pendingBodyOne : offline.signOut.pendingBodyMany,
+          { count: confirmSignOut?.unsent ?? 0 },
+        )}
+        confirmLabel={offline.signOut.signOutAnyway}
+        variant="destructive"
+        loading={signingOut}
+        onConfirm={() => {
+          const everywhere = confirmSignOut?.everywhere ?? false;
+          void signOut(everywhere, true);
+        }}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="grid size-9 cursor-pointer place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-2 ring-card transition-transform duration-250 ease-out-quart hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-ring data-[state=open]:scale-95"
+            aria-label={shared.accountMenu}
           >
-            <Icon className="size-4" aria-hidden />
-            {labelText}
+            <UserAvatar
+              name={user.full_name}
+              avatarUrl={user.avatar_url}
+              className="size-full"
+              fallbackClassName="bg-transparent text-sm font-semibold text-primary-foreground"
+            />
+          </button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel className="font-normal">
+            <p className="text-sm font-medium">{user.full_name}</p>
+            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            {user.role_code ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {/* The campus, when one is selected — NOT `organization_name`. An
+                    org-level principal has no `school_name` on their membership, so
+                    falling back to the organization here would leave the one thing
+                    they actually chose invisible everywhere in the chrome. */}
+                {user.role_code} ·{" "}
+                {user.school_name ?? activeSchool?.name ?? user.organization_name}
+              </p>
+            ) : null}
+          </DropdownMenuLabel>
+
+          {schools.length > 0 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {t.nav.schools}
+              </DropdownMenuLabel>
+              {schools.map((school) => (
+                <DropdownMenuItem
+                  key={school.id}
+                  onSelect={() => viewSchool(school.id)}
+                  disabled={busy}
+                  className="gap-2"
+                >
+                  <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-sm">{school.name}</span>
+                  <Check
+                    className={cn(
+                      "size-4 shrink-0",
+                      school.id === activeSchoolId ? "opacity-100" : "opacity-0",
+                    )}
+                    aria-hidden
+                  />
+                </DropdownMenuItem>
+              ))}
+            </>
+          ) : null}
+
+          {user.memberships.length > 1 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Switch context
+              </DropdownMenuLabel>
+              {user.memberships.map((membership) => (
+                <DropdownMenuItem
+                  key={membership.membership_id}
+                  onSelect={() => switchTo(membership.membership_id)}
+                  disabled={busy}
+                  className="gap-2"
+                >
+                  {membership.is_org_level ? (
+                    <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  ) : (
+                    <School className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">
+                      {membership.school_name ?? membership.organization_name}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {membership.role_name}
+                    </span>
+                  </span>
+                  <Check
+                    className={cn(
+                      "size-4 shrink-0",
+                      membership.membership_id === user.active_membership_id
+                        ? "opacity-100"
+                        : "opacity-0",
+                    )}
+                    aria-hidden
+                  />
+                </DropdownMenuItem>
+              ))}
+            </>
+          ) : null}
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem asChild>
+            <Link href="/settings" className="gap-2">
+              <Settings className="size-4" aria-hidden />
+              {t.nav.settings}
+            </Link>
           </DropdownMenuItem>
-        ))}
 
-        <DropdownMenuSeparator />
+          <DropdownMenuSeparator />
 
-        <DropdownMenuItem
-          onSelect={() => signOut(false)}
-          disabled={signingOut}
-          className="gap-2"
-        >
-          <LogOut className="size-4" aria-hidden />
-          {t.common.signOut}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => signOut(true)}
-          disabled={signingOut}
-          className="gap-2 text-muted-foreground"
-        >
-          {/* Offered alongside the ordinary sign-out because "I think someone else
-              has my password" needs a one-click answer, and burying it in settings
-              means nobody finds it at the moment they need it. */}
-          <LogOut className="size-4" aria-hidden />
-          Sign out on all devices
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+            Theme
+          </DropdownMenuLabel>
+          {(
+            [
+              ["light", Sun, "Light"],
+              ["dark", Moon, "Dark"],
+              ["system", Monitor, "System"],
+            ] as const
+          ).map(([value, Icon, labelText]) => (
+            <DropdownMenuItem
+              key={value}
+              onSelect={() => setTheme(value)}
+              className="gap-2"
+              data-active={theme === value}
+            >
+              <Icon className="size-4" aria-hidden />
+              {labelText}
+            </DropdownMenuItem>
+          ))}
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            onSelect={() => signOut(false)}
+            disabled={signingOut}
+            className="gap-2"
+          >
+            <LogOut className="size-4" aria-hidden />
+            {t.common.signOut}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => signOut(true)}
+            disabled={signingOut}
+            className="gap-2 text-muted-foreground"
+          >
+            {/* Offered alongside the ordinary sign-out because "I think someone else
+                has my password" needs a one-click answer, and burying it in settings
+                means nobody finds it at the moment they need it. */}
+            <LogOut className="size-4" aria-hidden />
+            Sign out on all devices
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }

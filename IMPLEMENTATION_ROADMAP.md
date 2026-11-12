@@ -615,6 +615,43 @@ Also on 2026-11-09: the backend `ruff format --check` CI gate, which eight older
 failed, passes again, and the Playwright platform-login test (broken by the
 show-password toggle matching `/password/`) passes again.
 
+### Offline mode -- implemented 2026-11-10
+
+The spec listed offline mode as out of scope; it is now built for the case that
+matters in a school: attendance on patchy wifi, or wifi with no internet behind it.
+
+- **What works offline.** Pages already opened on the device reload from a copy
+  (service worker, `frontend/public/sw.js`, network-first; production builds only).
+  The attendance board, registers, section rosters, the class list and the student
+  directory are kept per user and campus in IndexedDB for three days
+  (`lib/offline/query-persistence.ts`). A page never opened on the device falls back
+  to `public/offline.html` (English and Urdu). The app is installable
+  (`app/manifest.ts`, icons in `public/icons/`).
+- **Offline attendance.** Taking a register with no connection keeps it in a
+  device queue (`lib/offline/attendance-outbox.ts`); a save that fails mid-request
+  moves there too, so taps are never lost. Only the students the teacher changed are
+  kept, so a register already half-marked online is not reset. The queue syncs on
+  reconnect, at start-up and every minute (`attendance-sync.ts`): open (idempotent),
+  mark only differing students, submit if asked. A register submitted on the server
+  first is set aside, never overwritten; the header pill and its panel show queued
+  and failed registers with Retry / Discard. Registers stay markable until the end
+  of the day after their date, so a sync more than ~1.5 days late fails as locked.
+- **Detection.** Offline is decided from failed requests plus a `/api/ping` poll,
+  not only `navigator.onLine` (true on wifi without internet). TanStack Query's
+  `onlineManager` follows it: reads pause and show saved data; writes fail at once
+  with "No connection" (`mutations.networkMode = "always"`).
+- **Deliberately online-only.** Fee collection and every other write: receipt
+  numbers and balances must come from the server, and two offline counters could
+  take the same challan twice. Fee data is not stored on the device at all.
+- **Privacy.** Sign-out deletes the user's saved data, queue and page copies (it asks
+  first when registers are unsent, and refuses while offline because only the server
+  can clear the session cookies). A different person signing in on the device clears
+  the previous user's data first.
+- Verified in Chromium against a production build: a failed save falls back and
+  syncs, a fully offline reload/take/reconnect, the submitted-elsewhere conflict, the
+  sign-out guard and wipe, Urdu, and phone width. No automated test covers it in CI
+  yet -- the Playwright suite runs the dev server, where the worker is not registered.
+
 ### Guidance for every future school module
 
 The core spec explicitly defers attendance, gradebook, timetable, library, transport,

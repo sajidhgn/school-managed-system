@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · SchoolYar</title>
+    <link rel="icon" href="/icons/icon-192.png" />
+    <style>
+      :root {
+        --bg: #f3f4f6;
+        --card: #ffffff;
+        --text: #0a0c10;
+        --muted: #5b6475;
+        --primary: #2447f5;
+        --border: #e3e6ec;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0d12;
+          --card: #14171e;
+          --text: #f2f3f5;
+          --muted: #a3aab8;
+          --primary: #8ea2ff;
+          --border: #262b36;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main {
+        width: 100%;
+        max-width: 440px;
+        padding: 28px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--card);
+        text-align: center;
+      }
+      img { width: 48px; height: 48px; }
+      h1 { margin: 12px 0 4px; font-size: 20px; }
+      p { margin: 8px 0; color: var(--muted); }
+      .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+      button, a.button {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 9px 16px;
+        font: inherit;
+        cursor: pointer;
+        text-decoration: none;
+        color: var(--text);
+        background: transparent;
+      }
+      button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+      html[lang="ur"] body { line-height: 1.9; }
+      .ur { display: none; }
+      html[lang="ur"] .ur { display: block; }
+      html[lang="ur"] .en { display: none; }
+    </style>
+    <script>
+      // The app keeps the chosen language in a cookie; follow it here too.
+      if (/(?:^|;\s*)educloud_locale=ur(?:;|$)/.test(document.cookie)) {
+        document.documentElement.lang = "ur";
+        document.documentElement.dir = "rtl";
+        document.title = "آف لائن · اسکول یار";
+      }
+    </script>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" alt="" />
+      <div class="en">
+        <h1>You're offline</h1>
+        <p>This page hasn't been opened on this device yet, so there's no copy to show.</p>
+        <p>Pages you opened while online — like Attendance — still work offline, and attendance you take is sent when you're back.</p>
+      </div>
+      <div class="ur">
+        <h1>آپ آف لائن ہیں</h1>
+        <p>یہ صفحہ اس ڈیوائس پر ابھی نہیں کھولا گیا، اس لیے دکھانے کے لیے اس کی کوئی کاپی نہیں۔</p>
+        <p>جو صفحات آپ نے آن لائن ہوتے ہوئے کھولے تھے — جیسے حاضری — وہ آف لائن بھی چلتے ہیں، اور لگائی گئی حاضری کنکشن بحال ہوتے ہی بھیج دی جاتی ہے۔</p>
+      </div>
+      <div class="actions">
+        <button class="primary" onclick="location.reload()">
+          <span class="en">Try again</span><span class="ur">دوبارہ کوشش کریں</span>
+        </button>
+        <a class="button" href="/attendance">
+          <span class="en">Open Attendance</span><span class="ur">حاضری کھولیں</span>
+        </a>
+      </div>
+    </main>
+  </body>
+</html>

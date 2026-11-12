@@ -33,7 +33,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
               return failureCount < 2;
             },
           },
-          mutations: { retry: false },
+          // `always`: a write attempted offline fails at once with an
+          // `OfflineError` ("No connection") instead of pausing with its button
+          // spinning until the connection returns. Writes that CAN wait — offline
+          // attendance — are queued explicitly (`lib/offline`); everything else
+          // must tell the user it needs a connection.
+          mutations: { retry: false, networkMode: "always" },
         },
       }),
   );
