@@ -1,0 +1,30 @@
+# SchoolYar API: FastAPI on 127.0.0.1:8100 (private; Next's BFF is its only client).
+# Install: cp deploy/vps/systemd/* /etc/systemd/system/ && systemctl daemon-reload
+[Unit]
+Description=SchoolYar API (FastAPI, 127.0.0.1:8100)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sms
+Group=sms
+# pydantic-settings reads backend/.env from the working directory.
+WorkingDirectory=/var/www/school-managed-system/backend
+# The schools' own calendar: billing days, due dates and late fees use date.today().
+Environment=TZ=Asia/Karachi
+Environment=PYTHONUNBUFFERED=1
+# nginx overwrites X-Forwarded-For with the visitor's IP and the BFF passes it on;
+# only trust it from localhost.
+ExecStart=/var/www/school-managed-system/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8100 --workers 2 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

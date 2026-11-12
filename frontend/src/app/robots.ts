@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { absoluteUrl } from "@/lib/site";
+import { SITE_NOINDEX, absoluteUrl } from "@/lib/site";
 
 /**
  * /robots.txt. Crawlers may read the public site; everything behind a login is
@@ -49,6 +49,9 @@ export default function robots(): MetadataRoute.Robots {
         ...APP_ROUTES,
       ],
     },
-    sitemap: absoluteUrl("/sitemap.xml"),
+    // With SITE_NOINDEX the public pages stay crawlable on purpose: a crawler only
+    // obeys the noindex tag and header on a page it is allowed to fetch, so a
+    // blanket `Disallow: /` would leave bare URLs indexable from outside links.
+    ...(SITE_NOINDEX ? {} : { sitemap: absoluteUrl("/sitemap.xml") }),
   };
 }

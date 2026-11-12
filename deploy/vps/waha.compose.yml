@@ -1,0 +1,35 @@
+# WAHA WhatsApp gateway for the VPS. Optional: only with WHATSAPP_BACKEND=waha.
+#
+# Start (from the repo root; the API key is read from backend/.env, so there is a
+# single copy of it):
+#   docker compose --env-file backend/.env -f deploy/vps/waha.compose.yml up -d
+#
+# Host networking so WAHA and the API reach each other on 127.0.0.1 (the API listens
+# on 127.0.0.1:8100 only). Port 3001 is not reachable from outside: ufw allows only
+# SSH and nginx, and host-networked containers get no Docker port-forwarding rules
+# that would bypass it.
+#
+# Link each campus's WhatsApp number from the app's WhatsApp page (QR code).
+# Unofficial gateway: read backend/app/common/whatsapp/waha.py before relying on it.
+
+name: sms-waha
+
+services:
+  waha:
+    # GOWS-only build (no browser inside). Pinned: bump deliberately after reading
+    # the WAHA changelog, then `up -d` again.
+    image: devlikeapro/waha:gows-2026.10.1
+    network_mode: host
+    environment:
+      WHATSAPP_API_PORT: "3001"
+      WHATSAPP_API_KEY: ${WAHA_API_KEY:?set WAHA_API_KEY in backend/.env}
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WAHA_PRINT_QR: "false"
+      # Linked numbers come back by themselves after a restart.
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+    volumes:
+      - waha_sessions:/app/.sessions
+    restart: unless-stopped
+
+volumes:
+  waha_sessions:

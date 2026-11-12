@@ -1,0 +1,19 @@
+# Daily pass: billing lifecycle, retention, scheduled challan generation, late fees.
+# Started by sms-maintenance.timer; run by hand with: systemctl start sms-maintenance
+[Unit]
+Description=SchoolYar daily maintenance (run-maintenance)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sms
+Group=sms
+WorkingDirectory=/var/www/school-managed-system/backend
+Environment=TZ=Asia/Karachi
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/school-managed-system/backend/.venv/bin/python -m app.cli run-maintenance
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true

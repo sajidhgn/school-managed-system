@@ -1,0 +1,25 @@
+# Drains the WhatsApp outbox through WAHA (fee notices, custom messages, retries).
+# Enable only with WHATSAPP_BACKEND=waha and the WAHA container running
+# (deploy/vps/waha.compose.yml).
+[Unit]
+Description=SchoolYar WhatsApp worker (send-whatsapp --watch)
+After=network-online.target postgresql.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sms
+Group=sms
+WorkingDirectory=/var/www/school-managed-system/backend
+Environment=TZ=Asia/Karachi
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/school-managed-system/backend/.venv/bin/python -m app.cli send-whatsapp --watch
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

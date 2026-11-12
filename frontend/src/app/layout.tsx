@@ -5,7 +5,7 @@ import { Providers } from "@/components/providers";
 import { directionFor } from "@/lib/i18n/config";
 import { getMessages } from "@/lib/i18n/messages";
 import { getLocale } from "@/lib/i18n/server";
-import { SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
+import { SITE_NAME, SITE_NOINDEX, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
 import { urduFace } from "./fonts";
 import "./globals.css";
@@ -21,6 +21,8 @@ export const metadata: Metadata = {
   },
   description:
     "Fees and bank challans, attendance, exams and test papers from your own textbooks, plus a WhatsApp diary teachers send as a photo. Free for one school.",
+  // Inherited by every page that does not set its own `robots`.
+  ...(SITE_NOINDEX ? { robots: { index: false, follow: false } } : {}),
 };
 
 export const viewport: Viewport = {

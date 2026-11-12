@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { FEATURE_SLUGS, featurePath } from "@/components/marketing/features";
-import { absoluteUrl } from "@/lib/site";
+import { SITE_NOINDEX, absoluteUrl } from "@/lib/site";
 
 /**
  * /sitemap.xml: the public pages, and only those. The tenant panel and the
@@ -11,6 +11,9 @@ import { absoluteUrl } from "@/lib/site";
  * did teaches crawlers to ignore it.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
+  // A noindexed deployment advertises nothing.
+  if (SITE_NOINDEX) return [];
+
   return [
     { url: absoluteUrl("/"), changeFrequency: "weekly", priority: 1 },
     { url: absoluteUrl("/features"), changeFrequency: "monthly", priority: 0.9 },

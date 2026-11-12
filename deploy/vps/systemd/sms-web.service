@@ -1,0 +1,28 @@
+# SchoolYar web: Next.js standalone server on 127.0.0.1:3100, behind nginx.
+[Unit]
+Description=SchoolYar web (Next.js, 127.0.0.1:3100)
+After=network-online.target sms-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sms
+Group=sms
+WorkingDirectory=/var/www/school-managed-system/frontend/.next/standalone
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=PORT=3100
+Environment=HOSTNAME=127.0.0.1
+Environment=TZ=Asia/Karachi
+# API_BASE_URL, COOKIE_SECURE, SITE_URL, SITE_NOINDEX ... (also read by `next build`).
+EnvironmentFile=/var/www/school-managed-system/frontend/.env.production.local
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -16,6 +16,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, init_engine
 from app.middleware.request_context import RequestContextMiddleware
+from app.middleware.robots import NoIndexMiddleware
 
 logger = get_logger(__name__)
 
@@ -126,11 +127,12 @@ def _register_middleware(app: FastAPI, settings: Settings) -> None:
     it sees the request first and the response last.
 
     Desired outer-to-inner chain:
-        TrustedHost -> CORS -> GZip -> RequestContext -> router
+        NoIndex -> TrustedHost -> CORS -> GZip -> RequestContext -> router
 
     RequestContext must be innermost of these so that its timing measurement covers
     route execution rather than compression, and so its log line is emitted with the
-    final status code.
+    final status code. NoIndex is outermost so that even a rejected Host or a CORS
+    preflight carries `X-Robots-Tag`.
     """
     app.add_middleware(RequestContextMiddleware)
 
@@ -156,6 +158,9 @@ def _register_middleware(app: FastAPI, settings: Settings) -> None:
         # Blocks Host-header injection, which otherwise enables cache poisoning and
         # password-reset link hijacking. Replace with real hostnames at deploy time.
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*.example.com"])
+
+    # The API must never appear in search results, in any environment.
+    app.add_middleware(NoIndexMiddleware)
 
 
 def _register_routers(app: FastAPI, settings: Settings) -> None:

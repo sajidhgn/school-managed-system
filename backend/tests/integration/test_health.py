@@ -49,6 +49,14 @@ async def test_server_timing_header_is_present(client: AsyncClient) -> None:
     assert response.headers["Server-Timing"].startswith("app;dur=")
 
 
+async def test_every_response_is_noindex(client: AsyncClient) -> None:
+    """The API must stay out of search engines, errors included."""
+    for path in ("/health", "/api/v1/does-not-exist"):
+        response = await client.get(path)
+
+        assert response.headers["X-Robots-Tag"] == "noindex, nofollow"
+
+
 async def test_unknown_route_returns_problem_details(client: AsyncClient) -> None:
     """404s must use the same RFC 9457 shape as every other error."""
     response = await client.get("/api/v1/does-not-exist")

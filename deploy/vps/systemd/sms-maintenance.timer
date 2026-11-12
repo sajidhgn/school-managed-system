@@ -1,0 +1,13 @@
+# Every morning at 07:00 Pakistan time: after midnight, so "today" is the new day,
+# and late enough that fee notices it queues do not reach parents at night.
+# Persistent=true runs a missed day as soon as the server is back up; the job is
+# idempotent, so a catch-up never double-bills.
+[Unit]
+Description=Run SchoolYar maintenance daily
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 Asia/Karachi
+Persistent=true
+
+[Install]
+WantedBy=timers.target

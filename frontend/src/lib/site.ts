@@ -9,6 +9,14 @@ import type { Metadata } from "next";
  */
 export const SITE_URL = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 
+/**
+ * `SITE_NOINDEX=true` keeps the whole site out of search engines: a noindex robots
+ * meta tag on every page, an `X-Robots-Tag` header on every response (next.config.ts)
+ * and an empty sitemap. For staging and pre-launch deployments. Read at build time
+ * as well as at runtime, so set it before `npm run build`.
+ */
+export const SITE_NOINDEX = process.env.SITE_NOINDEX === "true";
+
 export const SITE_NAME = "SchoolYar";
 
 export const SITE_TAGLINE = "School management, from the diary to the fee challan";
